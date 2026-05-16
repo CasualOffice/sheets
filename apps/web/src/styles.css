@@ -214,40 +214,6 @@ button {
   letter-spacing: 0;
 }
 
-/* Quick Access Toolbar inside the title bar */
-.titlebar__qat {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.titlebar__qat-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: rgba(255, 255, 255, 0.85);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
-}
-
-.titlebar__qat-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-}
-
-.titlebar__qat-btn:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.titlebar__qat-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 
 .titlebar__spacer {
   flex: 1;
@@ -790,6 +756,22 @@ button {
   min-width: 22px;
 }
 
+.sheet-tabs__right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  margin-left: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-divider);
+}
+
+.sheet-tabs__action {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+}
+
 /* Status bar */
 .statusbar {
   display: flex;
@@ -825,11 +807,62 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.statusbar__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.statusbar__zoom-btn {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.statusbar__zoom-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.statusbar__zoom input[type="range"] {
+  width: 96px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+.statusbar__zoom-label-btn {
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  padding: 0 var(--space-2);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.statusbar__zoom-label-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Dropdown menu (File menu, future Insert menu)
    ───────────────────────────────────────────────────────────────────────── */
 .menu {
-  position: absolute;
+  position: fixed; /* escape all containing blocks (incl. ribbon__body overflow:hidden) */
   min-width: 220px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);

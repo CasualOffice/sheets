@@ -8,6 +8,7 @@ import {
   renameSheet,
   switchToSheet,
 } from './sheet-actions';
+import { redo, undo } from './home-tab-actions';
 import { Icon } from './Icon';
 
 /**
@@ -63,7 +64,7 @@ export function SheetTabs() {
         <Icon name="add" size="sm" />
       </button>
 
-      <div className="sheet-tabs__list">
+      <div className="sheet-tabs__list" data-testid="sheet-tabs-list">
         {sheets.map((s, i) => (
           <SheetTabItem
             key={s.id}
@@ -99,6 +100,31 @@ export function SheetTabs() {
             }}
           />
         ))}
+      </div>
+
+      <div className="sheet-tabs__right">
+        <button
+          type="button"
+          className="sheet-tabs__action btn btn--icon"
+          data-testid="qat-undo"
+          aria-label="Undo (Ctrl+Z)"
+          title="Undo (Ctrl+Z)"
+          disabled={!ready || !api}
+          onClick={() => api && undo(api)}
+        >
+          <Icon name="undo" size="sm" />
+        </button>
+        <button
+          type="button"
+          className="sheet-tabs__action btn btn--icon"
+          data-testid="qat-redo"
+          aria-label="Redo (Ctrl+Y)"
+          title="Redo (Ctrl+Y)"
+          disabled={!ready || !api}
+          onClick={() => api && redo(api)}
+        >
+          <Icon name="redo" size="sm" />
+        </button>
       </div>
     </div>
   );

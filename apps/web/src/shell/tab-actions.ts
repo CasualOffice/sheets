@@ -127,6 +127,92 @@ export function sortRange(api: FUniver, ascending: boolean) {
   withSort.sort?.({ column: range.getColumn(), ascending });
 }
 
+/* ── Wave B — Insert / Data / View ──────────────────────────────────────── */
+
+export function insertHyperlink(api: FUniver) {
+  // Univer's hyper-link UI registers an "insert hyper-link" popup; the
+  // command id below opens it with the active range pre-filled.
+  api.executeCommand('sheet.operation.insert-hyper-link');
+}
+
+export function insertComment(api: FUniver) {
+  // Opens the comment-on-cell modal — Univer figures out the cell from
+  // the active selection.
+  api.executeCommand('sheet.operation.show-comment-modal');
+}
+
+export function insertTable(api: FUniver) {
+  const range = activeRange(api);
+  const sheet = activeSheet(api);
+  const wb = api.getActiveWorkbook();
+  if (!range || !sheet || !wb) return;
+  // `sheet.command.add-table` is the public command from sheets-table.
+  // It needs unitId / subUnitId / range params.
+  api.executeCommand('sheet.command.add-table', {
+    unitId: wb.getId(),
+    subUnitId: sheet.getSheetId(),
+    range: {
+      startRow: range.getRow(),
+      startColumn: range.getColumn(),
+      endRow: range.getRow() + range.getHeight() - 1,
+      endColumn: range.getColumn() + range.getWidth() - 1,
+    },
+  });
+}
+
+export function openConditionalFormatting(api: FUniver) {
+  // The panel command requires a `value` indicating the sub-mode.
+  // 'viewRule' opens the all-rules manager view (Excel's default entry).
+  api.executeCommand('sheet.operation.open.conditional.formatting.panel', {
+    value: 'viewRule',
+  });
+}
+
+export function openDataValidation(api: FUniver) {
+  api.executeCommand('data-validation.operation.open-validation-panel');
+}
+
+/* ── View tab ───────────────────────────────────────────────────────────── */
+
+export function freezeFirstRow(api: FUniver) {
+  api.executeCommand('sheet.command.set-first-row-frozen');
+}
+
+export function freezeFirstColumn(api: FUniver) {
+  api.executeCommand('sheet.command.set-first-column-frozen');
+}
+
+export function freezeAtSelection(api: FUniver) {
+  api.executeCommand('sheet.command.set-selection-frozen');
+}
+
+export function unfreezePanes(api: FUniver) {
+  api.executeCommand('sheet.command.cancel-frozen');
+}
+
+export function toggleGridlines(api: FUniver, current: boolean) {
+  const wb = api.getActiveWorkbook();
+  const sheet = wb?.getActiveSheet();
+  if (!wb || !sheet) return;
+  // BooleanNumber: 0 = hide, 1 = show
+  api.executeCommand('sheet.command.toggle-gridlines', {
+    unitId: wb.getId(),
+    subUnitId: sheet.getSheetId(),
+    showGridlines: current ? 0 : 1,
+  });
+}
+
+export function setZoom(api: FUniver, ratio: number) {
+  const wb = api.getActiveWorkbook();
+  const sheet = wb?.getActiveSheet();
+  if (!wb || !sheet) return;
+  api.executeCommand('sheet.command.set-zoom-ratio', {
+    unitId: wb.getId(),
+    subUnitId: sheet.getSheetId(),
+    zoomRatio: Math.max(0.1, Math.min(4, ratio)),
+  });
+}
+
 export function toggleFilter(api: FUniver) {
   const sheet = activeSheet(api);
   const range = activeRange(api);

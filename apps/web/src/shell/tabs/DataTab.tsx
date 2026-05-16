@@ -1,6 +1,11 @@
 import { useUniverAPI } from '../../use-univer';
 import { useActiveCellState } from '../../hooks/useActiveCellState';
-import { sortRange, toggleFilter } from '../tab-actions';
+import {
+  openConditionalFormatting,
+  openDataValidation,
+  sortRange,
+  toggleFilter,
+} from '../tab-actions';
 import { RibbonGroup, ToolbarButton } from '../RibbonControls';
 
 export function DataTab() {
@@ -34,6 +39,23 @@ export function DataTab() {
           icon="filter_alt"
           disabled={!enabled || !isMultiCell}
           onClick={() => api && toggleFilter(api)}
+        />
+      </RibbonGroup>
+
+      <RibbonGroup label="Rules">
+        <ToolbarButton
+          id="data-validation"
+          label="Data validation"
+          icon="rule"
+          disabled={!enabled}
+          onClick={() => api && openDataValidation(api)}
+        />
+        <ToolbarButton
+          id="conditional-formatting"
+          label="Conditional formatting"
+          icon="palette"
+          disabled={!enabled}
+          onClick={() => api && openConditionalFormatting(api)}
         />
       </RibbonGroup>
     </>

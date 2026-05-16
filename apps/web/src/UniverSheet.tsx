@@ -20,6 +20,20 @@ import { UniverSheetsFilterPlugin } from '@univerjs/sheets-filter';
 import { UniverSheetsFilterUIPlugin } from '@univerjs/sheets-filter-ui';
 import { UniverFindReplacePlugin } from '@univerjs/find-replace';
 import { UniverSheetsFindReplacePlugin } from '@univerjs/sheets-find-replace';
+import { UniverSheetsConditionalFormattingPlugin } from '@univerjs/sheets-conditional-formatting';
+import { UniverSheetsConditionalFormattingUIPlugin } from '@univerjs/sheets-conditional-formatting-ui';
+import { UniverSheetsDataValidationPlugin } from '@univerjs/sheets-data-validation';
+import { UniverSheetsDataValidationUIPlugin } from '@univerjs/sheets-data-validation-ui';
+import { UniverSheetsHyperLinkPlugin } from '@univerjs/sheets-hyper-link';
+import { UniverSheetsHyperLinkUIPlugin } from '@univerjs/sheets-hyper-link-ui';
+import { UniverSheetsNotePlugin } from '@univerjs/sheets-note';
+import { UniverSheetsNoteUIPlugin } from '@univerjs/sheets-note-ui';
+import { UniverSheetsTablePlugin } from '@univerjs/sheets-table';
+import { UniverSheetsTableUIPlugin } from '@univerjs/sheets-table-ui';
+import { UniverSheetsThreadCommentPlugin } from '@univerjs/sheets-thread-comment';
+import { UniverSheetsThreadCommentUIPlugin } from '@univerjs/sheets-thread-comment-ui';
+import { UniverThreadCommentPlugin } from '@univerjs/thread-comment';
+import { UniverThreadCommentUIPlugin } from '@univerjs/thread-comment-ui';
 
 // Per-plugin CSS — Univer ships its own design tokens & layout primitives;
 // each plugin's `lib/index.css` must be imported once.
@@ -32,6 +46,13 @@ import '@univerjs/sheets-sort-ui/lib/index.css';
 import '@univerjs/sheets-filter-ui/lib/index.css';
 import '@univerjs/sheets-numfmt-ui/lib/index.css';
 import '@univerjs/find-replace/lib/index.css';
+import '@univerjs/sheets-conditional-formatting-ui/lib/index.css';
+import '@univerjs/sheets-data-validation-ui/lib/index.css';
+import '@univerjs/sheets-hyper-link-ui/lib/index.css';
+import '@univerjs/sheets-note-ui/lib/index.css';
+import '@univerjs/sheets-table-ui/lib/index.css';
+import '@univerjs/sheets-thread-comment-ui/lib/index.css';
+import '@univerjs/thread-comment-ui/lib/index.css';
 
 // Facade extensions — side-effect imports that attach methods to FUniver.
 import '@univerjs/sheets/facade';
@@ -94,6 +115,20 @@ export function UniverSheet({ snapshot }: Props) {
     univer.registerPlugin(UniverSheetsFilterUIPlugin);
     univer.registerPlugin(UniverFindReplacePlugin);
     univer.registerPlugin(UniverSheetsFindReplacePlugin);
+    univer.registerPlugin(UniverSheetsConditionalFormattingPlugin);
+    univer.registerPlugin(UniverSheetsConditionalFormattingUIPlugin);
+    univer.registerPlugin(UniverSheetsDataValidationPlugin);
+    univer.registerPlugin(UniverSheetsDataValidationUIPlugin);
+    univer.registerPlugin(UniverSheetsHyperLinkPlugin);
+    univer.registerPlugin(UniverSheetsHyperLinkUIPlugin);
+    univer.registerPlugin(UniverSheetsNotePlugin);
+    univer.registerPlugin(UniverSheetsNoteUIPlugin);
+    univer.registerPlugin(UniverSheetsTablePlugin);
+    univer.registerPlugin(UniverSheetsTableUIPlugin);
+    univer.registerPlugin(UniverThreadCommentPlugin);
+    univer.registerPlugin(UniverThreadCommentUIPlugin);
+    univer.registerPlugin(UniverSheetsThreadCommentPlugin);
+    univer.registerPlugin(UniverSheetsThreadCommentUIPlugin);
 
     univer.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
 

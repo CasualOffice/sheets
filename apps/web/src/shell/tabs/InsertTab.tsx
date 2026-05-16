@@ -7,9 +7,12 @@ import {
   deleteSelectedRow,
   insertColumnLeft,
   insertColumnRight,
+  insertComment,
+  insertHyperlink,
   insertNewSheet,
   insertRowAbove,
   insertRowBelow,
+  insertTable,
 } from '../tab-actions';
 import { RibbonGroup, ToolbarButton } from '../RibbonControls';
 
@@ -92,6 +95,30 @@ export function InsertTab() {
           icon="height"
           disabled={!enabled}
           onClick={() => api && autoFitRows(api)}
+        />
+      </RibbonGroup>
+
+      <RibbonGroup label="Content">
+        <ToolbarButton
+          id="insert-table"
+          label="Insert table"
+          icon="table_rows"
+          disabled={!enabled}
+          onClick={() => api && insertTable(api)}
+        />
+        <ToolbarButton
+          id="insert-comment"
+          label="Comment"
+          icon="comment"
+          disabled={!enabled}
+          onClick={() => api && insertComment(api)}
+        />
+        <ToolbarButton
+          id="insert-hyperlink"
+          label="Hyperlink (Ctrl+K)"
+          icon="link"
+          disabled={!enabled}
+          onClick={() => api && insertHyperlink(api)}
         />
       </RibbonGroup>
     </>
