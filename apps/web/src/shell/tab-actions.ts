@@ -413,12 +413,27 @@ export function openDataValidation(api: FUniver) {
 
 /* ── View tab ───────────────────────────────────────────────────────────── */
 
+// Univer's built-in set-first-row-frozen / set-first-column-frozen commands
+// each clobber the orthogonal axis to zero, so they can't be used to freeze
+// both a row and a column at the same time. The facade's setFrozenRows /
+// setFrozenColumns preserve the other axis, which is what users expect from
+// Excel (Freeze top row over a sheet that already has Freeze first column
+// leaves both frozen).
+//
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type FreezeCapableSheet = {
+  setFrozenRows: (n: number) => unknown;
+  setFrozenColumns: (n: number) => unknown;
+};
+
 export function freezeFirstRow(api: FUniver) {
-  api.executeCommand('sheet.command.set-first-row-frozen');
+  const sheet = activeSheet(api) as unknown as FreezeCapableSheet | null;
+  sheet?.setFrozenRows(1);
 }
 
 export function freezeFirstColumn(api: FUniver) {
-  api.executeCommand('sheet.command.set-first-column-frozen');
+  const sheet = activeSheet(api) as unknown as FreezeCapableSheet | null;
+  sheet?.setFrozenColumns(1);
 }
 
 export function freezeAtSelection(api: FUniver) {

@@ -104,14 +104,17 @@ test.describe('Data menu', () => {
 });
 
 test.describe('View menu', () => {
-  test('Freeze top row dispatches set-first-row-frozen', async ({ page }) => {
+  test('Freeze top row dispatches set-frozen', async ({ page }) => {
+    // We route Freeze top row through the additive facade method instead of
+    // set-first-row-frozen (see freeze-additive.spec.ts for the why), which
+    // dispatches the underlying set-frozen command.
     await page.goto('/');
     await waitForUniver(page);
     const fired = await clickMenuItemFiresCommand(
       page,
       'view',
       'freeze-row',
-      'set-first-row-frozen',
+      'set-frozen',
     );
     expect(fired).toBe(true);
   });
