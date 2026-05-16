@@ -154,7 +154,7 @@ test.describe('Toolbar — zoom slider + borders dropdown + undo/redo placement'
   test('Borders popover closes on outside click (canvas)', async ({ page }) => {
     await page.getByTestId('ribbon-dropdown-borders-caret').click();
     await expect(page.getByTestId('ribbon-dropdown-borders-popover')).toBeVisible();
-    const grid = page.locator('#univer-sheet-main-canvas_workbook-1');
+    const grid = page.locator('[id^="univer-sheet-main-canvas_"]');
     const box = await grid.boundingBox();
     if (box) {
       await page.mouse.click(box.x + 300, box.y + 200);

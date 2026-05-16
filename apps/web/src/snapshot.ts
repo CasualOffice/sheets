@@ -1,4 +1,11 @@
 import { LocaleType, type IWorkbookData } from '@univerjs/core';
+import appPkg from '../package.json';
+
+// Sourced from our package.json's `@univerjs/core` dependency declaration so
+// the snapshot's appVersion tracks the installed Univer release automatically.
+// (Vite supports JSON imports; tsconfig has resolveJsonModule.)
+const UNIVER_DEP = (appPkg.dependencies as Record<string, string>)['@univerjs/core'];
+export const UNIVER_VERSION = UNIVER_DEP.replace(/^[~^]/, '');
 
 /**
  * Initial workbook size. Univer materializes row/column metadata for the
@@ -12,10 +19,13 @@ export const MAX_COLUMNS = 1024;
 
 export function emptyWorkbook(): IWorkbookData {
   return {
-    id: 'workbook-1',
+    // Unique per call — Univer's IUniverInstanceService rejects duplicate unit
+    // ids, so a fresh blank workbook must not collide with the one it's
+    // replacing.
+    id: `wb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     rev: 1,
     name: 'Untitled',
-    appVersion: '0.22.1',
+    appVersion: UNIVER_VERSION,
     locale: LocaleType.EN_US,
     styles: {},
     sheetOrder: ['sheet-1'],

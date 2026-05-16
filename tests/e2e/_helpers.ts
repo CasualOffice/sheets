@@ -6,7 +6,9 @@ import type { Page } from '@playwright/test';
  * id and we never want to target it from tests.
  */
 export function mainCanvas(page: Page) {
-  return page.locator('#univer-sheet-main-canvas_workbook-1');
+  // Canvas id encodes the workbook unit id, which is now allocated dynamically
+  // per workbook (so Open / New don't collide on the previous id).
+  return page.locator('[id^="univer-sheet-main-canvas_"]');
 }
 
 export async function waitForUniver(page: Page) {

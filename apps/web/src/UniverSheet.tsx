@@ -183,7 +183,9 @@ export function UniverSheet({ snapshot }: Props) {
   }, []);
 
   // Swap the active workbook unit when the snapshot changes, without
-  // tearing down the Univer instance itself.
+  // tearing down the Univer instance itself. Dispose the old unit BEFORE
+  // creating the new one so we never collide on unit ids (Univer's
+  // IUniverInstanceService throws on duplicate ids).
   const lastSnapshotRef = useRef<IWorkbookData>(snapshot);
   useEffect(() => {
     if (lastSnapshotRef.current === snapshot) return;
@@ -192,17 +194,14 @@ export function UniverSheet({ snapshot }: Props) {
     const current = api.getActiveWorkbook() as unknown as FWorkbook | null;
     const currentId = current?.getId();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const createSheet = (api as any).createUniverSheet as
+    const apiAny = api as any;
+    const createSheet = apiAny.createUniverSheet as
       | ((data: IWorkbookData) => unknown)
       | undefined;
+    const disposeUnit = apiAny.disposeUnit as ((id: string) => void) | undefined;
     if (!createSheet) return;
+    if (currentId) disposeUnit?.call(api, currentId);
     createSheet.call(api, snapshot);
-    if (currentId && currentId !== snapshot.id) {
-      // Dispose after the new unit has rendered to keep handoff seamless.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const disposeUnit = (api as any).disposeUnit as ((id: string) => void) | undefined;
-      queueMicrotask(() => disposeUnit?.call(api, currentId));
-    }
     lastSnapshotRef.current = snapshot;
   }, [snapshot]);
 

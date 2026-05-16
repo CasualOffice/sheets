@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { LocaleType, type ICellData, type IRange, type IStyleData, type IWorkbookData } from '@univerjs/core';
 import { excelStyleToUniver } from './style-mapping';
-import { INITIAL_COLUMNS, INITIAL_ROWS } from '../snapshot';
+import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from '../snapshot';
 
 /**
  * Convert an .xlsx buffer to a Univer `IWorkbookData` snapshot.
@@ -145,7 +145,7 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
     id,
     rev: 1,
     name: wb.title || 'Untitled',
-    appVersion: '0.22.1',
+    appVersion: UNIVER_VERSION,
     locale: LocaleType.EN_US,
     styles,
     sheetOrder,
