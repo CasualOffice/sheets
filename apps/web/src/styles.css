@@ -24,10 +24,14 @@
   --color-text-disabled: #a19f9d;
   --color-text-on-accent: #ffffff;
 
-  --color-hover: rgba(0, 0, 0, 0.04);
-  --color-pressed: rgba(0, 0, 0, 0.08);
-  --color-focus-ring: #2b88d8;
-  --color-selected: rgba(33, 115, 70, 0.10);
+  --color-hover: rgba(0, 0, 0, 0.05);
+  --color-pressed: rgba(0, 0, 0, 0.10);
+  --color-focus-ring: #217346;
+  --color-selected: rgba(33, 115, 70, 0.12);
+  --color-selected-strong: rgba(33, 115, 70, 0.22);
+
+  /* Toolbar pill — neutral grey, matches Google's tint */
+  --color-toolbar-pill: #f1f3f4;
 
   /* Spacing scale (4px base) */
   --space-0: 0;
@@ -59,10 +63,13 @@
   --weight-medium: 500;
   --weight-semibold: 600;
 
-  /* Shape */
-  --radius-sm: 2px;
+  /* Shape — keep two scales only, used consistently:
+     --radius-md for all interactive controls (buttons, selects, inputs),
+     --radius-lg for containers (dialogs, popovers, menus). */
+  --radius-sm: 4px;  /* alias for backwards compat */
   --radius-md: 4px;
-  --radius-lg: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 20px;
 
   /* Elevation */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
@@ -241,8 +248,8 @@ button {
   display: inline-flex;
   align-items: center;
   height: 40px;
-  background: #e9eef6;
-  border-radius: 20px;
+  background: var(--color-toolbar-pill);
+  border-radius: var(--radius-pill);
   padding: 0 var(--space-3);
   gap: 0;
   overflow-x: auto;
@@ -292,9 +299,13 @@ button {
 }
 
 .toolbar .btn[aria-pressed="true"] {
-  background: #cfe2f4;
-  color: #0b57d0;
+  background: var(--color-selected);
+  color: var(--color-accent);
   border-color: transparent;
+}
+
+.toolbar .btn[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--color-selected-strong);
 }
 
 .toolbar .ribbon__select {
@@ -586,20 +597,24 @@ button {
 
 .btn[aria-pressed="true"] {
   background: var(--color-selected);
-  border-color: rgba(33, 115, 70, 0.30);
+  border-color: transparent;
   color: var(--color-accent);
+}
+
+.btn[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--color-selected-strong);
 }
 
 /* Ribbon select (font family, font size) */
 .ribbon__select {
-  height: 24px;
+  height: 28px;
   padding: 0 var(--space-3);
   font-family: inherit;
   font-size: var(--text-sm);
   color: var(--color-text);
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: border-color var(--motion-fast) var(--ease-out);
 }
@@ -761,7 +776,8 @@ button {
 }
 
 .formula-bar__input:focus {
-  background: var(--color-accent-soft);
+  background: var(--color-surface);
+  box-shadow: inset 0 -1px 0 var(--color-accent);
 }
 
 .formula-bar__input:disabled {
@@ -777,7 +793,7 @@ button {
   padding: var(--space-2);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-3);
   z-index: 1100;
   max-height: 280px;
@@ -1107,11 +1123,11 @@ button {
    Dropdown menu (File menu, future Insert menu)
    ───────────────────────────────────────────────────────────────────────── */
 .menu {
-  position: fixed; /* escape all containing blocks (incl. ribbon__body overflow:hidden) */
+  position: fixed; /* escape all containing blocks */
   min-width: 220px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-3);
   padding: var(--space-2) 0;
   z-index: 1000;
