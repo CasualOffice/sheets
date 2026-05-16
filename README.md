@@ -1,5 +1,7 @@
 # Casual Sheets
 
+**Live demo: <https://schnsrw.github.io/sheets/>** (deployed from `main` via GitHub Actions)
+
 A web-based, Excel-flavored spreadsheet editor with real-time collaboration on the roadmap. Built on [Univer](https://github.com/dream-num/univer) (Apache-2.0 OSS).
 
 The goal: feel like Excel, not like Google Sheets — ribbon, formula bar, file-centric workflow.

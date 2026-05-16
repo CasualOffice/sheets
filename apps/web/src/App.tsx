@@ -42,7 +42,7 @@ export function App() {
             className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
             data-testid="app-shell"
           >
-            <TitleBar filename={snapshot.name || 'Untitled'} />
+            <TitleBar />
             <MenuBar />
             <Toolbar />
             {formulaBarVisible && <FormulaBar />}
