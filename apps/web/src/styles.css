@@ -10,14 +10,19 @@
   --color-accent-fg: #ffffff;
   --color-accent-soft: #e6f0eb;
 
-  /* Neutrals (Fluent v9-ish) */
-  --color-bg: #faf9f8;
-  --color-surface: #ffffff;
-  --color-surface-alt: #f3f2f1;
+  /* Neutrals — three-tone layering scale.
+       zone 0 (white) — content surfaces (titlebar + menubar + formula bar + grid)
+       zone 1 (cool grey) — tool strips (toolbar)
+       zone 2 (warmer grey) — chrome strips (sheet tabs + status bar)
+     Each zone is visually distinct without needing hard borders. */
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;              /* zone 0 */
+  --color-surface-alt: #eef0f4;          /* zone 1 — clearly visible vs white */
+  --color-surface-strip: #e8eaed;        /* zone 2 — distinct chrome strip */
   --color-surface-raised: #ffffff;
-  --color-border: #e1dfdd;
-  --color-border-strong: #d2d0ce;
-  --color-divider: #edebe9;
+  --color-border: #d2d6dc;
+  --color-border-strong: #b9bec5;
+  --color-divider: #dadce0;
 
   --color-text: #201f1e;
   --color-text-secondary: #605e5c;
@@ -231,16 +236,16 @@ button {
   background: var(--color-pressed);
 }
 
-/* ── Flat toolbar row — matches the squared edges of the rest of the chrome.
-   Single row of icons on a soft grey strip, separated from the menubar
-   and formula bar by 1px divider lines. */
+/* ── Toolbar — zone 1 (cool grey). The bg shift vs white menubar above
+   and white formula bar below provides the layer separation. Subtle inset
+   shadow on top gives the strip a slight recessed feel. */
 .toolbar {
   display: flex;
   align-items: center;
   height: var(--toolbar-h);
   background: var(--color-surface-alt);
-  border-bottom: 1px solid var(--color-divider);
   padding: 0;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
   z-index: 2;
 }
 
@@ -380,7 +385,8 @@ button {
   height: 26px;
 }
 
-/* Title bar — white background, green icon accent (Google-Sheets style) */
+/* Title bar — zone 0 (white). Thin accent strip at the very top in the
+   brand colour gives the chrome a small splash of identity. */
 .titlebar {
   display: flex;
   align-items: center;
@@ -393,7 +399,7 @@ button {
   font-weight: var(--weight-medium);
   user-select: none;
   letter-spacing: 0;
-  border-bottom: 1px solid var(--color-divider);
+  border-top: 3px solid var(--color-accent);
   z-index: 4;
 }
 
@@ -695,13 +701,13 @@ button {
   cursor: pointer;
 }
 
-/* Formula bar — same 1px divider strip as the rest of the chrome. */
+/* Formula bar — zone 0 (white) again, separating itself from the grey
+   toolbar above and the white grid below by simply changing colour. */
 .formula-bar {
   display: flex;
   align-items: stretch;
   height: var(--formula-bar-h);
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-divider);
   z-index: 2;
 }
 
@@ -822,13 +828,15 @@ button {
   line-height: 1.35;
 }
 
-/* Grid host — only this region "scrolls" (Univer canvas handles internally) */
+/* Grid host — zone 0 (white). The grey sheet-tabs strip below provides
+   the next layer break. */
 .grid-host {
   position: relative;
   min-height: 0;
   background: var(--color-surface);
   overflow: hidden;
   z-index: 1;
+  border-top: 1px solid var(--color-divider);
 }
 
 .grid-host > div {
@@ -883,14 +891,14 @@ button {
   to { opacity: 1; }
 }
 
-/* Sheet tabs (between grid and status bar) */
+/* Sheet tabs — zone 1 (grey). The bg shift separates it from the
+   white grid above and matches the status bar below. */
 .sheet-tabs {
   display: flex;
   align-items: stretch;
   height: var(--sheet-tabs-h);
   padding: 0 var(--space-3);
-  background: var(--color-surface-alt);
-  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-strip);
   font-size: var(--text-sm);
   z-index: 2;
 }
@@ -1021,15 +1029,14 @@ button {
   min-width: 22px;
 }
 
-/* Status bar */
+/* Status bar — zone 2 (warm grey), continuous with the sheet tabs above. */
 .statusbar {
   display: flex;
   align-items: center;
   gap: var(--space-5);
   height: var(--statusbar-h);
   padding: 0 var(--space-6);
-  background: var(--color-surface-alt);
-  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-strip);
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
   user-select: none;
