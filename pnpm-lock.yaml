@@ -87,6 +87,9 @@ importers:
       '@univerjs/sheets-formula':
         specifier: 0.22.1
         version: 0.22.1(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/sheets-numfmt':
+        specifier: 0.22.1
+        version: 0.22.1(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/sheets-ui':
         specifier: 0.22.1
         version: 0.22.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
@@ -1302,6 +1305,11 @@ packages:
 
   '@univerjs/sheets-formula@0.22.1':
     resolution: {integrity: sha512-iESkDCYMcG0FqszTaZkrlgXXDTY+PJM+kP31nFem4ATg8/h7wMctwmJEu4Ia0WWDj/i2LzYN06lOKH/yNt/WhQ==}
+    peerDependencies:
+      rxjs: '>=7.0.0'
+
+  '@univerjs/sheets-numfmt@0.22.1':
+    resolution: {integrity: sha512-PDRjEtKWnMAnO0isO1qXaG9DznV38BDMEpGKIP9jSQtSCajkpViuskeP1Zi49WK10cVWOt8S4+SzeZTzmB84aQ==}
     peerDependencies:
       rxjs: '>=7.0.0'
 
@@ -3350,6 +3358,15 @@ snapshots:
       '@univerjs/core': 0.22.1(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/engine-formula': 0.22.1(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/rpc': 0.22.1(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/sheets': 0.22.1(react@18.3.1)(rxjs@7.8.2)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - react
+
+  '@univerjs/sheets-numfmt@0.22.1(react@18.3.1)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 0.22.1(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-formula': 0.22.1(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/sheets': 0.22.1(react@18.3.1)(rxjs@7.8.2)
       rxjs: 7.8.2
     transitivePeerDependencies:

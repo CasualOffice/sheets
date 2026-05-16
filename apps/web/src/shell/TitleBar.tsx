@@ -1,12 +1,12 @@
+import { Icon } from './Icon';
+
 type Props = { filename: string };
 
 export function TitleBar({ filename }: Props) {
   return (
     <header className="titlebar" data-testid="titlebar" role="banner">
       <span className="titlebar__brand">
-        <span className="titlebar__brand-mark" aria-hidden="true">
-          X
-        </span>
+        <Icon name="grid_view" size="sm" className="titlebar__brand-icon" />
         <span>Sheet</span>
       </span>
       <span className="titlebar__divider" aria-hidden="true" />

@@ -40,9 +40,10 @@
   --space-8: 24px;
 
   /* Typography */
-  --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+    Menlo, monospace;
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -104,7 +105,38 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss01", "ss03"; /* Inter optical alternates */
 }
+
+/* Material Symbols Outlined — single source of icon truth.
+   `display: block` on the @import + font-display: block here prevents the
+   FOUT showing icon names as text. */
+.icon {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 20;
+}
+
+.icon--sm { font-size: 16px; }
+.icon--lg { font-size: 22px; }
+.icon--filled { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 20; }
 
 button {
   font: inherit;
@@ -154,18 +186,8 @@ button {
   opacity: 0.9;
 }
 
-.titlebar__brand-mark {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-fg);
-  color: var(--color-accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: var(--weight-semibold);
-  font-size: 10px;
-  line-height: 1;
+.titlebar__brand-icon {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .titlebar__divider {
@@ -414,4 +436,11 @@ button {
   background: var(--color-accent);
   display: inline-block;
   margin-right: var(--space-2);
+}
+
+.statusbar__stats {
+  display: inline-flex;
+  gap: var(--space-6);
+  margin-right: var(--space-6);
+  font-variant-numeric: tabular-nums;
 }

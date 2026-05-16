@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LocaleType, LogLevel, Univer, UniverInstanceType, type IWorkbookData } from '@univerjs/core';
-import { FUniver, type FUniver as FUniverType } from '@univerjs/core/facade';
+import { FUniver } from '@univerjs/core/facade';
 import { defaultTheme } from '@univerjs/themes';
 
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
@@ -11,6 +11,7 @@ import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
 import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
+import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 
 // Per-plugin CSS — Univer ships its own design tokens & layout primitives;
 // each plugin's `lib/index.css` must be imported once.
@@ -23,26 +24,26 @@ import '@univerjs/sheets-ui/lib/index.css';
 import '@univerjs/sheets/facade';
 import '@univerjs/sheets-ui/facade';
 import '@univerjs/sheets-formula/facade';
+import '@univerjs/sheets-numfmt/facade';
 import '@univerjs/docs-ui/facade';
 import '@univerjs/ui/facade';
 import '@univerjs/engine-formula/facade';
 
 import { LOCALES } from './locale';
+import { useSetUniverAPI } from './use-univer';
 
-type Props = {
-  snapshot: IWorkbookData;
-  onReady?: (api: FUniverType) => void;
-};
+type Props = { snapshot: IWorkbookData };
 
 declare global {
   interface Window {
-    __univerAPI?: FUniverType;
+    __univerAPI?: FUniver;
   }
 }
 
-export function UniverSheet({ snapshot, onReady }: Props) {
+export function UniverSheet({ snapshot }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  const setApi = useSetUniverAPI();
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -68,13 +69,13 @@ export function UniverSheet({ snapshot, onReady }: Props) {
     univer.registerPlugin(UniverSheetsPlugin);
     univer.registerPlugin(UniverSheetsUIPlugin);
     univer.registerPlugin(UniverSheetsFormulaPlugin);
+    univer.registerPlugin(UniverSheetsNumfmtPlugin);
 
     univer.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
 
     const api = FUniver.newAPI(univer);
-    onReady?.(api);
+    setApi(api);
 
-    // Wait one animation frame so Univer has painted before we drop the skeleton.
     const raf = requestAnimationFrame(() => setReady(true));
 
     if (import.meta.env.DEV) {
@@ -83,6 +84,7 @@ export function UniverSheet({ snapshot, onReady }: Props) {
 
     return () => {
       cancelAnimationFrame(raf);
+      setApi(null);
       univer.dispose();
       if (import.meta.env.DEV) {
         delete window.__univerAPI;
