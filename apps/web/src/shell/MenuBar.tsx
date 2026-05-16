@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { Icon } from './Icon';
 import { PropertiesDialog } from './PropertiesDialog';
+import { AboutDialog } from './AboutDialog';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useUI } from '../use-ui';
@@ -76,6 +77,7 @@ export function MenuBar() {
   const ui = useUI();
   const [open, setOpen] = useState<MenuId | null>(null);
   const [showProperties, setShowProperties] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   const onClose = () => setOpen(null);
 
@@ -191,7 +193,7 @@ export function MenuBar() {
           id: 'about',
           label: 'About Casual Sheets',
           icon: 'info',
-          onClick: () => alert('Casual Sheets — an Excel-flavored web spreadsheet built on Univer OSS.'),
+          onClick: () => setShowAbout(true),
         },
         {
           kind: 'item',
@@ -235,6 +237,8 @@ export function MenuBar() {
           onClose={() => setShowProperties(false)}
         />
       )}
+
+      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
     </>
   );
 }
