@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { PropertiesDialog } from './PropertiesDialog';
+import { openXlsx, pickXlsxFile, saveAsXlsx } from './file-actions';
+import { useUniverAPI } from '../use-univer';
+import { useWorkbook } from '../use-workbook';
+import { emptyWorkbook } from '../snapshot';
 
 /**
- * Office 365-style File dropdown (not the full backstage view).
- * The "File" tab in the ribbon is rendered by Ribbon.tsx; this component
- * owns the dropdown panel that opens beneath it.
+ * Office 365-style File dropdown.
  */
 export function FileMenu({
   anchorRef,
@@ -14,7 +16,11 @@ export function FileMenu({
   anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
+  const api = useUniverAPI();
+  const workbook = useWorkbook();
+
   const [showProperties, setShowProperties] = useState(false);
+  const [busy, setBusy] = useState<null | 'opening' | 'saving'>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
@@ -41,6 +47,41 @@ export function FileMenu({
     };
   }, [onClose, anchorRef, showProperties]);
 
+  const handleOpen = async () => {
+    setBusy('opening');
+    try {
+      const file = await pickXlsxFile();
+      if (!file) return;
+      const data = await openXlsx(file);
+      workbook.replaceWorkbook(data);
+    } catch (err) {
+      console.error('Open failed:', err);
+      alert(`Could not open file: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+      onClose();
+    }
+  };
+
+  const handleSaveAs = async () => {
+    if (!api) return;
+    setBusy('saving');
+    try {
+      await saveAsXlsx(api, workbook.snapshot.name || 'workbook');
+    } catch (err) {
+      console.error('Save failed:', err);
+      alert(`Could not save file: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+      onClose();
+    }
+  };
+
+  const handleNew = () => {
+    workbook.replaceWorkbook(emptyWorkbook());
+    onClose();
+  };
+
   return (
     <>
       <div
@@ -50,9 +91,29 @@ export function FileMenu({
         role="menu"
         style={{ top: pos.top, left: pos.left }}
       >
-        <MenuItem icon="add" label="New" disabled shortcut="Ctrl+N" />
-        <MenuItem icon="folder_open" label="Open" disabled shortcut="Ctrl+O" />
-        <MenuItem icon="save" label="Save As" disabled shortcut="Ctrl+Shift+S" />
+        <MenuItem
+          icon="add"
+          label="New"
+          shortcut="Ctrl+N"
+          testid="file-menu-new"
+          onClick={handleNew}
+        />
+        <MenuItem
+          icon="folder_open"
+          label={busy === 'opening' ? 'Opening…' : 'Open'}
+          shortcut="Ctrl+O"
+          testid="file-menu-open"
+          disabled={busy !== null}
+          onClick={handleOpen}
+        />
+        <MenuItem
+          icon="save"
+          label={busy === 'saving' ? 'Saving…' : 'Save As'}
+          shortcut="Ctrl+Shift+S"
+          testid="file-menu-save-as"
+          disabled={busy !== null || !api}
+          onClick={handleSaveAs}
+        />
         <div className="menu__divider" />
         <MenuItem
           icon="info"

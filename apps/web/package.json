@@ -27,6 +27,7 @@
     "@univerjs/sheets-ui": "0.22.1",
     "@univerjs/themes": "0.22.1",
     "@univerjs/ui": "0.22.1",
+    "exceljs": "^4.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
