@@ -49,31 +49,36 @@ export function pickXlsxFile(): Promise<File | null> {
     input.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     input.style.display = 'none';
 
-    let resolved = false;
-    const cleanup = () => {
+    let settled = false;
+    const settle = (file: File | null) => {
+      if (settled) return;
+      settled = true;
       input.remove();
-      window.removeEventListener('focus', onFocus);
-    };
-    const onChange = () => {
-      resolved = true;
-      const file = input.files?.[0] ?? null;
-      console.info('[open-xlsx] file chosen', file?.name);
-      cleanup();
       resolve(file);
     };
-    // If the user cancels the OS file dialog there's no `change` event —
-    // detect that by listening for focus returning to the window.
-    const onFocus = () => {
-      setTimeout(() => {
-        if (resolved) return;
-        console.info('[open-xlsx] picker cancelled (focus returned without change)');
-        cleanup();
-        resolve(null);
-      }, 200);
-    };
 
-    input.addEventListener('change', onChange, { once: true });
-    window.addEventListener('focus', onFocus);
+    input.addEventListener(
+      'change',
+      () => {
+        const file = input.files?.[0] ?? null;
+        console.info('[open-xlsx] file chosen', file?.name);
+        settle(file);
+      },
+      { once: true },
+    );
+    // Standardized cancel event — fires when the user dismisses the native
+    // dialog without picking a file. Replaces the older focus-based heuristic
+    // which raced the change event in some browsers (resolving "cancelled"
+    // before the file selection arrived).
+    input.addEventListener(
+      'cancel',
+      () => {
+        console.info('[open-xlsx] picker cancelled');
+        settle(null);
+      },
+      { once: true },
+    );
+
     document.body.appendChild(input);
     input.click();
   });
