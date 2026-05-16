@@ -53,7 +53,9 @@ export function TitleBar() {
     <header className="titlebar" data-testid="titlebar" role="banner">
       <a className="titlebar__brand" href="/" aria-label="Casual Sheets — home">
         <img
-          src="/brand.svg"
+          // Prefix with Vite's BASE_URL so the path resolves under
+          // /sheets/ on GitHub Pages and stays at / in local dev.
+          src={`${import.meta.env.BASE_URL}brand.svg`}
           alt=""
           className="titlebar__brand-icon"
           width={28}
