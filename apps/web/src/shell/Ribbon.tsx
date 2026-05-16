@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useUniverAPI } from '../use-univer';
+import { FileMenu } from './FileMenu';
 import { useActiveCellState, type HAlign } from '../hooks/useActiveCellState';
 import {
   NUMBER_FORMATS,
@@ -7,6 +8,7 @@ import {
   setNumberFormat,
   toggleBold,
   toggleItalic,
+  toggleMerge,
   toggleUnderline,
 } from './home-tab-actions';
 import { Icon } from './Icon';
@@ -16,17 +18,26 @@ type Tab = (typeof TABS)[number];
 
 export function Ribbon() {
   const [active, setActive] = useState<Tab>('Home');
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const fileBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <nav className="ribbon" data-testid="ribbon" aria-label="Ribbon">
       <div className="ribbon__tabs" role="tablist">
         <button
+          ref={fileBtnRef}
           type="button"
           className="ribbon__tab ribbon__tab--file"
           data-testid="ribbon-tab-file"
+          aria-haspopup="menu"
+          aria-expanded={fileMenuOpen}
+          onClick={() => setFileMenuOpen((v) => !v)}
         >
           File
         </button>
+        {fileMenuOpen && (
+          <FileMenu anchorRef={fileBtnRef} onClose={() => setFileMenuOpen(false)} />
+        )}
         {TABS.map((tab) => (
           <button
             type="button"
@@ -123,6 +134,14 @@ function HomeTab() {
           pressed={state.align === ('right' as HAlign)}
           disabled={!ready}
           onClick={() => api && setAlignment(api, 'right')}
+        />
+        <ToolbarButton
+          id="merge-cells"
+          label={state.isMerged ? 'Unmerge cells' : 'Merge & Center'}
+          icon={state.isMerged ? 'call_split' : 'cell_merge'}
+          pressed={state.isMerged}
+          disabled={!ready || (!state.isMerged && !state.isMultiCell)}
+          onClick={() => api && toggleMerge(api, state.isMerged)}
         />
       </RibbonGroup>
 

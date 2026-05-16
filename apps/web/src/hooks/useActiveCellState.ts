@@ -34,6 +34,10 @@ export type ActiveCellState = {
   isUnderline: boolean;
   align: HAlign;
   numberFormat: string;
+  /** True when the current selection exactly matches a merged range. */
+  isMerged: boolean;
+  /** True when the current selection spans more than one cell. */
+  isMultiCell: boolean;
   /** Selection-level numeric aggregates (excludes single-cell selection). */
   stats: { count: number; sum: number; avg: number | null } | null;
 };
@@ -48,6 +52,8 @@ const EMPTY: ActiveCellState = {
   isUnderline: false,
   align: 'unset',
   numberFormat: '',
+  isMerged: false,
+  isMultiCell: false,
   stats: null,
 };
 
@@ -89,10 +95,28 @@ export function useActiveCellState(): ActiveCellState {
             ? ''
             : String(rawValue);
 
+      // Detect merge: does the current selection exactly match one of the
+      // worksheet's merged ranges?
+      const selRow = selection.getRow();
+      const selCol = selection.getColumn();
+      const selW = selection.getWidth();
+      const selH = selection.getHeight();
+      const merges = sheet.getMergedRanges();
+      const isMerged = merges.some((m) => {
+        const r = m.getRange();
+        return (
+          r.startRow === selRow &&
+          r.startColumn === selCol &&
+          r.endRow === selRow + selH - 1 &&
+          r.endColumn === selCol + selW - 1
+        );
+      });
+      const isMultiCell = selW * selH > 1;
+
       // Selection stats (multi-cell only).
       let stats: ActiveCellState['stats'] = null;
-      const cellsX = selection.getWidth();
-      const cellsY = selection.getHeight();
+      const cellsX = selW;
+      const cellsY = selH;
       if (cellsX * cellsY > 1) {
         let count = 0;
         let sum = 0;
@@ -124,6 +148,8 @@ export function useActiveCellState(): ActiveCellState {
         align:
           style?.ht === 1 ? 'left' : style?.ht === 2 ? 'center' : style?.ht === 3 ? 'right' : 'unset',
         numberFormat: style?.n?.pattern ?? '',
+        isMerged,
+        isMultiCell,
         stats,
       };
     };

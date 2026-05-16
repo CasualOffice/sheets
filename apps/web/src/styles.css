@@ -1,7 +1,6 @@
 /* ─────────────────────────────────────────────────────────────────────────
    Design tokens — Office-inspired. Centralised so the whole UI restyles
-   from this file alone. Refined per phase; do not hard-code colors/spacing
-   in components.
+   from this file alone.
    ───────────────────────────────────────────────────────────────────────── */
 :root {
   /* Brand */
@@ -9,6 +8,7 @@
   --color-accent-hover: #1e6b40;
   --color-accent-active: #185a36;
   --color-accent-fg: #ffffff;
+  --color-accent-soft: #e6f0eb;
 
   /* Neutrals (Fluent v9-ish) */
   --color-bg: #faf9f8;
@@ -27,6 +27,7 @@
   --color-hover: rgba(0, 0, 0, 0.04);
   --color-pressed: rgba(0, 0, 0, 0.08);
   --color-focus-ring: #2b88d8;
+  --color-selected: rgba(33, 115, 70, 0.10);
 
   /* Spacing scale (4px base) */
   --space-0: 0;
@@ -66,11 +67,12 @@
   /* Elevation */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
   --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
 
   /* Layout */
-  --titlebar-h: 32px;
-  --ribbon-h: 96px;
-  --formula-bar-h: 28px;
+  --titlebar-h: 30px;
+  --ribbon-h: 92px;
+  --formula-bar-h: 26px;
   --statusbar-h: 24px;
 
   /* Motion */
@@ -80,7 +82,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Reset / base
+   Reset / base — lock the viewport. Nothing outside the grid ever scrolls.
    ───────────────────────────────────────────────────────────────────────── */
 *,
 *::before,
@@ -95,6 +97,8 @@ body,
   padding: 0;
   height: 100%;
   width: 100%;
+  overflow: hidden; /* SPA: body never scrolls — Univer handles grid scroll */
+  overscroll-behavior: none;
 }
 
 body {
@@ -106,12 +110,25 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv11", "ss01", "ss03"; /* Inter optical alternates */
+  font-feature-settings: "cv11", "ss01", "ss03";
 }
 
-/* Material Symbols Outlined — single source of icon truth.
-   `display: block` on the @import + font-display: block here prevents the
-   FOUT showing icon names as text. */
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+/* Material Symbols Outlined — single source of icon truth. */
 .icon {
   font-family: "Material Symbols Outlined";
   font-weight: normal;
@@ -139,19 +156,8 @@ body {
 .icon--lg { font-size: 22px; }
 .icon--filled { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 20; }
 
-button {
-  font: inherit;
-  color: inherit;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-  border-radius: var(--radius-sm);
-}
-
 /* ─────────────────────────────────────────────────────────────────────────
-   App shell
+   App shell — strict grid, only the grid row stretches.
    ───────────────────────────────────────────────────────────────────────── */
 .app {
   display: grid;
@@ -159,9 +165,9 @@ button {
     var(--titlebar-h)
     var(--ribbon-h)
     var(--formula-bar-h)
-    1fr
+    minmax(0, 1fr)
     var(--statusbar-h);
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   background: var(--color-bg);
@@ -179,17 +185,20 @@ button {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   user-select: none;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-1);
+  z-index: 4;
 }
 
 .titlebar__brand {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
 .titlebar__brand-icon {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .titlebar__divider {
@@ -200,6 +209,7 @@ button {
 
 .titlebar__filename {
   font-weight: var(--weight-medium);
+  letter-spacing: 0;
 }
 
 .titlebar__spacer {
@@ -212,18 +222,21 @@ button {
   flex-direction: column;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  z-index: 3;
 }
 
 .ribbon__tabs {
   display: flex;
   align-items: stretch;
-  height: 30px;
-  padding: 0 var(--space-4);
-  gap: var(--space-1);
+  height: 28px;
+  padding: 0 var(--space-3);
+  gap: 0;
   border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface);
 }
 
 .ribbon__tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   height: 100%;
@@ -255,6 +268,7 @@ button {
   background: var(--color-accent);
   color: var(--color-text-on-accent);
   border-bottom-color: transparent;
+  margin-right: var(--space-2);
 }
 
 .ribbon__tab--file:hover {
@@ -262,13 +276,21 @@ button {
   color: var(--color-text-on-accent);
 }
 
+.ribbon__tab--file:active,
+.ribbon__tab--file[aria-expanded="true"] {
+  background: var(--color-accent-active);
+}
+
 .ribbon__body {
   flex: 1;
   display: flex;
   align-items: stretch;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   background: var(--color-surface-alt);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .ribbon__group {
@@ -278,6 +300,7 @@ button {
   gap: var(--space-2);
   padding: 0 var(--space-4);
   border-right: 1px solid var(--color-divider);
+  flex-shrink: 0;
 }
 
 .ribbon__group:last-child {
@@ -298,9 +321,20 @@ button {
   line-height: 1;
   padding-top: var(--space-1);
   user-select: none;
+  letter-spacing: 0.02em;
 }
 
-/* Ribbon button — Fluent v8 toolbar feel */
+.ribbon__empty {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Buttons — Fluent v8 toolbar feel */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -316,14 +350,15 @@ button {
   cursor: pointer;
   transition:
     background var(--motion-fast) var(--ease-out),
-    border-color var(--motion-fast) var(--ease-out);
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   background: var(--color-hover);
 }
 
-.btn:active {
+.btn:active:not(:disabled) {
   background: var(--color-pressed);
 }
 
@@ -337,8 +372,9 @@ button {
 }
 
 .btn[aria-pressed="true"] {
-  background: var(--color-pressed);
-  border-color: var(--color-border-strong);
+  background: var(--color-selected);
+  border-color: rgba(33, 115, 70, 0.30);
+  color: var(--color-accent);
 }
 
 /* Formula bar */
@@ -348,13 +384,14 @@ button {
   height: var(--formula-bar-h);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  z-index: 2;
 }
 
 .formula-bar__name-box {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 88px;
+  min-width: 96px;
   padding: 0 var(--space-4);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
@@ -373,8 +410,8 @@ button {
 }
 
 .formula-bar__action {
-  height: 22px;
-  min-width: 22px;
+  height: 20px;
+  min-width: 20px;
   padding: 0;
 }
 
@@ -409,8 +446,7 @@ button {
 }
 
 .formula-bar__input:focus {
-  background: #fffef0; /* Excel-style subtle highlight when editing */
-  box-shadow: inset 0 0 0 1px var(--color-focus-ring);
+  background: var(--color-accent-soft);
 }
 
 .formula-bar__input:disabled {
@@ -418,12 +454,13 @@ button {
   background: var(--color-surface-alt);
 }
 
-/* Grid host */
+/* Grid host — only this region "scrolls" (Univer canvas handles internally) */
 .grid-host {
   position: relative;
   min-height: 0;
   background: var(--color-surface);
-  border-top: 1px solid var(--color-divider);
+  overflow: hidden;
+  z-index: 1;
 }
 
 .grid-host > div {
@@ -431,8 +468,7 @@ button {
   inset: 0;
 }
 
-/* Skeleton shown until Univer first paints — avoids the brief
-   "white box" gap on mount that would otherwise look broken. */
+/* Skeleton shown until Univer first paints */
 .grid-skeleton {
   position: absolute;
   inset: 0;
@@ -479,17 +515,6 @@ button {
   to { opacity: 1; }
 }
 
-/* Empty-tab placeholder (used by ribbon tabs not yet wired in Phase 1) */
-.ribbon__empty {
-  display: inline-flex;
-  align-items: center;
-  height: 100%;
-  padding: 0 var(--space-5);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
 /* Status bar */
 .statusbar {
   display: flex;
@@ -502,6 +527,7 @@ button {
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
   user-select: none;
+  z-index: 2;
 }
 
 .statusbar__spacer {
@@ -523,3 +549,200 @@ button {
   margin-right: var(--space-6);
   font-variant-numeric: tabular-nums;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Dropdown menu (File menu, future Insert menu)
+   ───────────────────────────────────────────────────────────────────────── */
+.menu {
+  position: absolute;
+  min-width: 220px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3);
+  padding: var(--space-2) 0;
+  z-index: 1000;
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+
+.menu__item:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.menu__item:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.menu__item-icon {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.menu__item-shortcut {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.menu__divider {
+  height: 1px;
+  margin: var(--space-2) 0;
+  background: var(--color-divider);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Modal dialog (Properties dialog and future modals)
+   ───────────────────────────────────────────────────────────────────────── */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.36);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: backdrop-in 140ms var(--ease-out);
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dialog {
+  width: min(540px, 92vw);
+  max-height: 86vh;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.dialog__title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  margin: 0;
+}
+
+.dialog__body {
+  padding: var(--space-5) var(--space-6);
+  overflow: auto;
+}
+
+.dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-surface-alt);
+}
+
+/* Form fields */
+.field {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+
+.field__label {
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-medium);
+}
+
+.field__value {
+  color: var(--color-text);
+}
+
+.field__value--mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.input {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.input:focus {
+  border-color: var(--color-focus-ring);
+  outline: none;
+}
+
+.input--textarea {
+  height: auto;
+  padding: var(--space-3);
+  resize: vertical;
+  min-height: 60px;
+  line-height: var(--leading-normal);
+  font-family: inherit;
+}
+
+.btn-primary {
+  height: 28px;
+  padding: 0 var(--space-5);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+
+.btn-primary:hover { background: var(--color-accent-hover); }
+.btn-primary:active { background: var(--color-accent-active); }
+
+.btn-secondary {
+  height: 28px;
+  padding: 0 var(--space-5);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+
+.btn-secondary:hover { background: var(--color-hover); }

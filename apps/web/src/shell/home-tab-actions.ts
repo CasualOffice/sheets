@@ -49,3 +49,20 @@ export const NUMBER_FORMATS = {
   currency: '"$"#,##0.00',
   percent: '0.00%',
 } as const;
+
+/**
+ * Toggle merge on the current selection. If the selection is a single
+ * already-merged range, unmerge it; otherwise merge and center.
+ */
+export function toggleMerge(api: FUniver, currentlyMerged: boolean) {
+  const range = activeRange(api);
+  if (!range) return;
+  if (currentlyMerged) {
+    range.breakApart();
+  } else {
+    // Skip the 1x1 no-op — merging a single cell is meaningless.
+    if (range.getWidth() * range.getHeight() <= 1) return;
+    range.merge();
+    range.setHorizontalAlignment('center');
+  }
+}

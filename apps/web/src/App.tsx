@@ -6,12 +6,14 @@ import { StatusBar } from './shell/StatusBar';
 import { UniverSheet } from './UniverSheet';
 import { emptyWorkbook } from './snapshot';
 import { UniverRoot } from './UniverRoot';
+import { useWorkbookGrowth } from './hooks/useWorkbookGrowth';
 
 export function App() {
   const snapshot = useMemo(() => emptyWorkbook(), []);
 
   return (
     <UniverRoot>
+      <GrowthDriver />
       <div className="app">
         <TitleBar filename="Untitled" />
         <Ribbon />
@@ -23,4 +25,10 @@ export function App() {
       </div>
     </UniverRoot>
   );
+}
+
+/** Effect-only component — auto-grows the active sheet near edges. */
+function GrowthDriver() {
+  useWorkbookGrowth();
+  return null;
 }

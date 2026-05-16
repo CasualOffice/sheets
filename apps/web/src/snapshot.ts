@@ -1,5 +1,15 @@
 import { LocaleType, type IWorkbookData } from '@univerjs/core';
 
+/**
+ * Initial workbook size. Univer materializes row/column metadata for the
+ * declared count, so we keep this modest to boot fast. The grid grows
+ * dynamically (see `useWorkbookGrowth`) up to MAX_ROWS / MAX_COLUMNS.
+ */
+export const INITIAL_ROWS = 1024;
+export const INITIAL_COLUMNS = 128;
+export const MAX_ROWS = 8192;
+export const MAX_COLUMNS = 1024;
+
 export function emptyWorkbook(): IWorkbookData {
   return {
     id: 'workbook-1',
@@ -14,8 +24,8 @@ export function emptyWorkbook(): IWorkbookData {
         id: 'sheet-1',
         name: 'Sheet1',
         cellData: {},
-        rowCount: 1000,
-        columnCount: 26,
+        rowCount: INITIAL_ROWS,
+        columnCount: INITIAL_COLUMNS,
       },
     },
   };
