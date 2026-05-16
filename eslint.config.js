@@ -9,13 +9,13 @@ import prettier from 'eslint-config-prettier';
 export default tseslint.config(
   {
     ignores: [
-      'node_modules',
-      'dist',
-      'build',
-      '.turbo',
-      'vendor',
-      'test-results',
-      'playwright-report',
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.turbo/**',
+      'vendor/**',
+      'test-results/**',
+      'playwright-report/**',
       '**/*.config.js',
       '**/*.config.ts',
     ],
