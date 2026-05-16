@@ -37,6 +37,10 @@ yarn-debug.log*
 .DS_Store
 Thumbs.db
 
+# Reference assets dropped at project root (not part of source)
+/img.png
+/*.heic
+
 # Editors
 *.swp
 *.swo
