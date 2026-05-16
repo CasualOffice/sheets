@@ -189,9 +189,9 @@ export function MenuBar() {
         {
           kind: 'item',
           id: 'about',
-          label: 'About casual sheets',
+          label: 'About Casual Sheets',
           icon: 'info',
-          onClick: () => alert('casual sheets — an Excel-flavored web spreadsheet built on Univer OSS.'),
+          onClick: () => alert('Casual Sheets — an Excel-flavored web spreadsheet built on Univer OSS.'),
         },
         {
           kind: 'item',

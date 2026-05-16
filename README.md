@@ -1,4 +1,4 @@
-# casual sheets
+# Casual Sheets
 
 A web-based, Excel-flavored spreadsheet editor with real-time collaboration on the roadmap. Built on [Univer](https://github.com/dream-num/univer) (Apache-2.0 OSS).
 

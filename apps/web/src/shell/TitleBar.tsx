@@ -1,14 +1,22 @@
-import { Icon } from './Icon';
-
 type Props = { filename: string };
 
 export function TitleBar({ filename }: Props) {
   return (
     <header className="titlebar" data-testid="titlebar" role="banner">
-      <span className="titlebar__brand">
-        <Icon name="grid_view" size="lg" className="titlebar__brand-icon" filled />
-        <span>casual sheets</span>
-      </span>
+      <a
+        className="titlebar__brand"
+        href="/"
+        aria-label="Casual Sheets — home"
+      >
+        <img
+          src="/brand.svg"
+          alt=""
+          className="titlebar__brand-icon"
+          width={28}
+          height={28}
+        />
+        <span className="titlebar__brand-name">Casual Sheets</span>
+      </a>
       <span className="titlebar__divider" aria-hidden="true" />
       <span className="titlebar__filename" data-testid="titlebar-filename">
         {filename}

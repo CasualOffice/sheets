@@ -1,7 +1,8 @@
-<!-- Full wordmark — brand mark + 'Casual Sheets'. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" fill="none">
-  <rect x="4" y="4" width="64" height="64" rx="14" fill="#217346"/>
-  <g fill="#ffffff" transform="translate(4 4)">
+<!-- Icon-only brand mark — identical to favicon.svg so the app icon and
+     the in-app brand match exactly. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#217346"/>
+  <g fill="#ffffff">
     <rect x="11" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
     <rect x="26" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
     <rect x="41" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
@@ -12,13 +13,4 @@
     <rect x="26" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
     <rect x="41" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
   </g>
-
-  <text x="86" y="46" font-family="Inter, -apple-system, system-ui, sans-serif"
-        font-size="28" font-weight="600" fill="#201f1e" letter-spacing="-0.02em">
-    Casual
-  </text>
-  <text x="186" y="46" font-family="Inter, -apple-system, system-ui, sans-serif"
-        font-size="28" font-weight="400" fill="#605e5c" letter-spacing="-0.01em">
-    Sheets
-  </text>
 </svg>

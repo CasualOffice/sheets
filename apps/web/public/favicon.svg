@@ -1,14 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Rounded green tile -->
-  <rect width="32" height="32" rx="7" fill="#217346"/>
-  <!-- White inner spreadsheet glyph -->
-  <g transform="translate(6 6)" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round">
-    <rect x="0" y="0" width="20" height="20" rx="2"/>
-    <!-- two vertical dividers -->
-    <path d="M7 0 v20 M13 0 v20"/>
-    <!-- three horizontal dividers -->
-    <path d="M0 5 h20 M0 10 h20 M0 15 h20"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Brand tile -->
+  <rect width="64" height="64" rx="14" fill="#217346"/>
+
+  <!-- 3×3 grid of soft white cells, one bright center cell as the "active cell".
+       Cells are separate (with tile-coloured gaps) so the icon reads as
+       distinct cells, not a uniform grid. -->
+  <g fill="#ffffff">
+    <!-- top row -->
+    <rect x="11" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <rect x="26" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <rect x="41" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <!-- middle row -->
+    <rect x="11" y="26" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <rect x="26" y="26" width="12" height="12" rx="2.5"/>  <!-- ACTIVE CELL -->
+    <rect x="41" y="26" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <!-- bottom row -->
+    <rect x="11" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <rect x="26" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+    <rect x="41" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
   </g>
-  <!-- Top-left "casual" dot in brand fill for personality -->
-  <rect x="6" y="6" width="7" height="5" rx="1" fill="#ffffff" fill-opacity="0.12"/>
 </svg>
