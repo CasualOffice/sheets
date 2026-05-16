@@ -70,6 +70,28 @@ export function unhideSelectedRows(api: FUniver) {
   api.executeCommand('sheet.command.set-selected-rows-visible');
 }
 
+/**
+ * Reveal every hidden row on the active sheet — recovery action when a filter
+ * (sheet-level or table-level) has left rows stuck hidden after the filter UI
+ * was dismissed. Univer's set-specific-rows-visible command is a no-op for
+ * rows that are already visible, so passing the full row span is safe.
+ */
+export function showAllRows(api: FUniver) {
+  const wb = api.getActiveWorkbook();
+  const sheet = activeSheet(api);
+  if (!wb || !sheet) return;
+  const rowCount = (sheet as unknown as { getMaxRows: () => number }).getMaxRows();
+  if (!rowCount) return;
+  api.executeCommand('sheet.command.set-specific-rows-visible', {
+    unitId: wb.getId(),
+    subUnitId: sheet.getSheetId(),
+    ranges: [
+      // rangeType: 1 === RANGE_TYPE.ROW.
+      { startRow: 0, endRow: rowCount - 1, startColumn: 0, endColumn: 0, rangeType: 1 },
+    ],
+  });
+}
+
 export function hideSelectedColumns(api: FUniver) {
   api.executeCommand('sheet.command.set-col-hidden');
 }
