@@ -224,43 +224,50 @@ button {
   background: var(--color-pressed);
 }
 
-/* ── Office-style toolbar (single horizontal strip of grouped controls) ──── */
+/* ── Google-Sheets-style toolbar — rounded pill, single row ─────────────── */
 .toolbar {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   height: var(--toolbar-h);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-5);
   z-index: 2;
-  overflow: hidden;
 }
 
+/* Inner element is the visible "pill": light blue-grey, rounded corners.
+   All controls live inside it on a single baseline. */
 .toolbar__inner {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  background: #e9eef6;
+  border-radius: 20px;
+  padding: 0 var(--space-3);
   gap: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  max-width: 100%;
 }
 
-/* All groups are single-row → all icons share the same baseline.
-   Group label hidden on the toolbar (kept available for ribbon-style
-   contexts elsewhere); group sections separated by thin dividers. */
+.toolbar__inner::-webkit-scrollbar { display: none; }
+
+/* Groups inside the pill — thin vertical dividers, no labels. */
 .toolbar .ribbon__group {
   display: inline-flex;
   align-items: center;
   height: 100%;
   padding: 0 var(--space-3);
-  border-right: 1px solid var(--color-divider);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
+  gap: 2px;
 }
 
+.toolbar .ribbon__group:first-child { padding-left: var(--space-2); }
 .toolbar .ribbon__group:last-child {
   border-right: 0;
+  padding-right: var(--space-2);
 }
 
 .toolbar .ribbon__group-body {
@@ -270,8 +277,70 @@ button {
   gap: 2px;
 }
 
-.toolbar .ribbon__group-label {
-  display: none;
+.toolbar .ribbon__group-label { display: none; }
+
+/* Buttons / selects inside the pill — slightly smaller and rounded. */
+.toolbar .btn {
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-md);
+  background: transparent;
+}
+
+.toolbar .btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.toolbar .btn[aria-pressed="true"] {
+  background: #cfe2f4;
+  color: #0b57d0;
+  border-color: transparent;
+}
+
+.toolbar .ribbon__select {
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+}
+
+.toolbar .ribbon__select:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.toolbar .ribbon__select:focus {
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+
+.toolbar .btn-split,
+.toolbar .btn-color {
+  height: 28px;
+  background: transparent;
+}
+
+.toolbar .btn-split__icon,
+.toolbar .btn-color__icon {
+  height: 28px;
+  width: 28px;
+  background: transparent;
+}
+
+.toolbar .btn-split__caret,
+.toolbar .btn-color__picker {
+  height: 28px;
+  background: transparent;
+}
+
+.toolbar .btn-split__icon:hover,
+.toolbar .btn-color__icon:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.toolbar .btn-split__caret:hover,
+.toolbar .btn-color__picker:hover {
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* Inside the toolbar, normalize sizes so buttons and selects align cleanly. */
