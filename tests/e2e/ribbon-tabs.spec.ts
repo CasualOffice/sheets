@@ -84,14 +84,13 @@ test.describe('Home — font, color, wrap, borders, vertical align', () => {
   });
 });
 
-test.describe('Insert tab', () => {
+test.describe('Insert via menu bar', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
-    await page.getByTestId('ribbon-tab-insert').click();
   });
 
-  test('Insert row above shifts the existing value down', async ({ page }) => {
+  test('Insert → Row above shifts the existing value down', async ({ page }) => {
     await page.evaluate(() => {
       const api = window.__univerAPI!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,7 +99,8 @@ test.describe('Insert tab', () => {
     });
     await selectRange(page, 'A1');
 
-    await page.getByTestId('ribbon-btn-insert-row-above').click();
+    await page.getByTestId('menubar-insert').click();
+    await page.getByTestId('menu-item-insert-row-above').click();
 
     const a1 = await readCell(page, 'A1');
     const a2 = await readCell(page, 'A2');
@@ -108,7 +108,7 @@ test.describe('Insert tab', () => {
     expect(a2?.v).toBe('first');
   });
 
-  test('Insert column right shifts content one column right', async ({ page }) => {
+  test('Insert → Column right shifts content one column right', async ({ page }) => {
     await page.evaluate(() => {
       const api = window.__univerAPI!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,7 +117,8 @@ test.describe('Insert tab', () => {
     });
     await selectRange(page, 'A1');
 
-    await page.getByTestId('ribbon-btn-insert-col-right').click();
+    await page.getByTestId('menubar-insert').click();
+    await page.getByTestId('menu-item-insert-col-right').click();
 
     const b1 = await readCell(page, 'B1');
     const c1 = await readCell(page, 'C1');
@@ -125,13 +126,14 @@ test.describe('Insert tab', () => {
     expect(c1?.v).toBe('col-b');
   });
 
-  test('New sheet appends to the workbook', async ({ page }) => {
+  test('Insert → New sheet appends to the workbook', async ({ page }) => {
     const before = await page.evaluate(() => {
       const api = window.__univerAPI!;
       return api.getActiveWorkbook()!.getSheets().length;
     });
 
-    await page.getByTestId('ribbon-btn-insert-sheet').click();
+    await page.getByTestId('menubar-insert').click();
+    await page.getByTestId('menu-item-new-sheet').click();
 
     const after = await page.evaluate(() => {
       const api = window.__univerAPI!;
@@ -141,8 +143,8 @@ test.describe('Insert tab', () => {
   });
 });
 
-test.describe('Formulas tab — AutoSum', () => {
-  test('SUM of a column range lands in the cell below', async ({ page }) => {
+test.describe('Toolbar — AutoSum and sort', () => {
+  test('AutoSum default lands SUM formula in cell below the selection', async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
 
@@ -156,16 +158,12 @@ test.describe('Formulas tab — AutoSum', () => {
     });
     await selectRange(page, 'A1:A3');
 
-    await page.getByTestId('ribbon-tab-formulas').click();
-    // AutoSum is now a split-dropdown; the icon applies the default (SUM).
     await page.getByTestId('ribbon-dropdown-auto-sum-apply').click();
 
     const a4 = await readCell(page, 'A4');
     expect(a4?.f).toBe('=SUM(A1:A3)');
   });
-});
 
-test.describe('Data tab — sort', () => {
   test('Sort ascending reorders the selected column', async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
@@ -179,7 +177,6 @@ test.describe('Data tab — sort', () => {
       ws.getRange('A3').setValue({ v: 2 });
     });
     await selectRange(page, 'A1:A3');
-    await page.getByTestId('ribbon-tab-data').click();
     await page.getByTestId('ribbon-btn-sort-asc').click();
 
     const values = await page.evaluate(() => {

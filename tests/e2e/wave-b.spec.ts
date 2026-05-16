@@ -1,13 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { selectRange, waitForUniver } from './_helpers';
 
-/**
- * Wave B coverage — verifies the new ribbon buttons dispatch the right
- * Univer commands. We don't try to drive the resulting dialogs/panels
- * (those are Univer-internal and version-fragile); the assertion is that
- * the command event fires.
- */
-
 import type { Page } from '@playwright/test';
 
 declare global {
@@ -39,93 +32,104 @@ async function clickFiresCommand(
     window.__cmdLog!.length = 0;
   });
   await page.getByTestId(buttonTestId).click();
-  // Univer commands may dispatch async mutations; give them a moment.
   await page.waitForTimeout(400);
   return page.evaluate((frag) => {
     return (window.__cmdLog ?? []).some((id) => id.includes(frag));
   }, commandFragment);
 }
 
-test.describe('Wave B — Insert tab', () => {
+async function clickMenuItemFiresCommand(
+  page: Page,
+  menuId: string,
+  itemId: string,
+  commandFragment: string,
+): Promise<boolean> {
+  await attachCmdLog(page);
+  await page.evaluate(() => {
+    window.__cmdLog!.length = 0;
+  });
+  await page.getByTestId(`menubar-${menuId}`).click();
+  await page.getByTestId(`menu-item-${itemId}`).click();
+  await page.waitForTimeout(400);
+  return page.evaluate((frag) => {
+    return (window.__cmdLog ?? []).some((id) => id.includes(frag));
+  }, commandFragment);
+}
+
+test.describe('Insert menu', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
     await selectRange(page, 'A1:C3');
-    await page.getByTestId('ribbon-tab-insert').click();
   });
 
   test('Insert Table dispatches add-table', async ({ page }) => {
-    const fired = await clickFiresCommand(page, 'ribbon-btn-insert-table', 'add-table');
+    const fired = await clickMenuItemFiresCommand(page, 'insert', 'insert-table', 'add-table');
     expect(fired).toBe(true);
   });
 
   test('Insert Comment dispatches show-comment-modal', async ({ page }) => {
     await selectRange(page, 'B2');
-    const fired = await clickFiresCommand(page, 'ribbon-btn-insert-comment', 'comment-modal');
+    const fired = await clickMenuItemFiresCommand(page, 'insert', 'insert-comment', 'comment-modal');
     expect(fired).toBe(true);
   });
 
   test('Insert Hyperlink dispatches insert-hyper-link', async ({ page }) => {
-    const fired = await clickFiresCommand(page, 'ribbon-btn-insert-hyperlink', 'hyper-link');
+    const fired = await clickMenuItemFiresCommand(page, 'insert', 'insert-link', 'hyper-link');
     expect(fired).toBe(true);
   });
 });
 
-test.describe('Wave B — Data tab', () => {
+test.describe('Data menu', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
     await selectRange(page, 'A1:A5');
-    await page.getByTestId('ribbon-tab-data').click();
   });
 
   test('Data Validation opens the panel', async ({ page }) => {
-    const fired = await clickFiresCommand(page, 'ribbon-btn-data-validation', 'validation');
+    const fired = await clickMenuItemFiresCommand(page, 'data', 'data-validation', 'validation');
     expect(fired).toBe(true);
   });
 
   test('Conditional Formatting opens the panel', async ({ page }) => {
-    const fired = await clickFiresCommand(
+    const fired = await clickMenuItemFiresCommand(
       page,
-      'ribbon-btn-conditional-formatting',
+      'data',
+      'conditional-formatting',
       'conditional.formatting',
     );
     expect(fired).toBe(true);
   });
 });
 
-test.describe('Wave B — View tab', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('View menu', () => {
+  test('Freeze top row dispatches set-first-row-frozen', async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
-    await page.getByTestId('ribbon-tab-view').click();
-  });
-
-  test('Freeze top row dispatches set-first-row-frozen', async ({ page }) => {
-    const fired = await clickFiresCommand(
+    const fired = await clickMenuItemFiresCommand(
       page,
-      'ribbon-btn-freeze-first-row',
+      'view',
+      'freeze-row',
       'set-first-row-frozen',
     );
     expect(fired).toBe(true);
   });
 
   test('Toggle Gridlines dispatches toggle-gridlines', async ({ page }) => {
-    const fired = await clickFiresCommand(
+    await page.goto('/');
+    await waitForUniver(page);
+    const fired = await clickMenuItemFiresCommand(
       page,
-      'ribbon-btn-toggle-gridlines',
+      'view',
+      'toggle-gridlines',
       'toggle-gridlines',
     );
     expect(fired).toBe(true);
   });
-
-  test('Zoom 100 dispatches set-zoom-ratio', async ({ page }) => {
-    const fired = await clickFiresCommand(page, 'ribbon-btn-zoom-100', 'zoom-ratio');
-    expect(fired).toBe(true);
-  });
 });
 
-test.describe('Wave B — Status bar zoom + undo/redo moved to tabs strip', () => {
+test.describe('Toolbar — zoom slider + borders dropdown + undo/redo placement', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
@@ -139,7 +143,6 @@ test.describe('Wave B — Status bar zoom + undo/redo moved to tabs strip', () =
     await page.evaluate(() => {
       window.__cmdLog!.length = 0;
     });
-    // React's onChange listens for the synthesized change event; fill works.
     await page.getByTestId('statusbar-zoom-slider').fill('150');
     await page.waitForTimeout(400);
     const fired = await page.evaluate(() =>
@@ -148,10 +151,9 @@ test.describe('Wave B — Status bar zoom + undo/redo moved to tabs strip', () =
     expect(fired).toBe(true);
   });
 
-  test('Borders popover closes on outside click (canvas + titlebar)', async ({ page }) => {
+  test('Borders popover closes on outside click (canvas)', async ({ page }) => {
     await page.getByTestId('ribbon-dropdown-borders-caret').click();
     await expect(page.getByTestId('ribbon-dropdown-borders-popover')).toBeVisible();
-    // Click somewhere on the canvas grid.
     const grid = page.locator('#univer-sheet-main-canvas_workbook-1');
     const box = await grid.boundingBox();
     if (box) {
@@ -160,11 +162,37 @@ test.describe('Wave B — Status bar zoom + undo/redo moved to tabs strip', () =
     await expect(page.getByTestId('ribbon-dropdown-borders-popover')).toHaveCount(0);
   });
 
-  test('Undo / Redo are in the sheet-tabs strip (not the titlebar)', async ({ page }) => {
-    // Buttons live under sheet-tabs now.
-    await expect(page.getByTestId('sheet-tabs').getByTestId('qat-undo')).toBeVisible();
-    await expect(page.getByTestId('sheet-tabs').getByTestId('qat-redo')).toBeVisible();
-    // And not under titlebar.
-    await expect(page.getByTestId('titlebar').getByTestId('qat-undo')).toHaveCount(0);
+  test('Undo / Redo on the sheet-tabs strip work', async ({ page }) => {
+    // Make a styled change we can undo.
+    await selectRange(page, 'A1');
+    await page.getByTestId('ribbon-btn-bold').click();
+    await page.getByTestId('sheet-tabs').getByTestId('qat-undo').click();
+    // The bold toggle should now reflect false again.
+    await expect(page.getByTestId('ribbon-btn-bold')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('Toolbar Insert/Comment button dispatches show-comment-modal', async ({ page }) => {
+    await selectRange(page, 'B2');
+    const fired = await clickFiresCommand(page, 'ribbon-btn-insert-comment', 'comment-modal');
+    expect(fired).toBe(true);
+  });
+
+  test('AutoSum split-button default dispatches a SUM formula', async ({ page }) => {
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 10 });
+      ws.getRange('A2').setValue({ v: 20 });
+    });
+    await selectRange(page, 'A1:A2');
+    await page.getByTestId('ribbon-dropdown-auto-sum-apply').click();
+    const a3 = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      return ws.getRange('A3').getCellData();
+    });
+    expect((a3 as { f?: string }).f).toBe('=SUM(A1:A2)');
   });
 });

@@ -63,12 +63,13 @@ test.describe('Number format dropdown + decimals', () => {
     expect(style?.n?.pattern).toBe('#,##0.00');
   });
 
-  test('Increase decimals adds a decimal place', async ({ page }) => {
+  test('Increase decimals (Format menu) adds a decimal place', async ({ page }) => {
     // Start from Number format with 2 decimals; bump to 3.
     await page.getByTestId('ribbon-select-num-format').selectOption('number');
-    await page.getByTestId('ribbon-btn-num-decimal-up').click();
+    // Decimal +/- live in the Format menu now.
+    await page.getByTestId('menubar-format').click();
+    await page.getByTestId('menu-item-decimal-up').click();
     const style = (await readStyle(page, 'A1')) as { n?: { pattern: string } } | null;
-    // The decimal-bump command appends one '0' after the dot, or grows it.
     expect(style?.n?.pattern).toMatch(/0\.0{3,}/);
   });
 });
@@ -83,27 +84,32 @@ test.describe('Format Painter', () => {
   });
 });
 
-test.describe('Find & Replace', () => {
-  test('Ribbon button is reachable; click executes the command', async ({ page }) => {
+test.describe('Find & Replace (Edit menu)', () => {
+  test('Edit → Find & Replace dispatches the command', async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
 
-    // Subscribe to command events so we can confirm the find-replace command
-    // fired (the actual dialog markup is Univer-internal and version-fragile).
     const fired = await page.evaluate(async () => {
       const api = window.__univerAPI!;
       return new Promise<boolean>((resolve) => {
-        const sub = api.addEvent(api.Event.CommandExecuted, (e) => {
+        const log: string[] = [];
+        api.addEvent(api.Event.CommandExecuted, (e) => {
           const id = (e as { id?: string }).id ?? '';
-          if (id.includes('find-dialog') || id.includes('find-replace')) {
-            sub.dispose();
-            resolve(true);
-          }
+          log.push(id);
         });
-        document
-          .querySelector<HTMLButtonElement>('[data-testid="ribbon-btn-find-replace"]')
-          ?.click();
-        setTimeout(() => resolve(false), 1500);
+        document.querySelector<HTMLButtonElement>('[data-testid="menubar-edit"]')?.click();
+        setTimeout(() => {
+          document
+            .querySelector<HTMLButtonElement>('[data-testid="menu-item-find-replace"]')
+            ?.click();
+        }, 50);
+        setTimeout(
+          () =>
+            resolve(
+              log.some((id) => id.includes('find-dialog') || id.includes('find-replace')),
+            ),
+          1500,
+        );
       });
     });
     expect(fired).toBe(true);

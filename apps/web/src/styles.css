@@ -71,7 +71,8 @@
 
   /* Layout */
   --titlebar-h: 30px;
-  --ribbon-h: 92px;
+  --menubar-h: 28px;
+  --toolbar-h: 76px;
   --formula-bar-h: 26px;
   --sheet-tabs-h: 28px;
   --statusbar-h: 24px;
@@ -164,7 +165,8 @@ button {
   display: grid;
   grid-template-rows:
     var(--titlebar-h)
-    var(--ribbon-h)
+    var(--menubar-h)
+    var(--toolbar-h)
     var(--formula-bar-h)
     minmax(0, 1fr)
     var(--sheet-tabs-h)
@@ -178,10 +180,103 @@ button {
 .app--no-formula-bar {
   grid-template-rows:
     var(--titlebar-h)
-    var(--ribbon-h)
+    var(--menubar-h)
+    var(--toolbar-h)
     minmax(0, 1fr)
     var(--sheet-tabs-h)
     var(--statusbar-h);
+}
+
+/* ── Menu bar (Google-Sheets style top dropdowns) ───────────────────────── */
+.menubar {
+  display: flex;
+  align-items: stretch;
+  height: var(--menubar-h);
+  padding: 0 var(--space-3);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: var(--text-sm);
+  z-index: 3;
+}
+
+.menubar__item {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--space-4);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin: var(--space-1) 0;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+
+.menubar__item:hover,
+.menubar__item--open {
+  background: var(--color-hover);
+}
+
+.menubar__item--open {
+  background: var(--color-pressed);
+}
+
+/* ── Flat toolbar (fixed — does not switch on tab clicks) ───────────────── */
+.toolbar {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+  z-index: 2;
+  overflow: hidden;
+}
+
+.toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 var(--space-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  min-height: 0;
+}
+
+.toolbar__row + .toolbar__row {
+  border-top: 1px solid var(--color-divider);
+}
+
+/* Inside the flat toolbar, groups stack horizontally with thin dividers
+   and a visible bottom label, matching Office's ribbon group pattern. */
+.toolbar .ribbon__group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  margin: 0;
+  height: 100%;
+  border-right: 1px solid var(--color-divider);
+  flex-shrink: 0;
+}
+
+.toolbar .ribbon__group:last-child {
+  border-right: 0;
+}
+
+.toolbar .ribbon__group-body {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  height: 26px;
+}
+
+.toolbar .ribbon__group-label {
+  display: none; /* flat toolbar is tight — labels live in tooltips */
 }
 
 /* Title bar */
