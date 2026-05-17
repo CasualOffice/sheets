@@ -39,6 +39,34 @@ export async function workbookDataToXlsx(data: IWorkbookData): Promise<Blob> {
     if (!wsd) continue;
     const ws = wb.addWorksheet(wsd.name ?? sheetId);
 
+    // Hidden sheet — BooleanNumber 1 means hidden in Univer.
+    if (wsd.hidden === 1) ws.state = 'hidden';
+
+    // Tab color — Univer stores '#rrggbb' or 'rgb(...)'; ExcelJS wants ARGB hex.
+    if (wsd.tabColor && typeof wsd.tabColor === 'string' && wsd.tabColor.startsWith('#')) {
+      const rgb = wsd.tabColor.slice(1).toUpperCase();
+      if (/^[0-9A-F]{6}$/.test(rgb)) {
+        ws.properties.tabColor = { argb: `FF${rgb}` };
+      }
+    }
+
+    // Frozen panes — Univer.freeze.ySplit/xSplit count the frozen rows/cols.
+    if (wsd.freeze && (wsd.freeze.xSplit > 0 || wsd.freeze.ySplit > 0)) {
+      ws.views = [{
+        state: 'frozen',
+        xSplit: wsd.freeze.xSplit || 0,
+        ySplit: wsd.freeze.ySplit || 0,
+      }];
+    }
+
+    // Sheet-level defaults.
+    if (typeof wsd.defaultColumnWidth === 'number' && wsd.defaultColumnWidth > 0) {
+      ws.properties.defaultColWidth = pxToChars(wsd.defaultColumnWidth);
+    }
+    if (typeof wsd.defaultRowHeight === 'number' && wsd.defaultRowHeight > 0) {
+      ws.properties.defaultRowHeight = pxToPoints(wsd.defaultRowHeight);
+    }
+
     const cellData = (wsd.cellData ?? {}) as Record<string, Record<string, ICellSnapshot>>;
     for (const rKey of Object.keys(cellData)) {
       const r = Number(rKey);

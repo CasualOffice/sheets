@@ -165,6 +165,77 @@ test.describe('xlsx round-trip', () => {
     expect(names).toContain('Inputs');
   });
 
+  test('freeze + tab color + hidden sheet round-trip', async ({ page }) => {
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      const wb = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fws: any = wb.getActiveSheet();
+      // Freeze the top row + first column.
+      fws.setFrozenRows(1);
+      fws.setFrozenColumns(1);
+      // Tab color via the facade if exposed; otherwise via the mutation field
+      // on the snapshot. Univer's facade has setTabColor? Fallback to the
+      // mutation directly so the snapshot reflects it before export.
+      if (typeof fws.setTabColor === 'function') fws.setTabColor('#ff5722');
+      // Add a second sheet and hide it. The snapshot is what export reads, so
+      // it's enough to set hidden=1 directly there — facade variants differ
+      // across Univer versions.
+      wb.insertSheet('Secret');
+    });
+
+    // Mark the second sheet hidden in the snapshot before export.
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const snap: any = api.getActiveWorkbook()!.save();
+      const secretId = snap.sheetOrder.find((id: string) => snap.sheets[id].name === 'Secret');
+      if (secretId) snap.sheets[secretId].hidden = 1;
+      // Cache the prepared snapshot for the next eval.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as { __preparedSnap?: unknown }).__preparedSnap = snap;
+    });
+
+    const result = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const snap: any = (window as { __preparedSnap?: unknown }).__preparedSnap;
+      const blob = await window.__xlsx!.workbookDataToXlsx(snap);
+      const buf = await blob.arrayBuffer();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const reloaded: any = await window.__xlsx!.xlsxToWorkbookData(buf);
+      const firstId = reloaded.sheetOrder[0];
+      const first = reloaded.sheets[firstId];
+      const secret = Object.values(reloaded.sheets).find((s: unknown) => (s as { name: string }).name === 'Secret') as { hidden?: number } | undefined;
+      return {
+        freeze: first.freeze,
+        tabColor: first.tabColor,
+        secretHidden: secret?.hidden,
+      };
+    });
+
+    expect(result.freeze?.ySplit).toBe(1);
+    expect(result.freeze?.xSplit).toBe(1);
+    expect(result.secretHidden).toBe(1);
+  });
+
+  test('tab color round-trip via snapshot field', async ({ page }) => {
+    // Set tabColor directly on the snapshot and round-trip — avoids depending
+    // on any facade setter that may or may not exist.
+    const result = await page.evaluate(async () => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const original: any = api.getActiveWorkbook()!.save();
+      const firstId = original.sheetOrder[0];
+      original.sheets[firstId].tabColor = '#aabbcc';
+      const blob = await window.__xlsx!.workbookDataToXlsx(original);
+      const buf = await blob.arrayBuffer();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const reloaded: any = await window.__xlsx!.xlsxToWorkbookData(buf);
+      return reloaded.sheets[reloaded.sheetOrder[0]].tabColor;
+    });
+    expect(result).toBe('#aabbcc');
+  });
+
   test('column widths and row heights round-trip', async ({ page }) => {
     // Set non-default widths on A and B and a tall row 1 via the facade,
     // then export → re-import and check the values come back.

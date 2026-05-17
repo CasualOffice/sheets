@@ -147,6 +147,42 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
       if (entry.h !== undefined || entry.hd !== undefined) rowData[rowNumber - 1] = entry;
     });
 
+    // Frozen panes — ExcelJS stores the first view; we read xSplit/ySplit.
+    let freeze: { xSplit: number; ySplit: number; startRow: number; startColumn: number } | undefined;
+    const view = (ws as { views?: Array<{ state?: string; xSplit?: number; ySplit?: number }> })
+      .views?.[0];
+    if (view?.state === 'frozen') {
+      const xSplit = view.xSplit ?? 0;
+      const ySplit = view.ySplit ?? 0;
+      if (xSplit > 0 || ySplit > 0) {
+        freeze = {
+          xSplit,
+          ySplit,
+          // Univer's freeze.startRow/startColumn is the first non-frozen cell.
+          startRow: ySplit > 0 ? ySplit : -1,
+          startColumn: xSplit > 0 ? xSplit : -1,
+        };
+      }
+    }
+
+    // Tab color — ExcelJS gives { argb }, Univer wants '#rrggbb'.
+    const argb = ws.properties?.tabColor?.argb;
+    const tabColor =
+      argb && /^[0-9A-Fa-f]{8}$/.test(argb) ? `#${argb.slice(2).toLowerCase()}` : undefined;
+
+    // Sheet-level defaults (in our pixel units).
+    const defaultColumnWidth =
+      typeof ws.properties?.defaultColWidth === 'number'
+        ? charsToPx(ws.properties.defaultColWidth)
+        : undefined;
+    const defaultRowHeight =
+      typeof ws.properties?.defaultRowHeight === 'number'
+        ? pointsToPx(ws.properties.defaultRowHeight)
+        : undefined;
+
+    // Hidden — ExcelJS exposes ws.state as 'visible' | 'hidden' | 'veryHidden'.
+    const hidden = (ws as { state?: string }).state === 'hidden' ? 1 : undefined;
+
     sheets[sheetId] = {
       id: sheetId,
       name: ws.name,
@@ -156,6 +192,11 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
       rowData,
       rowCount: Math.max(INITIAL_ROWS, maxRow + 1),
       columnCount: Math.max(INITIAL_COLUMNS, maxCol + 1),
+      ...(freeze ? { freeze } : {}),
+      ...(tabColor ? { tabColor } : {}),
+      ...(defaultColumnWidth !== undefined ? { defaultColumnWidth } : {}),
+      ...(defaultRowHeight !== undefined ? { defaultRowHeight } : {}),
+      ...(hidden ? { hidden } : {}),
     };
   }
 
