@@ -8,6 +8,7 @@ import { useWorkbook } from '../use-workbook';
 import { useUI } from '../use-ui';
 import { emptyWorkbook } from '../snapshot';
 import { openXlsx, pickXlsxFile, saveAsXlsx } from './file-actions';
+import { printActiveSheet } from './print';
 import {
   copy as actCopy,
   cut as actCut,
@@ -82,6 +83,21 @@ export function MenuBar() {
 
   const onClose = () => setOpen(null);
 
+  // Intercept Ctrl/Cmd+P globally — the default would print the whole web
+  // page (chrome + grid). We print only the active sheet via an offscreen
+  // iframe instead. Capture-phase so we beat browser shortcuts on focused
+  // inputs as well.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'p' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        if (api) printActiveSheet(api);
+      }
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [api]);
+
   const handleNew = () => workbook.replaceWorkbook(emptyWorkbook());
   const handleOpen = async () => {
     try {
@@ -111,6 +127,8 @@ export function MenuBar() {
         { kind: 'item', id: 'open', label: 'Open', icon: 'folder_open', shortcut: 'Ctrl+O', onClick: handleOpen },
         { kind: 'item', id: 'save-as', label: 'Save As', icon: 'save', shortcut: 'Ctrl+Shift+S', onClick: handleSaveAs },
         { kind: 'separator', id: 'sep-1' },
+        { kind: 'item', id: 'print', label: 'Print', icon: 'print', shortcut: 'Ctrl+P', onClick: () => api && printActiveSheet(api) },
+        { kind: 'separator', id: 'sep-2' },
         { kind: 'item', id: 'properties', label: 'Properties', icon: 'info', onClick: () => setShowProperties(true) },
       ],
     },
