@@ -1392,7 +1392,10 @@ button {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-3);
   padding: var(--space-2) 0;
-  z-index: 1000;
+  /* Above formula-suggestions (1100) and any toolbar / formula-bar stacking
+     context. Without this, the Borders popover renders behind the formula
+     input — Playwright catches it because pointer hit-tests pick the input. */
+  z-index: 2000;
 }
 
 .menu__item {
@@ -1436,6 +1439,62 @@ button {
   height: 1px;
   margin: var(--space-2) 0;
   background: var(--color-divider);
+}
+
+/* Color-picker row in dropdowns (Borders dropdown uses this). */
+.menu__color-row {
+  padding: 6px 10px 8px;
+}
+
+.menu__color-label {
+  font-size: 11px;
+  font-weight: var(--weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-soft, var(--color-text-secondary, var(--color-text)));
+  margin-bottom: 6px;
+}
+
+.menu__color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.menu__color-swatch {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--color-border-strong) 60%, transparent);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.menu__color-swatch:hover { transform: scale(1.08); }
+
+.menu__color-swatch--active {
+  box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 3px var(--color-surface);
+}
+
+/* Custom color = a label-wrapped <input type="color"> with an icon overlay. */
+.menu__color-swatch--custom {
+  background: linear-gradient(135deg, #ff0066 0%, #ff9900 25%, #ffee00 50%, #00ff66 75%, #0066ff 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.menu__color-swatch--custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
 }
 
 /* Submenu — a nested .menu opened from a parent item. The wrapper anchors

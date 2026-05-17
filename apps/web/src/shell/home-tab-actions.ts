@@ -158,13 +158,14 @@ export function openFindReplace(api: FUniver) {
 
 /**
  * Apply borders to the active selection. Color defaults to the standard
- * neutral grid color so borders blend with Excel-style sheets.
+ * neutral grid color so borders blend with Excel-style sheets; pass an
+ * explicit hex from the toolbar's color picker to override.
  */
 export type BorderChoice = 'all' | 'outside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
 
-const BORDER_COLOR = '#666666';
+export const DEFAULT_BORDER_COLOR = '#666666';
 
-export function setBorders(api: FUniver, choice: BorderChoice) {
+export function setBorders(api: FUniver, choice: BorderChoice, color: string = DEFAULT_BORDER_COLOR) {
   const range = activeRange(api);
   if (!range) return;
   const type =
@@ -182,7 +183,7 @@ export function setBorders(api: FUniver, choice: BorderChoice) {
                 ? BorderType.RIGHT
                 : BorderType.NONE;
   const style = choice === 'none' ? BorderStyleTypes.NONE : BorderStyleTypes.THIN;
-  range.setBorder(type, style, BORDER_COLOR);
+  range.setBorder(type, style, color);
 }
 
 /**

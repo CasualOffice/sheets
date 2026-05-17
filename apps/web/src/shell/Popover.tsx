@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Anchored popover. Positions itself just below the anchor element, closes on
@@ -53,7 +54,11 @@ export function Popover({ anchorRef, onClose, className, children, ...rest }: Pr
     };
   }, [onClose, anchorRef]);
 
-  return (
+  // Portaled to <body> so the popover escapes every parent stacking context
+  // (toolbar, ribbon group, btn-split, etc.). Without this, even with a
+  // high z-index, the rendered popover was sitting below the formula bar
+  // input — Playwright caught it because pointer hit-tests picked the input.
+  return createPortal(
     <div
       ref={ref}
       className={`menu ${className ?? ''}`}
@@ -62,6 +67,7 @@ export function Popover({ anchorRef, onClose, className, children, ...rest }: Pr
       data-testid={rest['data-testid']}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }

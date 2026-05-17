@@ -38,12 +38,14 @@ import {
   type TableThemeId,
 } from './tab-actions';
 import {
+  BordersControl,
   RibbonGroup,
   ToolbarButton,
   ToolbarColorButton,
   ToolbarDropdown,
   ToolbarSelect,
 } from './RibbonControls';
+import { DEFAULT_BORDER_COLOR } from './home-tab-actions';
 
 /**
  * Fixed single-row toolbar — every group lays out its controls in one
@@ -163,11 +165,11 @@ export function Toolbar() {
             disabled={!ready}
             onChange={(c) => api && setFillColor(api, c)}
           />
-          <ToolbarDropdown
-            id="borders"
+          <BordersControl
             label="Borders"
             icon="border_all"
             disabled={!ready}
+            defaultColor={DEFAULT_BORDER_COLOR}
             items={[
               { id: 'all', label: 'All borders', icon: 'border_all' },
               { id: 'outside', label: 'Outside borders', icon: 'border_outer' },
@@ -177,8 +179,8 @@ export function Toolbar() {
               { id: 'right', label: 'Right border', icon: 'border_right' },
               { id: 'none', label: 'No border', icon: 'border_clear' },
             ]}
-            onDefault={() => api && setBorders(api, 'all')}
-            onChoose={(choice) => api && setBorders(api, choice as BorderChoice)}
+            onDefault={(color) => api && setBorders(api, 'all', color)}
+            onChoose={(choice, color) => api && setBorders(api, choice as BorderChoice, color)}
           />
         </RibbonGroup>
 
