@@ -9,9 +9,57 @@ test.describe('Formula bar', () => {
   });
 
   test('Name Box shows active cell reference and tracks selection', async ({ page }) => {
-    await expect(page.getByTestId('name-box')).toHaveText('A1');
+    await expect(page.getByTestId('name-box')).toHaveValue('A1');
     await selectRange(page, 'C3');
-    await expect(page.getByTestId('name-box')).toHaveText('C3');
+    await expect(page.getByTestId('name-box')).toHaveValue('C3');
+  });
+
+  test('Typing a reference into the Name Box navigates to it', async ({ page }) => {
+    const nameBox = page.getByTestId('name-box');
+    await nameBox.click();
+    await nameBox.fill('D7');
+    await nameBox.press('Enter');
+
+    await expect(page.getByTestId('name-box')).toHaveValue('D7');
+    const activeA1 = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      const r = ws.getActiveRange();
+      const a = (col: number) => String.fromCharCode(65 + col);
+      return `${a(r.getColumn())}${r.getRow() + 1}`;
+    });
+    expect(activeA1).toBe('D7');
+  });
+
+  test('Name Box accepts a range and selects it', async ({ page }) => {
+    const nameBox = page.getByTestId('name-box');
+    await nameBox.click();
+    await nameBox.fill('B2:C4');
+    await nameBox.press('Enter');
+
+    const sel = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      const r = ws.getActiveRange();
+      return {
+        row: r.getRow(),
+        col: r.getColumn(),
+        w: r.getWidth(),
+        h: r.getHeight(),
+      };
+    });
+    expect(sel).toEqual({ row: 1, col: 1, w: 2, h: 3 });
+  });
+
+  test('Invalid reference in Name Box leaves selection unchanged', async ({ page }) => {
+    await selectRange(page, 'A1');
+    const nameBox = page.getByTestId('name-box');
+    await nameBox.click();
+    await nameBox.fill('not a ref');
+    await nameBox.press('Enter');
+    await expect(page.getByTestId('name-box')).toHaveValue('A1');
   });
 
   test('Typing text and Enter commits to the active cell', async ({ page }) => {

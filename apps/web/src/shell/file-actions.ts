@@ -1,6 +1,8 @@
 import { CustomRangeType, type IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import { AddHyperLinkCommand } from '@univerjs/sheets-hyper-link';
+import { IMessageService } from '@univerjs/ui';
+import { MessageType } from '@univerjs/design';
 import { workbookDataToXlsx, xlsxToWorkbookData } from '../xlsx';
 import type { ExportExtras } from '../xlsx/export';
 import type { PendingHyperlink } from '../xlsx/import';
@@ -42,13 +44,78 @@ export async function openSpreadsheetFile(file: File): Promise<IWorkbookData> {
 /** Back-compat alias — older callers reference openXlsx by name. */
 export const openXlsx = openSpreadsheetFile;
 
+export type WorkbookFormat = 'xlsx' | 'ods' | 'csv' | 'tsv';
+
+function inferFormat(filename: string): WorkbookFormat {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.ods')) return 'ods';
+  if (lower.endsWith('.csv')) return 'csv';
+  if (lower.endsWith('.tsv') || lower.endsWith('.tab')) return 'tsv';
+  return 'xlsx';
+}
+
+/**
+ * The full "open this file and make it the active workbook" flow used by both
+ * File → Open and drag-and-drop. Parses the file, replaces the active
+ * workbook, and replays imported hyperlinks once the new unit mounts (see
+ * the AddHyperLinkCommand side-channel notes above).
+ *
+ * `replaceWorkbook` is the React-state setter from `WorkbookContext`. It has
+ * to stay outside this module so the file is decoupled from React.
+ */
+export async function loadSpreadsheetFile(
+  file: File,
+  api: FUniver | null,
+  replaceWorkbook: (data: IWorkbookData, format: WorkbookFormat) => void,
+): Promise<void> {
+  const data = await openSpreadsheetFile(file);
+  const format = inferFormat(file.name);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pending = (data as any).__pendingHyperlinks as
+    | PendingHyperlink[]
+    | undefined;
+  replaceWorkbook(data, format);
+  if (api && Array.isArray(pending) && pending.length > 0) {
+    const targetUnitId = data.id;
+    const dispose = api.onUniverSheetCreated((fwb) => {
+      if (fwb.getId() !== targetUnitId) return;
+      void replayPendingHyperlinks(api, targetUnitId, pending);
+      dispose.dispose();
+    });
+  }
+}
+
 export async function saveAsXlsx(api: FUniver, filename = 'workbook.xlsx') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
   const snapshot = wb.save() as IWorkbookData;
   const extras = collectExportExtras(api);
   const blob = await workbookDataToXlsx(snapshot, extras);
-  triggerDownload(blob, ensureExt(filename, 'xlsx'));
+  const finalName = ensureExt(filename, 'xlsx');
+  triggerDownload(blob, finalName);
+  toast(api, `Saved as ${finalName}`);
+}
+
+/**
+ * Resolve Univer's IMessageService off the FUniver injector and show a brief
+ * success toast. Silently no-ops if the message service isn't registered (in
+ * tests, in headless seed paths, etc.) — feedback is nice-to-have, not load-
+ * bearing.
+ */
+function toast(api: FUniver, content: string): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const injector = (api as any)._injector as
+    | { get: (token: unknown) => unknown }
+    | undefined;
+  if (!injector) return;
+  try {
+    const svc = injector.get(IMessageService) as
+      | { show: (opts: { content: string; type?: MessageType; duration?: number }) => unknown }
+      | undefined;
+    svc?.show({ content, type: MessageType.Success, duration: 2500 });
+  } catch {
+    /* message service not registered — silent */
+  }
 }
 
 /**
@@ -146,7 +213,9 @@ export async function saveAsOds(api: FUniver, filename = 'workbook.ods') {
   if (!wb) return;
   const snapshot = wb.save() as IWorkbookData;
   const blob = await workbookDataToOds(snapshot);
-  triggerDownload(blob, ensureExt(filename, 'ods'));
+  const finalName = ensureExt(filename, 'ods');
+  triggerDownload(blob, finalName);
+  toast(api, `Saved as ${finalName}`);
 }
 
 export async function saveAsCsv(api: FUniver, filename = 'workbook.csv') {
@@ -154,7 +223,9 @@ export async function saveAsCsv(api: FUniver, filename = 'workbook.csv') {
   if (!wb) return;
   const snapshot = wb.save() as IWorkbookData;
   const blob = await workbookDataToDelimited(snapshot, 'csv');
-  triggerDownload(blob, ensureExt(filename, 'csv'));
+  const finalName = ensureExt(filename, 'csv');
+  triggerDownload(blob, finalName);
+  toast(api, `Saved as ${finalName}`);
 }
 
 export async function saveAsTsv(api: FUniver, filename = 'workbook.tsv') {
@@ -162,7 +233,9 @@ export async function saveAsTsv(api: FUniver, filename = 'workbook.tsv') {
   if (!wb) return;
   const snapshot = wb.save() as IWorkbookData;
   const blob = await workbookDataToDelimited(snapshot, 'tsv');
-  triggerDownload(blob, ensureExt(filename, 'tsv'));
+  const finalName = ensureExt(filename, 'tsv');
+  triggerDownload(blob, finalName);
+  toast(api, `Saved as ${finalName}`);
 }
 
 function ensureExt(name: string, ext: string): string {

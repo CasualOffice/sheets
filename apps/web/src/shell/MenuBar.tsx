@@ -8,14 +8,12 @@ import { useWorkbook } from '../use-workbook';
 import { useUI } from '../use-ui';
 import { emptyWorkbook } from '../snapshot';
 import {
-  openXlsx,
+  loadSpreadsheetFile,
   pickXlsxFile,
-  replayPendingHyperlinks,
   saveAsCsv,
   saveAsOds,
   saveAsTsv,
   saveAsXlsx,
-  type PendingHyperlink,
 } from './file-actions';
 import { printActiveSheet } from './print';
 import {
@@ -129,33 +127,7 @@ export function MenuBar() {
     try {
       const file = await pickXlsxFile();
       if (!file) return;
-      const data = await openXlsx(file);
-      const lower = file.name.toLowerCase();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let format: 'xlsx' | 'ods' | 'csv' | 'tsv' = 'xlsx';
-      if (lower.endsWith('.ods')) format = 'ods';
-      else if (lower.endsWith('.csv')) format = 'csv';
-      else if (lower.endsWith('.tsv') || lower.endsWith('.tab')) format = 'tsv';
-      console.info('[open] replacing active workbook', data.id, 'as', format);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pending = (data as any).__pendingHyperlinks as
-        | PendingHyperlink[]
-        | undefined;
-      workbook.replaceWorkbook(data, format);
-      // Wait for Univer to publish the new unit before firing hyperlink
-      // commands. Use the FWorkbook handed to the callback directly — at the
-      // moment `unitAdded$` fires, `__addUnit` has registered the unit but
-      // not yet promoted it to "current", so `api.getActiveWorkbook()` would
-      // return null. Filter on unit id so we don't latch onto an unrelated swap.
-      if (api && Array.isArray(pending) && pending.length > 0) {
-        const targetUnitId = data.id;
-        const dispose = api.onUniverSheetCreated((fwb) => {
-          if (fwb.getId() !== targetUnitId) return;
-          void replayPendingHyperlinks(api, targetUnitId, pending);
-          dispose.dispose();
-        });
-      }
-      console.info('[open] done');
+      await loadSpreadsheetFile(file, api, workbook.replaceWorkbook);
     } catch (err) {
       // Surface failures from the parser / replace flow so they aren't
       // swallowed by React's unhandled-rejection silence on event handlers.

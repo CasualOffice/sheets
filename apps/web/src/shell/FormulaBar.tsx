@@ -147,15 +147,8 @@ export function FormulaBar() {
 
   return (
     <div className="formula-bar" data-testid="formula-bar">
-      <div
-        className="formula-bar__name-box"
-        data-testid="name-box"
-        title="Name Box"
-        role="textbox"
-        aria-label="Name Box"
-      >
-        {a1 || '—'}
-      </div>
+      <NameBox a1={a1} />
+
 
       <div className="formula-bar__actions" role="group" aria-label="Formula bar actions">
         <button
@@ -253,5 +246,67 @@ export function FormulaBar() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Editable A1-reference input. Defaults to the active cell address. Accepts
+ * any A1 notation the Univer facade's `getRange()` understands — single cell
+ * (`B5`), range (`B5:D10`), or column/row (`B:B`). On Enter, parses and
+ * activates the range; on Esc, reverts to the current address. Invalid
+ * references snap back without changing the selection.
+ */
+function NameBox({ a1 }: { a1: string }) {
+  const api = useUniverAPI();
+  const [draft, setDraft] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const value = draft ?? a1;
+
+  const commit = () => {
+    const target = (draft ?? '').trim();
+    setDraft(null);
+    if (!api || !target || target === a1) return;
+    const wb = api.getActiveWorkbook();
+    const sheet = wb?.getActiveSheet();
+    if (!sheet) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const range = (sheet as any).getRange(target);
+      range?.activate?.();
+    } catch {
+      /* invalid reference — silent, the input has already snapped back */
+    }
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      className="formula-bar__name-box"
+      data-testid="name-box"
+      title="Name Box — type a cell reference (e.g. B5 or B5:D10) and press Enter"
+      aria-label="Name Box"
+      spellCheck={false}
+      value={value || ''}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => {
+        setDraft(a1);
+        // Select the existing reference so typing replaces it immediately —
+        // matches Excel's "click name box, type, Enter" muscle memory.
+        requestAnimationFrame(() => e.target.select());
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+          inputRef.current?.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setDraft(null);
+          inputRef.current?.blur();
+        }
+      }}
+    />
   );
 }

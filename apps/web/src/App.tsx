@@ -10,6 +10,7 @@ import { UniverSheet } from './UniverSheet';
 import { emptyWorkbook } from './snapshot';
 import { UniverRoot } from './UniverRoot';
 import { useWorkbookGrowth } from './hooks/useWorkbookGrowth';
+import { useFileDrop } from './hooks/useFileDrop';
 import { WorkbookContext, type WorkbookCtxValue, type WorkbookFormat } from './workbook-context';
 import { UIContext, type UICtxValue } from './ui-context';
 
@@ -50,6 +51,7 @@ export function App() {
       <UIContext.Provider value={uiValue}>
         <WorkbookContext.Provider value={wbValue}>
           <GrowthDriver />
+          <FileDropDriver />
           <div
             className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
             data-testid="app-shell"
@@ -76,4 +78,20 @@ export function App() {
 function GrowthDriver(): ReactNode {
   useWorkbookGrowth();
   return null;
+}
+
+/** Window-level file drag-and-drop. Renders an overlay while a file is over
+ * the page; the hook itself handles the actual drop and routes through the
+ * shared open flow. */
+function FileDropDriver(): ReactNode {
+  const dragging = useFileDrop();
+  if (!dragging) return null;
+  return (
+    <div className="file-drop-overlay" data-testid="file-drop-overlay" aria-hidden="true">
+      <div className="file-drop-overlay__card">
+        <div className="file-drop-overlay__title">Drop to open</div>
+        <div className="file-drop-overlay__hint">.xlsx · .ods · .csv · .tsv</div>
+      </div>
+    </div>
+  );
 }
