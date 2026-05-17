@@ -1428,6 +1428,30 @@ button {
   background: var(--color-divider);
 }
 
+/* Submenu — a nested .menu opened from a parent item. The wrapper anchors
+   the popup; the popup floats to the right of the parent menu. */
+.menu__submenu {
+  position: relative;
+}
+
+.menu__item--has-submenu {
+  /* Reserve space on the right for the chevron. */
+  padding-right: var(--space-3);
+}
+
+.menu__item-chevron {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+}
+
+.menu--sub {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 2px;
+  z-index: 51;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Modal dialog (Properties dialog and future modals)
    ───────────────────────────────────────────────────────────────────────── */

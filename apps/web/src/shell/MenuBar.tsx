@@ -71,7 +71,14 @@ type MenuItem =
       onClick?: () => void;
       disabled?: boolean;
     }
-  | { kind: 'separator'; id: string };
+  | { kind: 'separator'; id: string }
+  | {
+      kind: 'submenu';
+      id: string;
+      label: string;
+      icon?: string;
+      items: MenuItem[];
+    };
 
 export function MenuBar() {
   const api = useUniverAPI();
@@ -164,11 +171,18 @@ export function MenuBar() {
         { kind: 'item', id: 'new', label: 'New', icon: 'add', shortcut: 'Ctrl+N', onClick: handleNew },
         { kind: 'item', id: 'open', label: 'Open', icon: 'folder_open', shortcut: 'Ctrl+O', onClick: handleOpen },
         { kind: 'item', id: 'save', label: 'Save', icon: 'save', shortcut: 'Ctrl+S', onClick: handleSave },
-        { kind: 'separator', id: 'sep-export' },
-        { kind: 'item', id: 'export-xlsx', label: 'Export as .xlsx', icon: 'description', onClick: handleExportXlsx },
-        { kind: 'item', id: 'export-ods', label: 'Export as .ods', icon: 'description', onClick: handleExportOds },
-        { kind: 'item', id: 'export-csv', label: 'Export as .csv', icon: 'description', onClick: handleExportCsv },
-        { kind: 'item', id: 'export-tsv', label: 'Export as .tsv', icon: 'description', onClick: handleExportTsv },
+        {
+          kind: 'submenu',
+          id: 'export',
+          label: 'Export',
+          icon: 'ios_share',
+          items: [
+            { kind: 'item', id: 'export-xlsx', label: '.xlsx', icon: 'description', onClick: handleExportXlsx },
+            { kind: 'item', id: 'export-ods', label: '.ods', icon: 'description', onClick: handleExportOds },
+            { kind: 'item', id: 'export-csv', label: '.csv', icon: 'description', onClick: handleExportCsv },
+            { kind: 'item', id: 'export-tsv', label: '.tsv', icon: 'description', onClick: handleExportTsv },
+          ],
+        },
         { kind: 'separator', id: 'sep-1' },
         { kind: 'item', id: 'print', label: 'Print', icon: 'print', shortcut: 'Ctrl+P', onClick: () => api && printActiveSheet(api) },
         { kind: 'separator', id: 'sep-2' },
@@ -399,12 +413,48 @@ function MenuList({
   items: MenuItem[];
   onItemClick: (item: MenuItem) => void;
 }) {
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   return (
     <>
-      {items.map((item) =>
-        item.kind === 'separator' ? (
-          <div key={item.id} className="menu__divider" />
-        ) : (
+      {items.map((item) => {
+        if (item.kind === 'separator') {
+          return <div key={item.id} className="menu__divider" />;
+        }
+        if (item.kind === 'submenu') {
+          const isOpen = openSubmenu === item.id;
+          return (
+            <div
+              key={item.id}
+              className="menu__submenu"
+              onMouseEnter={() => setOpenSubmenu(item.id)}
+              onMouseLeave={() => setOpenSubmenu(null)}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="menu__item menu__item--has-submenu"
+                data-testid={`menu-item-${item.id}`}
+                aria-haspopup="menu"
+                aria-expanded={isOpen}
+                onClick={() => setOpenSubmenu(isOpen ? null : item.id)}
+              >
+                {item.icon && <Icon name={item.icon} size="sm" className="menu__item-icon" />}
+                <span>{item.label}</span>
+                <Icon name="chevron_right" size="sm" className="menu__item-chevron" />
+              </button>
+              {isOpen && (
+                <div
+                  className="menu menu--sub"
+                  role="menu"
+                  data-testid={`menu-item-${item.id}-popup`}
+                >
+                  <MenuList items={item.items} onItemClick={onItemClick} />
+                </div>
+              )}
+            </div>
+          );
+        }
+        return (
           <button
             key={item.id}
             type="button"
@@ -418,8 +468,8 @@ function MenuList({
             <span>{item.label}</span>
             {item.shortcut && <span className="menu__item-shortcut">{item.shortcut}</span>}
           </button>
-        ),
-      )}
+        );
+      })}
     </>
   );
 }
