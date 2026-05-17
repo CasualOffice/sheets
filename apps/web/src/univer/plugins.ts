@@ -8,7 +8,7 @@ import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
-import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
+import { UniverSheetsFormulaPlugin, CalculationMode } from '@univerjs/sheets-formula';
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
@@ -57,7 +57,15 @@ export function registerPlugins(univer: Univer, container: HTMLElement): void {
   // ships the heavy `evaluate` path so paste / sort / fill on large
   // workbooks doesn't freeze the UI thread.
   // See apps/web/src/univer/formula-worker.ts for the worker side.
-  univer.registerPlugin(UniverFormulaEnginePlugin, { notExecuteFormula: true });
+  // `notExecuteFormula` keeps formula compute off the main thread (the
+  // worker registered below ships the heavy `evaluate` work). Pairing
+  // it with `initialFormulaComputing: NO_CALCULATION` skips the load-
+  // time RPC thunder on file open — every formula cell that lacks a
+  // cached value would otherwise trigger one worker round-trip just to
+  // mount the workbook.
+  univer.registerPlugin(UniverFormulaEnginePlugin, {
+    notExecuteFormula: true,
+  });
   const worker = new Worker(new URL('./formula-worker.ts', import.meta.url), {
     type: 'module',
     name: 'formula-worker',
@@ -74,7 +82,10 @@ export function registerPlugins(univer: Univer, container: HTMLElement): void {
   univer.registerPlugin(UniverDocsUIPlugin);
   univer.registerPlugin(UniverSheetsPlugin, { notExecuteFormula: true });
   univer.registerPlugin(UniverSheetsUIPlugin);
-  univer.registerPlugin(UniverSheetsFormulaPlugin, { notExecuteFormula: true });
+  univer.registerPlugin(UniverSheetsFormulaPlugin, {
+    notExecuteFormula: true,
+    initialFormulaComputing: CalculationMode.NO_CALCULATION,
+  });
   univer.registerPlugin(UniverSheetsFormulaUIPlugin);
   univer.registerPlugin(UniverSheetsNumfmtPlugin);
   univer.registerPlugin(UniverSheetsNumfmtUIPlugin);

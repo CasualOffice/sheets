@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { timeItAsync } from '../perf';
 import type { IStyleData, IWorkbookData } from '@univerjs/core';
 import { univerStyleToExcel } from './style-mapping';
 import { writeOutlineIntoSnapshot } from '../outline/resources';
@@ -41,6 +42,13 @@ export type ExportExtras = {
  * See `import.ts` for the fidelity scope (same coverage in both directions).
  */
 export async function workbookDataToXlsx(
+  data: IWorkbookData,
+  extras: ExportExtras = {},
+): Promise<Blob> {
+  return timeItAsync('export-xlsx', () => _workbookDataToXlsxImpl(data, extras));
+}
+
+async function _workbookDataToXlsxImpl(
   data: IWorkbookData,
   extras: ExportExtras = {},
 ): Promise<Blob> {

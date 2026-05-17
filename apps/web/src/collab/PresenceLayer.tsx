@@ -30,6 +30,9 @@ type Rect = {
   top: number;
   width: number;
   height: number;
+  /** Live in-progress text for this peer's cell, if any. Renders as a
+   *  ghost overlay inside the cursor rect. */
+  liveText?: string;
 };
 
 export function PresenceLayer() {
@@ -72,10 +75,23 @@ export function PresenceLayer() {
   useEffect(() => {
     if (!api) return;
     let raf = 0;
-    let frame = 0;
+    let idleFrame = 0;
+    let lastScrollTick = scrollTickRef.current;
+    let lastScrollAtFrame = -1000;
     const tick = () => {
-      frame = (frame + 1) % 4;
-      if (frame === 0) recompute();
+      // Always recompute while a scroll is in progress, plus a small
+      // tail of ~20 frames after the last scroll event so the rendered
+      // position settles instead of snapping. Outside scroll, fall back
+      // to every-4-frames polling (selection/resize wobbles only).
+      const tickNow = ++idleFrame;
+      const scrollChanged = scrollTickRef.current !== lastScrollTick;
+      if (scrollChanged) {
+        lastScrollTick = scrollTickRef.current;
+        lastScrollAtFrame = tickNow;
+      }
+      const inScrollTail = tickNow - lastScrollAtFrame < 20;
+      const everyFourth = idleFrame % 4 === 0;
+      if (inScrollTail || everyFourth) recompute();
       raf = requestAnimationFrame(tick);
     };
     const recompute = () => {
@@ -109,30 +125,49 @@ export function PresenceLayer() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const activeSheetId = (activeSheet as any)?.getSheetId?.() ?? (activeSheet as any)?.getId?.() ?? '';
 
+      const sx = scrollRef.current.x;
+      const sy = scrollRef.current.y;
+
       const next: Rect[] = [];
       for (const peer of peers) {
-        const sel = peer.selection;
-        if (!sel) continue;
         // Mismatched unit ids are normal — every browser gets a random
         // unitId on workbook creation. We render any peer whose sheet id
         // matches the local active sheet (sheet ids ARE deterministic).
-        if (sel.s !== activeSheetId) continue;
+        // Prefer the live-edit cell when present (during typing) so the
+        // ghost overlay sits exactly on the cell being typed into,
+        // independent of where their selection has wandered.
+        let sr: number, er: number, sc: number, ec: number;
+        let sheetId: string;
+        let liveText: string | undefined;
+        if (peer.liveEdit && peer.liveEdit.s === activeSheetId) {
+          sheetId = peer.liveEdit.s;
+          sr = er = peer.liveEdit.row;
+          sc = ec = peer.liveEdit.col;
+          liveText = peer.liveEdit.text;
+        } else if (peer.selection && peer.selection.s === activeSheetId) {
+          sheetId = peer.selection.s;
+          sr = peer.selection.r.sr;
+          er = peer.selection.r.er;
+          sc = peer.selection.r.sc;
+          ec = peer.selection.r.ec;
+        } else {
+          continue;
+        }
+        void sheetId;
         try {
           const ws = wb.getActiveSheet();
           if (!ws) continue;
-          const tl = ws.getRange(sel.r.sr, sel.r.sc).getCellRect();
-          const br = ws.getRange(sel.r.er, sel.r.ec).getCellRect();
-          if (!tl || !br) continue;
+          const tl = ws.getRange(sr, sc).getCellRect();
+          const br2 = ws.getRange(er, ec).getCellRect();
+          if (!tl || !br2) continue;
           // `getCellRect` returns cell positions in the canvas's *content*
           // space — i.e. pre-scroll. Subtract the current scroll offset
           // to land in the visible-canvas frame, then add the canvas-vs-
           // host offset to translate into the portal's coord system.
-          const sx = scrollRef.current.x;
-          const sy = scrollRef.current.y;
-          const left = Math.min(tl.left, br.left) - sx + dx;
-          const top = Math.min(tl.top, br.top) - sy + dy;
-          const right = Math.max(tl.right, br.right) - sx + dx;
-          const bottom = Math.max(tl.bottom, br.bottom) - sy + dy;
+          const left = Math.min(tl.left, br2.left) - sx + dx;
+          const top = Math.min(tl.top, br2.top) - sy + dy;
+          const right = Math.max(tl.right, br2.right) - sx + dx;
+          const bottom = Math.max(tl.bottom, br2.bottom) - sy + dy;
           // Clip to the canvas area so cursors don't paint over headers
           // or float into the column-label gutter.
           if (right < dx || bottom < dy) continue;
@@ -145,6 +180,7 @@ export function PresenceLayer() {
             top,
             width: right - left,
             height: bottom - top,
+            liveText,
           });
         } catch {
           /* getCellRect can throw mid-resize — drop this frame for that peer */
@@ -177,8 +213,9 @@ export function PresenceLayer() {
       {rects.map((r) => (
         <div
           key={r.clientId}
-          className="presence-cursor"
+          className={'presence-cursor' + (r.liveText !== undefined ? ' presence-cursor--editing' : '')}
           data-testid="presence-cursor"
+          data-live={r.liveText !== undefined ? '1' : '0'}
           style={
             {
               left: `${r.left}px`,
@@ -190,6 +227,11 @@ export function PresenceLayer() {
           }
         >
           <span className="presence-cursor__label">{r.name}</span>
+          {r.liveText !== undefined && r.liveText.length > 0 && (
+            <span className="presence-cursor__ghost" data-testid="presence-cursor-ghost">
+              {r.liveText}
+            </span>
+          )}
         </div>
       ))}
     </div>,
@@ -209,7 +251,8 @@ function rectsEqual(a: Rect[], b: Rect[]): boolean {
       x.width !== y.width ||
       x.height !== y.height ||
       x.name !== y.name ||
-      x.color !== y.color
+      x.color !== y.color ||
+      x.liveText !== y.liveText
     ) {
       return false;
     }

@@ -13,6 +13,7 @@ import { useSetUniverAPI } from './use-univer';
 import { extendContextMenu } from './context-menu-extensions';
 import { registerPlugins } from './univer/plugins';
 import { installDevHelpers } from './univer/dev-helpers';
+import { timeIt } from './perf';
 
 type Props = { snapshot: IWorkbookData };
 
@@ -40,7 +41,7 @@ export function UniverSheet({ snapshot }: Props) {
 
     registerPlugins(univer, hostRef.current);
 
-    univer.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
+    timeIt('mount-unit', () => univer.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot));
 
     // Augment the built-in cell context menu with Merge / Unmerge entries.
     extendContextMenu(univer);
@@ -95,8 +96,10 @@ export function UniverSheet({ snapshot }: Props) {
     }
     console.info('[open-xlsx] swapping unit', { from: currentId, to: snapshot.id });
     try {
-      if (currentId) disposeUnit?.call(api, currentId);
-      createSheet.call(api, snapshot);
+      timeIt('swap-unit', () => {
+        if (currentId) disposeUnit?.call(api, currentId);
+        createSheet.call(api, snapshot);
+      });
       lastSnapshotRef.current = snapshot;
       console.info('[open-xlsx] swap complete');
     } catch (err) {

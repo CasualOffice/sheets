@@ -1991,6 +1991,37 @@ button {
   letter-spacing: 0.01em;
 }
 
+/* Live-typing variant — the peer is typing in this cell. Cursor pulses
+   subtly to draw the eye; the ghost text overlay shows what they're
+   typing before they commit. */
+.presence-cursor--editing {
+  background: color-mix(in srgb, var(--presence-color, #1a73e8) 18%, transparent);
+  animation: presence-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes presence-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset; }
+  50%      { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset,
+                         0 0 0 2px color-mix(in srgb, var(--presence-color, #1a73e8) 35%, transparent); }
+}
+
+.presence-cursor__ghost {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--presence-color, #1a73e8) 80%, #000);
+  background: color-mix(in srgb, #fff 92%, var(--presence-color, #1a73e8));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  font-family: var(--font-sans, -apple-system, system-ui, sans-serif);
+  line-height: 1;
+}
+
 .presence-avatars {
   display: inline-flex;
   align-items: center;
@@ -2018,6 +2049,10 @@ button {
   background: var(--color-surface-alt);
   color: var(--color-text);
   border-color: var(--color-surface);
+}
+.presence-avatar--idle {
+  opacity: 0.55;
+  filter: grayscale(0.4);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

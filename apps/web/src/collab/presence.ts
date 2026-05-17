@@ -109,6 +109,16 @@ export type PeerAwareness = {
     s: string;
     r: { sr: number; er: number; sc: number; ec: number };
   };
+  /** In-progress cell edit. Cleared on SheetEditEnded. Used to render a
+   *  "ghost" overlay so peers see the value appearing character-by-
+   *  character instead of jumping in on commit. */
+  liveEdit?: {
+    u: string;
+    s: string;
+    row: number;
+    col: number;
+    text: string;
+  };
 };
 
 export type Peer = {
@@ -117,4 +127,9 @@ export type Peer = {
   name: string;
   color: string;
   selection: PeerAwareness['sel'];
+  liveEdit: PeerAwareness['liveEdit'];
+  /** Unix ms of the last awareness update from this peer (from
+   *  `awareness.meta[clientId].lastUpdated`). Used by the avatar tooltip
+   *  to render "Active now" / "Last seen Xs ago". */
+  lastSeen: number;
 };

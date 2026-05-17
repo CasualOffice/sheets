@@ -13,7 +13,10 @@ export const UNIVER_VERSION = UNIVER_DEP.replace(/^[~^]/, '');
  * dynamically (see `useWorkbookGrowth`) up to MAX_ROWS / MAX_COLUMNS.
  */
 export const INITIAL_ROWS = 1024;
-export const INITIAL_COLUMNS = 128;
+// 26 = A..Z. Univer allocates row/column metadata up-front for the declared
+// count, so a 128-wide start cost ~5× the boot allocation for columns the
+// user almost never reaches before `useWorkbookGrowth` extends them.
+export const INITIAL_COLUMNS = 26;
 export const MAX_ROWS = 8192;
 export const MAX_COLUMNS = 1024;
 

@@ -162,7 +162,9 @@ test.describe('Cell merge', () => {
 });
 
 test.describe('Workbook growth', () => {
-  test('Initial size is 1024 × 128', async ({ page }) => {
+  test('Initial size is 1024 × 26', async ({ page }) => {
+    // 26 columns = A..Z. Univer allocates row/column metadata up-front
+    // for the declared count; useWorkbookGrowth extends it on demand.
     await page.goto('/');
     await waitForUniver(page);
 
@@ -172,7 +174,7 @@ test.describe('Workbook growth', () => {
       const ws: any = api.getActiveWorkbook()!.getActiveSheet();
       return { rows: ws.getMaxRows(), cols: ws.getMaxColumns() };
     });
-    expect(size).toEqual({ rows: 1024, cols: 128 });
+    expect(size).toEqual({ rows: 1024, cols: 26 });
   });
 
   test('Selecting near the bottom edge grows rows', async ({ page }) => {
@@ -202,12 +204,12 @@ test.describe('Workbook growth', () => {
     await page.goto('/');
     await waitForUniver(page);
 
-    // Column 123 is within the 8-column buffer of 128.
+    // Column 22 is within the 8-column edge buffer of the initial 26.
     await page.evaluate(() => {
       const api = window.__univerAPI!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ws: any = api.getActiveWorkbook()!.getActiveSheet();
-      ws.getRange(0, 123).activate();
+      ws.getRange(0, 22).activate();
     });
 
     const after = await page.evaluate(() => {
@@ -216,7 +218,7 @@ test.describe('Workbook growth', () => {
       const ws: any = api.getActiveWorkbook()!.getActiveSheet();
       return ws.getMaxColumns();
     });
-    expect(after).toBeGreaterThan(128);
+    expect(after).toBeGreaterThan(26);
     expect(after).toBeLessThanOrEqual(1024);
   });
 });

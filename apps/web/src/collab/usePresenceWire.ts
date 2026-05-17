@@ -43,6 +43,12 @@ export function usePresenceWire(
     }
     const recompute = () => {
       const out: Peer[] = [];
+      // Read per-client metadata for `lastUpdated` (used by AvatarStack's
+      // "Active now / Last seen" tooltip). y-protocols/awareness maintains
+      // this map alongside the state map and updates lastUpdated on every
+      // setLocalState.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const meta = (awareness as unknown as { meta: Map<number, { lastUpdated: number }> }).meta;
       awareness.getStates().forEach((raw, clientId) => {
         if (clientId === awareness.clientID) return; // skip self
         const s = raw as PeerAwareness;
@@ -52,14 +58,22 @@ export function usePresenceWire(
           name: s.name,
           color: typeof s.color === 'string' ? s.color : colorForName(s.name),
           selection: s.sel,
+          liveEdit: s.liveEdit,
+          lastSeen: meta?.get(clientId)?.lastUpdated ?? Date.now(),
         });
       });
       out.sort((a, b) => a.clientId - b.clientId);
       setPeers(out);
     };
     awareness.on('change', recompute);
+    // Also tick once a second so "last seen Ns ago" labels refresh even
+    // when peers are quiet (no awareness change events firing).
+    const interval = setInterval(recompute, 1000);
     recompute();
-    return () => awareness.off('change', recompute);
+    return () => {
+      awareness.off('change', recompute);
+      clearInterval(interval);
+    };
   }, [awareness]);
 
   // Broadcast our selection. We tried subscribing to FUniver's
@@ -117,6 +131,108 @@ export function usePresenceWire(
     writeIfChanged();
     const id = setInterval(writeIfChanged, 150);
     return () => clearInterval(id);
+  }, [api, awareness]);
+
+  // Live-typing ghost: broadcast in-progress edits via awareness so peers
+  // see characters appear in real time, rather than only on commit. We
+  // throttle to ~30 ms (one awareness frame per typed key max) so a fast
+  // typist doesn't flood the WS.
+  useEffect(() => {
+    if (!api || !awareness) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyApi = api as any;
+    const ChangingEv = anyApi.Event?.SheetEditChanging;
+    const EndedEv = anyApi.Event?.SheetEditEnded;
+    const StartedEv = anyApi.Event?.SheetEditStarted;
+    if (!ChangingEv || !EndedEv || typeof anyApi.addEvent !== 'function') {
+      console.warn('[presence] FUniver missing edit events — version mismatch?');
+      return;
+    }
+
+    let lastText = '';
+    let lastWriteAt = 0;
+    let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const writeLive = (row: number, col: number, text: string): void => {
+      const wb = api.getActiveWorkbook();
+      if (!wb) return;
+      const ws = wb.getActiveSheet();
+      if (!ws) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sheetId = (ws as any).getSheetId?.() ?? (ws as any).getId?.() ?? '';
+      const prev = (awareness.getLocalState() ?? {}) as PeerAwareness;
+      const liveEdit: PeerAwareness['liveEdit'] = {
+        u: wb.getId(),
+        s: sheetId,
+        row,
+        col,
+        text,
+      };
+      awareness.setLocalState({ ...prev, liveEdit });
+    };
+
+    const clearLive = (): void => {
+      const prev = (awareness.getLocalState() ?? {}) as PeerAwareness;
+      if (prev.liveEdit) awareness.setLocalState({ ...prev, liveEdit: undefined });
+      lastText = '';
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+    };
+
+    const onChanging = (p: {
+      row: number;
+      column: number;
+      value: { toPlainText?: () => string };
+    }) => {
+      try {
+        const text = typeof p.value?.toPlainText === 'function' ? p.value.toPlainText() : '';
+        if (text === lastText) return;
+        lastText = text;
+        const now = Date.now();
+        const elapsed = now - lastWriteAt;
+        if (elapsed >= 30) {
+          lastWriteAt = now;
+          writeLive(p.row, p.column, text);
+          if (pendingTimer) {
+            clearTimeout(pendingTimer);
+            pendingTimer = null;
+          }
+        } else if (!pendingTimer) {
+          // Trailing-edge flush: ensure the final keystroke of a burst
+          // also makes it onto the wire even if it landed inside the
+          // 30 ms window.
+          pendingTimer = setTimeout(() => {
+            pendingTimer = null;
+            lastWriteAt = Date.now();
+            writeLive(p.row, p.column, lastText);
+          }, 30 - elapsed);
+        }
+      } catch (err) {
+        console.warn('[presence] live-edit write failed', err);
+      }
+    };
+
+    const onEnded = () => clearLive();
+    const onStarted = (p: { row: number; column: number }) => {
+      // Reset the per-edit text tracker so an empty-cell start doesn't
+      // inherit the previous edit's last value.
+      lastText = '';
+      writeLive(p.row, p.column, '');
+    };
+
+    const subs = [
+      anyApi.addEvent(StartedEv, onStarted),
+      anyApi.addEvent(ChangingEv, onChanging),
+      anyApi.addEvent(EndedEv, onEnded),
+    ] as Array<{ dispose?: () => void } | undefined>;
+
+    return () => {
+      for (const s of subs) s?.dispose?.();
+      if (pendingTimer) clearTimeout(pendingTimer);
+      clearLive();
+    };
   }, [api, awareness]);
 
   return { peers, myClientId };

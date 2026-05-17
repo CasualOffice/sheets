@@ -4,6 +4,7 @@ import { AddHyperLinkCommand } from '@univerjs/sheets-hyper-link';
 import { IMessageService } from '@univerjs/ui';
 import { MessageType } from '@univerjs/design';
 import { workbookDataToXlsx, xlsxToWorkbookData } from '../xlsx';
+import { timeIt } from '../perf';
 import type { ExportExtras } from '../xlsx/export';
 import type { PendingHyperlink } from '../xlsx/import';
 import type { OutlineState } from '../outline/types';
@@ -98,9 +99,12 @@ export async function saveAsXlsx(
 ) {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  // wb.save() is a deep clone of the whole workbook — measurable on big
+  // sheets. Capture it once and pass it down to anything that needs the
+  // snapshot (xlsx writer + hyperlink extractor).
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const extras: ExportExtras = {
-    ...collectExportExtras(api),
+    ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
   };
   const blob = await workbookDataToXlsx(snapshot, extras);
@@ -121,9 +125,9 @@ export async function exportCurrentWorkbookAsXlsxBlob(
 ): Promise<Blob | null> {
   const wb = api.getActiveWorkbook();
   if (!wb) return null;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const extras: ExportExtras = {
-    ...collectExportExtras(api),
+    ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
   };
   return workbookDataToXlsx(snapshot, extras);
@@ -171,10 +175,7 @@ function toast(api: FUniver, content: string): void {
  * source of truth — we just have to look inside `cell.p`, which the plain
  * xlsx exporter otherwise ignores.
  */
-function collectExportExtras(api: FUniver): ExportExtras {
-  const wb = api.getActiveWorkbook();
-  if (!wb) return {};
-  const snapshot = wb.save() as IWorkbookData;
+function collectExportExtras(snapshot: IWorkbookData): ExportExtras {
   return { hyperlinks: extractHyperlinks(snapshot) };
 }
 
@@ -256,7 +257,7 @@ export async function replayPendingHyperlinks(
 export async function saveAsOds(api: FUniver, filename = 'workbook.ods') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const blob = await workbookDataToOds(snapshot);
   const finalName = ensureExt(filename, 'ods');
   triggerDownload(blob, finalName);
@@ -266,7 +267,7 @@ export async function saveAsOds(api: FUniver, filename = 'workbook.ods') {
 export async function saveAsCsv(api: FUniver, filename = 'workbook.csv') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const blob = await workbookDataToDelimited(snapshot, 'csv');
   const finalName = ensureExt(filename, 'csv');
   triggerDownload(blob, finalName);
@@ -276,7 +277,7 @@ export async function saveAsCsv(api: FUniver, filename = 'workbook.csv') {
 export async function saveAsTsv(api: FUniver, filename = 'workbook.tsv') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const blob = await workbookDataToDelimited(snapshot, 'tsv');
   const finalName = ensureExt(filename, 'tsv');
   triggerDownload(blob, finalName);
