@@ -148,11 +148,18 @@ export function useActiveCellState(): ActiveCellState {
         // service may not exist; leave as false
       }
 
-      // Selection stats (multi-cell only).
+      // Selection stats (multi-cell only). Cap the materialization at
+      // 100k cells — beyond that, `getValues()` allocates a 2D array
+      // of millions of entries which freezes the UI for seconds when
+      // a user hits Cmd+A or clicks the select-all corner on a big
+      // workbook. The status-bar stat isn't worth a 2 s freeze; we
+      // surface it as null and the UI hides the row.
+      const SELECTION_STATS_CAP = 100_000;
       let stats: ActiveCellState['stats'] = null;
       const cellsX = selW;
       const cellsY = selH;
-      if (cellsX * cellsY > 1) {
+      const totalCells = cellsX * cellsY;
+      if (totalCells > 1 && totalCells <= SELECTION_STATS_CAP) {
         let count = 0;
         let sum = 0;
         const values = selection.getValues();

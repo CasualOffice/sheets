@@ -122,11 +122,30 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
 
   // Local → Yjs: append every synced mutation to the log. Skipped for
   // view-role clients — their local edits never leave their browser.
+  //
+  // We BATCH the appends across a microtask window so a paste / sort
+  // that emits many mutations doesn't trigger one Yjs encode per
+  // mutation — that path was the main contributor to "large action
+  // takes 3–5 s" on big workbooks. Single Y.Array.push with N entries
+  // is one transaction, one encode, one WS frame.
+  let pending: OpRecord[] = [];
+  let flushScheduled = false;
+  const flush = () => {
+    flushScheduled = false;
+    if (pending.length === 0) return;
+    const batch = pending;
+    pending = [];
+    // doc.transact wraps the push in a single transaction so subscribers
+    // see one change event for the whole batch.
+    doc.transact(() => {
+      log.push(batch);
+    });
+  };
   const subDispose = cmdSvc.onMutationExecutedForCollab((info, options) => {
     if (role === 'view') return;
     if (options?.fromCollab) return;
     if (!SYNCED_MUTATIONS.has(info.id)) return;
-    const rec: OpRecord = {
+    pending.push({
       c: myClientId,
       t: Date.now(),
       id: info.id,
@@ -135,9 +154,14 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       // discover it via a runtime error; that's the signal to drop the
       // mutation from SYNCED_MUTATIONS.
       p: info.params as unknown,
-    };
-    // Single-record append — Yjs batches the array operation atomically.
-    log.push([rec]);
+    });
+    if (!flushScheduled) {
+      flushScheduled = true;
+      // queueMicrotask runs after the current command completes but
+      // before the browser paints — keeps the bridge low-latency while
+      // letting a multi-mutation command (paste, sort, fill) coalesce.
+      queueMicrotask(flush);
+    }
   });
 
   // Replay tracking: how many entries we've already executed locally so we
@@ -180,6 +204,9 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     doc,
     dispose: () => {
       subDispose.dispose();
+      // Flush any pending batch so an edit-then-leave race doesn't drop
+      // the last keystroke on the floor.
+      if (pending.length > 0) flush();
       log.unobserve(observer);
     },
   };

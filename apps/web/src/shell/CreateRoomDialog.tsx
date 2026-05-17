@@ -63,16 +63,21 @@ export function CreateRoomDialog({ onClose }: { onClose: () => void }) {
       //      the raw file (server stores at /api/rooms/:id/seed).
       //   2. gzipped JSON snapshot — fast-path for joiners so they can
       //      skip the multi-second ExcelJS parse on join.
-      // Both are best-effort: a missing snapshot just means joiners
-      // fall back to the xlsx path, which still works.
+      //
+      // The xlsx upload is *required* for joiners to start from the
+      // same workbook, so we await it. The snapshot upload is a pure
+      // fast-path — joiners fall back to the xlsx if it's missing, so
+      // we fire it in the background. This keeps the dialog's "Ready"
+      // state from waiting on two serial worker exports + uploads.
       if (api) {
+        const roomId = body.roomId;
         const wb = api.getActiveWorkbook();
         try {
           const blob = await exportCurrentWorkbookAsXlsxBlob(api);
           if (blob) {
             const form = new FormData();
             form.append('file', blob, 'seed.xlsx');
-            const seedRes = await fetch(`/api/rooms/${body.roomId}/seed`, {
+            const seedRes = await fetch(`/api/rooms/${roomId}/seed`, {
               method: 'POST',
               body: form,
             });
@@ -87,29 +92,30 @@ export function CreateRoomDialog({ onClose }: { onClose: () => void }) {
         } catch (err) {
           console.warn('[share-room] failed to serialize xlsx seed', err);
         }
-        try {
-          if (wb && typeof CompressionStream !== 'undefined') {
-            // Walk the in-memory snapshot — wb.save() is a deep clone
-            // but we'd pay the same cost in the xlsx exporter, so
-            // this is essentially free.
-            const snapshot = wb.save();
-            const json = JSON.stringify(snapshot);
-            const gzipped = await gzipString(json);
-            const snapRes = await fetch(`/api/rooms/${body.roomId}/snapshot`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/gzip' },
-              body: gzipped as BodyInit,
-            });
-            if (!snapRes.ok) {
-              console.warn(
-                '[share-room] snapshot upload failed',
-                snapRes.status,
-                await snapRes.text().catch(() => ''),
-              );
+        // Fire-and-forget — joiners fall back to /seed if this is
+        // missing or still in flight. Don't block the dialog on it.
+        if (wb && typeof CompressionStream !== 'undefined') {
+          void (async () => {
+            try {
+              const snapshot = wb.save();
+              const json = JSON.stringify(snapshot);
+              const gzipped = await gzipString(json);
+              const snapRes = await fetch(`/api/rooms/${roomId}/snapshot`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/gzip' },
+                body: gzipped as BodyInit,
+              });
+              if (!snapRes.ok) {
+                console.warn(
+                  '[share-room] snapshot upload failed',
+                  snapRes.status,
+                  await snapRes.text().catch(() => ''),
+                );
+              }
+            } catch (err) {
+              console.warn('[share-room] failed to upload snapshot cache', err);
             }
-          }
-        } catch (err) {
-          console.warn('[share-room] failed to upload snapshot cache', err);
+          })();
         }
       }
 
