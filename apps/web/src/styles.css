@@ -1659,6 +1659,113 @@ button {
 .btn-secondary:hover { background: var(--color-hover); }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Outline (group) side panel. Mirrors the TablesPanel surface treatment —
+   right-edge column, surface-alt tint — so the two panels feel like a
+   matched set when both are open.
+   ───────────────────────────────────────────────────────────────────────── */
+.outline-panel {
+  width: 280px;
+  flex: 0 0 280px;
+  background: var(--color-surface-alt);
+  border-top: 1px solid var(--color-divider);
+  border-left: 1px solid var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.outline-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-divider);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.outline-panel__close {
+  background: transparent;
+  border: 0;
+  color: var(--color-text-secondary, var(--color-text));
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.outline-panel__close:hover { background: var(--color-surface-strip); }
+
+.outline-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 12px 14px;
+}
+
+.outline-panel__empty {
+  color: var(--color-text-soft, var(--color-text));
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.outline-panel__section {
+  margin-top: 10px;
+}
+
+.outline-panel__section:first-child {
+  margin-top: 0;
+}
+
+.outline-panel__section-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: var(--weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-soft, var(--color-text-secondary, var(--color-text)));
+}
+
+.outline-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outline-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.outline-panel__toggle,
+.outline-panel__remove {
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.outline-panel__toggle:hover,
+.outline-panel__remove:hover { background: var(--color-surface-strip); }
+
+.outline-panel__toggle[aria-pressed="true"] {
+  color: var(--color-accent);
+}
+
+.outline-panel__range {
+  flex: 1 1 auto;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    Custom tooltip. Drop-in replacement for the slow native `title=` tooltip:
    300 ms delay, dark pill, portaled to <body> so it escapes ribbon clipping.
    The trigger keeps its `aria-label` for screen readers; the tooltip itself

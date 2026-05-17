@@ -6,6 +6,7 @@ import { MessageType } from '@univerjs/design';
 import { workbookDataToXlsx, xlsxToWorkbookData } from '../xlsx';
 import type { ExportExtras } from '../xlsx/export';
 import type { PendingHyperlink } from '../xlsx/import';
+import type { OutlineState } from '../outline/types';
 
 export type { PendingHyperlink };
 import {
@@ -85,11 +86,23 @@ export async function loadSpreadsheetFile(
   }
 }
 
-export async function saveAsXlsx(api: FUniver, filename = 'workbook.xlsx') {
+export type SaveOptions = {
+  /** Outline / group state to fold into the xlsx — see ExportExtras.outline. */
+  outline?: OutlineState;
+};
+
+export async function saveAsXlsx(
+  api: FUniver,
+  filename = 'workbook.xlsx',
+  options: SaveOptions = {},
+) {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
   const snapshot = wb.save() as IWorkbookData;
-  const extras = collectExportExtras(api);
+  const extras: ExportExtras = {
+    ...collectExportExtras(api),
+    ...(options.outline ? { outline: options.outline } : {}),
+  };
   const blob = await workbookDataToXlsx(snapshot, extras);
   const finalName = ensureExt(filename, 'xlsx');
   triggerDownload(blob, finalName);

@@ -1,6 +1,8 @@
 import ExcelJS from 'exceljs';
 import type { IStyleData, IWorkbookData } from '@univerjs/core';
 import { univerStyleToExcel } from './style-mapping';
+import { writeOutlineIntoSnapshot } from '../outline/resources';
+import type { OutlineState } from '../outline/types';
 
 type ICellSnapshot = {
   v?: string | number | boolean;
@@ -27,6 +29,11 @@ const pxToPoints = (px: number) => Math.max(0, (px * 72) / 96);
 export type ExportExtras = {
   /** subUnitId -> rows of { row, column, payload, display } */
   hyperlinks?: Record<string, Array<{ row: number; column: number; payload: string; display?: string }>>;
+  /** Per-sheet row/column outline groups — survives the round-trip via two
+   *  parallel channels: our `__casual_sheets_outline__` resource (exact
+   *  group boundaries) AND ExcelJS row/col `outlineLevel`+`collapsed` (so
+   *  Excel renders the native +/- gutter when the file is opened there). */
+  outline?: OutlineState;
 };
 
 /**
@@ -150,6 +157,37 @@ export async function workbookDataToXlsx(
       }
       if (meta?.hd === 1) ws.getRow(r + 1).hidden = true;
     }
+
+    // Outline groups for this sheet — set row.outlineLevel / col.outlineLevel
+    // (and collapsed where applicable) so Excel and LibreOffice render the
+    // native +/- outline gutter. The full group state still round-trips
+    // through our resource (extras.outline → data.resources below) so we
+    // can reconstruct exact group ids and boundaries on re-import; the
+    // outlineLevel is the "looks right in Excel" half of the bargain.
+    const sheetOutline = extras.outline?.[sheetId];
+    if (sheetOutline) {
+      for (const g of sheetOutline.rows ?? []) {
+        for (let r = g.start; r <= g.end; r++) {
+          const row = ws.getRow(r + 1);
+          row.outlineLevel = 1;
+          if (g.collapsed) row.hidden = true;
+        }
+      }
+      for (const g of sheetOutline.cols ?? []) {
+        for (let c = g.start; c <= g.end; c++) {
+          const col = ws.getColumn(c + 1);
+          col.outlineLevel = 1;
+          if (g.collapsed) col.hidden = true;
+        }
+      }
+    }
+  }
+
+  // Fold outline state into the snapshot's resources before stashing them
+  // into the hidden sheet — this is the channel that preserves exact group
+  // ids + boundaries (vs `outlineLevel` which is just per-row/col flags).
+  if (extras.outline && Object.keys(extras.outline).length > 0) {
+    writeOutlineIntoSnapshot(data, extras.outline);
   }
 
   // Univer plugin state — tables, conditional formatting, data validation,

@@ -17,6 +17,8 @@ import {
 } from './file-actions';
 import { printActiveSheet } from './print';
 import { openBugReport } from './report-bug';
+import { useOutlineActions } from '../outline/use-outline-actions';
+import { useOutline } from '../outline/outline-context';
 import {
   copy as actCopy,
   cut as actCut,
@@ -92,6 +94,8 @@ export function MenuBar() {
   const api = useUniverAPI();
   const workbook = useWorkbook();
   const ui = useUI();
+  const outlineActions = useOutlineActions();
+  const outline = useOutline();
   const [open, setOpen] = useState<MenuId | null>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -154,11 +158,12 @@ export function MenuBar() {
         return;
       case 'xlsx':
       default:
-        await saveAsXlsx(api, name);
+        await saveAsXlsx(api, name, { outline: outline.state });
     }
   };
 
-  const handleExportXlsx = async () => api && saveAsXlsx(api, workbook.snapshot.name || 'workbook');
+  const handleExportXlsx = async () =>
+    api && saveAsXlsx(api, workbook.snapshot.name || 'workbook', { outline: outline.state });
   const handleExportOds = async () => api && saveAsOds(api, workbook.snapshot.name || 'workbook');
   const handleExportCsv = async () => api && saveAsCsv(api, workbook.snapshot.name || 'workbook');
   const handleExportTsv = async () => api && saveAsTsv(api, workbook.snapshot.name || 'workbook');
@@ -266,7 +271,12 @@ export function MenuBar() {
         { kind: 'item', id: 'remove-duplicates', label: 'Remove Duplicates', icon: 'filter_list_off', run: removeDuplicates },
         { kind: 'item', id: 'show-all-rows', label: 'Show all rows', icon: 'unfold_more', run: showAllRows },
         { kind: 'separator', id: 'sep-2' },
+        { kind: 'item', id: 'group-rows', label: 'Group rows', icon: 'unfold_less', onClick: () => { outlineActions.groupRows(); } },
+        { kind: 'item', id: 'group-cols', label: 'Group columns', icon: 'view_week', onClick: () => { outlineActions.groupCols(); } },
+        { kind: 'item', id: 'ungroup', label: 'Ungroup', icon: 'unfold_more_double', onClick: () => { outlineActions.ungroupSelection(); } },
+        { kind: 'separator', id: 'sep-3' },
         { kind: 'item', id: 'tables-panel', label: ui.tablesPanelVisible ? 'Hide Tables panel' : 'Tables panel', icon: 'table_rows', onClick: ui.toggleTablesPanel },
+        { kind: 'item', id: 'outline-panel', label: ui.outlinePanelVisible ? 'Hide Outline panel' : 'Outline panel', icon: 'list', onClick: ui.toggleOutlinePanel },
         { kind: 'item', id: 'comments-panel', label: 'Comments panel', icon: 'forum', run: toggleCommentPanel },
       ],
     },

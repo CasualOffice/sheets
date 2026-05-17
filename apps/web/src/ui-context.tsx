@@ -5,6 +5,8 @@ export type UICtxValue = {
   toggleFormulaBar: () => void;
   tablesPanelVisible: boolean;
   toggleTablesPanel: () => void;
+  outlinePanelVisible: boolean;
+  toggleOutlinePanel: () => void;
 };
 
 export const UIContext = createContext<UICtxValue | null>(null);

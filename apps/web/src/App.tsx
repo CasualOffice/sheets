@@ -13,11 +13,14 @@ import { useWorkbookGrowth } from './hooks/useWorkbookGrowth';
 import { useFileDrop } from './hooks/useFileDrop';
 import { WorkbookContext, type WorkbookCtxValue, type WorkbookFormat } from './workbook-context';
 import { UIContext, type UICtxValue } from './ui-context';
+import { OutlineProvider } from './outline/outline-context';
+import { OutlinePanel } from './shell/OutlinePanel';
 
 export function App() {
   const [snapshot, setSnapshot] = useState<IWorkbookData>(() => emptyWorkbook());
   const [formulaBarVisible, setFormulaBarVisible] = useState(true);
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
+  const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
   // What File → Save should write to. Set on Open from the file extension;
   // null while editing an empty / unsaved workbook (in which case Save
   // defaults to .xlsx).
@@ -42,32 +45,37 @@ export function App() {
       toggleFormulaBar: () => setFormulaBarVisible((v) => !v),
       tablesPanelVisible,
       toggleTablesPanel: () => setTablesPanelVisible((v) => !v),
+      outlinePanelVisible,
+      toggleOutlinePanel: () => setOutlinePanelVisible((v) => !v),
     }),
-    [formulaBarVisible, tablesPanelVisible],
+    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible],
   );
 
   return (
     <UniverRoot>
       <UIContext.Provider value={uiValue}>
         <WorkbookContext.Provider value={wbValue}>
-          <GrowthDriver />
-          <FileDropDriver />
-          <div
-            className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
-            data-testid="app-shell"
-          >
-            <TitleBar />
-            <MenuBar />
-            <Toolbar />
-            {formulaBarVisible && <FormulaBar />}
-            <div className="grid-row">
-              <main className="grid-host" data-testid="grid-host">
-                <UniverSheet snapshot={snapshot} />
-              </main>
-              {tablesPanelVisible && <TablesPanel />}
+          <OutlineProvider>
+            <GrowthDriver />
+            <FileDropDriver />
+            <div
+              className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
+              data-testid="app-shell"
+            >
+              <TitleBar />
+              <MenuBar />
+              <Toolbar />
+              {formulaBarVisible && <FormulaBar />}
+              <div className="grid-row">
+                <main className="grid-host" data-testid="grid-host">
+                  <UniverSheet snapshot={snapshot} />
+                </main>
+                {tablesPanelVisible && <TablesPanel />}
+                {outlinePanelVisible && <OutlinePanel />}
+              </div>
+              <SheetTabs />
             </div>
-            <SheetTabs />
-          </div>
+          </OutlineProvider>
         </WorkbookContext.Provider>
       </UIContext.Provider>
     </UniverRoot>
