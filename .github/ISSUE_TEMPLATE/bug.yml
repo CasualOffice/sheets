@@ -1,0 +1,61 @@
+name: Bug report
+description: Something doesn't work the way it should — a crash, wrong result, broken UI, regression after an update.
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report — the more concrete the repro, the faster we can fix it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: One or two sentences. What did you do, what did you expect, what did you get instead?
+      placeholder: "I clicked X, expected Y, but Z happened."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A short numbered list. Start from "open the app".
+      placeholder: |
+        1. Open the app
+        2. Type =SUM(A1:A3) in B1
+        3. Press Ctrl+D over B1:B5
+        4. Notice that …
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL
+      description: The URL of the page where it happened (e.g. the live demo or your local dev server).
+      placeholder: https://schnsrw.github.io/sheets/
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: Browser + version + OS. Auto-filled if you used Help → Report a bug from inside the app.
+      placeholder: "Chrome 138 / macOS 14.5"
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output (optional)
+      description: Anything in the browser devtools console that looked relevant. Wrap in ``` code fences.
+      render: shell
+
+  - type: checkboxes
+    id: regression
+    attributes:
+      label: Regression?
+      options:
+        - label: This used to work in an earlier version

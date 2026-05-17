@@ -16,6 +16,7 @@ import {
   saveAsXlsx,
 } from './file-actions';
 import { printActiveSheet } from './print';
+import { openBugReport } from './report-bug';
 import {
   copy as actCopy,
   cut as actCut,
@@ -272,6 +273,14 @@ export function MenuBar() {
     help: {
       label: 'Help',
       items: [
+        {
+          kind: 'item',
+          id: 'report-bug',
+          label: 'Report a bug…',
+          icon: 'bug_report',
+          onClick: openBugReport,
+        },
+        { kind: 'separator', id: 'sep-1' },
         {
           kind: 'item',
           id: 'about',
