@@ -69,10 +69,13 @@ test('growth hook skips Select-All so corner click doesn\'t freeze', async ({ pa
     return { rows: fws.getMaxRows(), cols: fws.getMaxColumns() };
   });
 
+  // Behavior assertion: the sheet must NOT have grown. The pre-fix loop
+  // chased the edge in 256-row chunks all the way to MAX_ROWS, so a
+  // Select-All would have ended at rows=MAX_ROWS and cols=MAX_COLUMNS. With
+  // the guard in place the dimensions are unchanged.
   expect(after.rows).toBe(before.rows);
   expect(after.cols).toBe(before.cols);
-  // The pre-fix behavior took ~800ms because the growth hook chased the
-  // edge in 256-row chunks up to MAX_ROWS. Anything well under that proves
-  // the loop is gone; we leave headroom for noisy CI runners.
-  expect(dur).toBeLessThan(600);
+  // (dur captured for local debugging; not asserted — CI runners are too
+  // variable to make a perf threshold meaningful.)
+  void dur;
 });

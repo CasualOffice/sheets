@@ -7,7 +7,7 @@ import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useUI } from '../use-ui';
 import { emptyWorkbook } from '../snapshot';
-import { openXlsx, pickXlsxFile, saveAsXlsx } from './file-actions';
+import { openXlsx, pickXlsxFile, saveAsCsv, saveAsOds, saveAsTsv, saveAsXlsx } from './file-actions';
 import { printActiveSheet } from './print';
 import {
   copy as actCopy,
@@ -118,6 +118,18 @@ export function MenuBar() {
     if (!api) return;
     await saveAsXlsx(api, workbook.snapshot.name || 'workbook');
   };
+  const handleSaveAsOds = async () => {
+    if (!api) return;
+    await saveAsOds(api, workbook.snapshot.name || 'workbook');
+  };
+  const handleSaveAsCsv = async () => {
+    if (!api) return;
+    await saveAsCsv(api, workbook.snapshot.name || 'workbook');
+  };
+  const handleSaveAsTsv = async () => {
+    if (!api) return;
+    await saveAsTsv(api, workbook.snapshot.name || 'workbook');
+  };
 
   const menus: Record<MenuId, { label: string; items: MenuItem[] }> = {
     file: {
@@ -125,7 +137,10 @@ export function MenuBar() {
       items: [
         { kind: 'item', id: 'new', label: 'New', icon: 'add', shortcut: 'Ctrl+N', onClick: handleNew },
         { kind: 'item', id: 'open', label: 'Open', icon: 'folder_open', shortcut: 'Ctrl+O', onClick: handleOpen },
-        { kind: 'item', id: 'save-as', label: 'Save As', icon: 'save', shortcut: 'Ctrl+Shift+S', onClick: handleSaveAs },
+        { kind: 'item', id: 'save-as', label: 'Save As .xlsx', icon: 'save', shortcut: 'Ctrl+Shift+S', onClick: handleSaveAs },
+        { kind: 'item', id: 'save-as-ods', label: 'Save As .ods', icon: 'save_alt', onClick: handleSaveAsOds },
+        { kind: 'item', id: 'save-as-csv', label: 'Save As .csv', icon: 'description', onClick: handleSaveAsCsv },
+        { kind: 'item', id: 'save-as-tsv', label: 'Save As .tsv', icon: 'description', onClick: handleSaveAsTsv },
         { kind: 'separator', id: 'sep-1' },
         { kind: 'item', id: 'print', label: 'Print', icon: 'print', shortcut: 'Ctrl+P', onClick: () => api && printActiveSheet(api) },
         { kind: 'separator', id: 'sep-2' },

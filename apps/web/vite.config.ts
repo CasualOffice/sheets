@@ -13,4 +13,13 @@ export default defineConfig({
     port: 5273,
     strictPort: true,
   },
+  // Pre-bundle the heavy / dynamically-loaded deps at server start instead
+  // of letting Vite discover them mid-run. Without this, the first dynamic
+  // import of '@e965/xlsx' (when the user picks an .ods / .csv file or our
+  // e2e suite probes the ods module) triggers a re-optimize pass that
+  // duplicates Univer modules in the dep cache — the symptom is "Identifier
+  // ... already exists" DI errors and a blank grid until a hard reload.
+  optimizeDeps: {
+    include: ['@e965/xlsx'],
+  },
 });
