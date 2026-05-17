@@ -42,8 +42,12 @@ jobs:
 
       - name: Build web
         env:
-          # Base path for github.com/schnsrw/sheets → served at /sheets/
-          PAGES_BASE: /sheets/
+          # Served at the apex of the custom domain (sheet.schnsrw.live), so
+          # assets are root-relative. `apps/web/public/CNAME` is copied into
+          # the artifact by Vite and tells GitHub Pages which host to serve;
+          # without it, every deploy strips the custom-domain config in the
+          # GitHub Pages UI.
+          PAGES_BASE: /
         run: pnpm --filter @sheet/web build
 
       - name: Upload Pages artifact
