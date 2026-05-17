@@ -1,4 +1,5 @@
 import { useUniverAPI } from '../use-univer';
+import { useUI } from '../use-ui';
 import { useActiveCellState, type HAlign, type VAlign } from '../hooks/useActiveCellState';
 import {
   NUMBER_FORMATS,
@@ -95,6 +96,7 @@ function detectFormatKey(pattern: string): NumberFormatKey {
 
 export function Toolbar() {
   const api = useUniverAPI();
+  const ui = useUI();
   const state = useActiveCellState();
   const ready = Boolean(api) && state.ready;
 
@@ -253,6 +255,13 @@ export function Toolbar() {
               if (id === 'plain') formatAsTable(api, undefined);
               else formatAsTable(api, id as TableThemeId);
             }}
+          />
+          <ToolbarButton
+            id="tables-panel"
+            label={ui.tablesPanelVisible ? 'Hide Tables panel' : 'Tables panel'}
+            icon="view_sidebar"
+            pressed={ui.tablesPanelVisible}
+            onClick={ui.toggleTablesPanel}
           />
           <ToolbarButton id="insert-comment" label="Insert comment" icon="add_comment" disabled={!ready} onClick={() => api && insertComment(api)} />
           <ToolbarButton id="insert-hyperlink" label="Insert hyperlink (Ctrl+K)" icon="link" disabled={!ready} onClick={() => api && insertHyperlink(api)} />
