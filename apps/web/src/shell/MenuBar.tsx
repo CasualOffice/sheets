@@ -7,7 +7,16 @@ import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useUI } from '../use-ui';
 import { emptyWorkbook } from '../snapshot';
-import { openXlsx, pickXlsxFile, saveAsCsv, saveAsOds, saveAsTsv, saveAsXlsx } from './file-actions';
+import {
+  openXlsx,
+  pickXlsxFile,
+  replayPendingHyperlinks,
+  saveAsCsv,
+  saveAsOds,
+  saveAsTsv,
+  saveAsXlsx,
+  type PendingHyperlink,
+} from './file-actions';
 import { printActiveSheet } from './print';
 import {
   copy as actCopy,
@@ -128,7 +137,24 @@ export function MenuBar() {
       else if (lower.endsWith('.csv')) format = 'csv';
       else if (lower.endsWith('.tsv') || lower.endsWith('.tab')) format = 'tsv';
       console.info('[open] replacing active workbook', data.id, 'as', format);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pending = (data as any).__pendingHyperlinks as
+        | PendingHyperlink[]
+        | undefined;
       workbook.replaceWorkbook(data, format);
+      // Wait for Univer to publish the new unit before firing hyperlink
+      // commands. Use the FWorkbook handed to the callback directly — at the
+      // moment `unitAdded$` fires, `__addUnit` has registered the unit but
+      // not yet promoted it to "current", so `api.getActiveWorkbook()` would
+      // return null. Filter on unit id so we don't latch onto an unrelated swap.
+      if (api && Array.isArray(pending) && pending.length > 0) {
+        const targetUnitId = data.id;
+        const dispose = api.onUniverSheetCreated((fwb) => {
+          if (fwb.getId() !== targetUnitId) return;
+          void replayPendingHyperlinks(api, targetUnitId, pending);
+          dispose.dispose();
+        });
+      }
       console.info('[open] done');
     } catch (err) {
       // Surface failures from the parser / replace flow so they aren't

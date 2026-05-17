@@ -2,6 +2,56 @@ import ExcelJS from 'exceljs';
 import { LocaleType, type ICellData, type IRange, type IStyleData, type IWorkbookData } from '@univerjs/core';
 import { excelStyleToUniver } from './style-mapping';
 import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from '../snapshot';
+import { RESOURCES_SHEET } from './export';
+
+/** A hyperlink read off an xlsx cell that must be replayed into Univer's
+ * hyperlink plugin AFTER the snapshot becomes the active workbook. The
+ * hyperlink plugin keeps its state in HyperLinkModel (and the rich-text cell
+ * body it mutates as a side-effect of AddHyperLinkCommand), neither of which
+ * we can construct in the pure-data import path — so we capture the URL
+ * here and re-issue the command after the unit mounts.
+ *
+ * `id` is a fresh client id; xlsx doesn't persist Univer's link ids, so a new
+ * one per import is correct and matches what an in-app insert would assign. */
+export type PendingHyperlink = {
+  subUnitId: string;
+  id: string;
+  row: number;
+  column: number;
+  payload: string;
+  display?: string;
+};
+
+let hyperlinkIdCounter = 0;
+const nextHyperlinkId = () =>
+  `hl-${Date.now().toString(36)}-${(hyperlinkIdCounter++).toString(36)}`;
+
+/** Workbook data plus side-channel info that has to be replayed into
+ * plugin services after the snapshot is mounted as the active unit. */
+export type ImportedWorkbook = IWorkbookData & {
+  __pendingHyperlinks?: PendingHyperlink[];
+};
+
+/**
+ * Walk a worksheet and reassemble the JSON we stashed in column A across N
+ * rows when exporting. Returns the parsed IWorkbookData.resources array, or
+ * an empty array if anything looks off.
+ */
+function readResourcesSheet(ws: ExcelJS.Worksheet): IWorkbookData['resources'] {
+  const parts: string[] = [];
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    const v = row.getCell(1).value;
+    if (typeof v === 'string') parts.push(v);
+  });
+  if (parts.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(parts.join(''));
+    if (Array.isArray(parsed)) return parsed as IWorkbookData['resources'];
+  } catch {
+    /* corrupt blob — drop silently, the workbook still opens */
+  }
+  return undefined;
+}
 
 /**
  * Convert an .xlsx buffer to a Univer `IWorkbookData` snapshot.
@@ -19,7 +69,7 @@ import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from '../snapshot';
  * Accepts loss: charts, drawings, pivots, validation, conditional formatting,
  * data tables, comments, hyperlinks, advanced borders (dashed/double), themes.
  */
-export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbookData> {
+export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<ImportedWorkbook> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
 
@@ -50,7 +100,24 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
   const charsToPx = (chars: number) => Math.round(chars * PX_PER_CHAR);
   const pointsToPx = (pt: number) => Math.round((pt * 96) / 72);
 
+  // Flat list of hyperlinks across all sheets. Stamped onto the returned
+  // workbook as the non-standard __pendingHyperlinks field. handleOpen
+  // replays these through the hyperlink plugin after the unit mounts —
+  // they live in plugin state, not on the snapshot.
+  const pendingHyperlinksAll: PendingHyperlink[] = [];
+
+  // Look for our stashed Univer plugin resources before walking sheets — if
+  // found, skip that sheet from the user-visible sheet order.
+  let resources: IWorkbookData['resources'] | undefined;
   for (const ws of wb.worksheets) {
+    if (ws.name === RESOURCES_SHEET) {
+      resources = readResourcesSheet(ws);
+      break;
+    }
+  }
+
+  for (const ws of wb.worksheets) {
+    if (ws.name === RESOURCES_SHEET) continue;
     const sheetId = `sheet-${ws.id}`;
     sheetOrder.push(sheetId);
 
@@ -58,6 +125,11 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
     const mergeData: IRange[] = [];
     const columnData: Record<number, { w?: number; hd?: number }> = {};
     const rowData: Record<number, { h?: number; hd?: number }> = {};
+    // Per-sheet collection of hyperlinks the cells advertise. We don't fold
+    // them into the resources blob here because the hyperlink plugin owns
+    // its own model that isn't in IWorkbookData.resources — these get
+    // replayed via FUniver after the snapshot mounts (see open flow).
+    const pendingHyperlinks: Array<{ row: number; column: number; payload: string; display?: string }> = [];
 
     let maxRow = 0;
     let maxCol = 0;
@@ -86,6 +158,18 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
           cd.v = (raw as { richText: { text: string }[] }).richText.map((t) => t.text).join('');
         } else if (raw && typeof raw === 'object' && 'text' in raw && 'hyperlink' in raw) {
           cd.v = (raw as { text: string }).text;
+          // Capture the URL so we can re-inject it into the hyperlink plugin
+          // after the workbook unit is constructed (see note in the file
+          // header about resource-side plugin state).
+          const url = (raw as { hyperlink: string }).hyperlink;
+          if (typeof url === 'string' && url) {
+            pendingHyperlinks.push({
+              row: r,
+              column: c,
+              payload: url,
+              display: (raw as { text: string }).text,
+            });
+          }
         } else if (raw && typeof raw === 'object' && 'sharedFormula' in raw) {
           const sf = (raw as { sharedFormula: string; result?: unknown }).sharedFormula;
           cd.f = sf.startsWith('=') ? sf : `=${sf}`;
@@ -198,6 +282,10 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
       ...(defaultRowHeight !== undefined ? { defaultRowHeight } : {}),
       ...(hidden ? { hidden } : {}),
     };
+
+    for (const hl of pendingHyperlinks) {
+      pendingHyperlinksAll.push({ ...hl, subUnitId: sheetId, id: nextHyperlinkId() });
+    }
   }
 
   // If the file had no worksheets (rare but possible), seed with an empty one
@@ -222,6 +310,8 @@ export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<IWorkbook
     styles,
     sheetOrder,
     sheets,
+    ...(resources ? { resources } : {}),
+    ...(pendingHyperlinksAll.length ? { __pendingHyperlinks: pendingHyperlinksAll } : {}),
   };
 }
 

@@ -20,10 +20,23 @@ const pxToChars = (px: number) => Math.max(0, px / PX_PER_CHAR);
 const pxToPoints = (px: number) => Math.max(0, (px * 72) / 96);
 
 /**
+ * Cell-level extras the caller has read out of plugin services and wants us
+ * to fold into the xlsx output. None of these live on `IWorkbookData` itself,
+ * so the export function can't recover them on its own.
+ */
+export type ExportExtras = {
+  /** subUnitId -> rows of { row, column, payload, display } */
+  hyperlinks?: Record<string, Array<{ row: number; column: number; payload: string; display?: string }>>;
+};
+
+/**
  * Convert a Univer `IWorkbookData` snapshot to an .xlsx Blob.
  * See `import.ts` for the fidelity scope (same coverage in both directions).
  */
-export async function workbookDataToXlsx(data: IWorkbookData): Promise<Blob> {
+export async function workbookDataToXlsx(
+  data: IWorkbookData,
+  extras: ExportExtras = {},
+): Promise<Blob> {
   const wb = new ExcelJS.Workbook();
   wb.title = data.name || 'Untitled';
 
@@ -100,6 +113,22 @@ export async function workbookDataToXlsx(data: IWorkbookData): Promise<Blob> {
       }
     }
 
+    // Hyperlinks for this sheet — write cell.value as { text, hyperlink }
+    // so Excel and LibreOffice render them as native links. Applied AFTER
+    // cellData so cell text we already set isn't clobbered.
+    const sheetHyperlinks = extras.hyperlinks?.[sheetId] ?? [];
+    for (const hl of sheetHyperlinks) {
+      const excelCell = ws.getCell(hl.row + 1, hl.column + 1);
+      const text =
+        hl.display ??
+        (typeof excelCell.value === 'string'
+          ? excelCell.value
+          : typeof excelCell.value === 'number'
+            ? String(excelCell.value)
+            : hl.payload);
+      excelCell.value = { text, hyperlink: hl.payload };
+    }
+
     // Column widths.
     const columnData = (wsd.columnData ?? {}) as Record<string, { w?: number; hd?: number }>;
     for (const cKey of Object.keys(columnData)) {
@@ -123,8 +152,33 @@ export async function workbookDataToXlsx(data: IWorkbookData): Promise<Blob> {
     }
   }
 
+  // Univer plugin state — tables, conditional formatting, data validation,
+  // comments, notes, drawings, defined names, filters, range protection —
+  // lives on the snapshot's `resources` array as serialized JSON per plugin.
+  // None of it has a clean native xlsx representation that round-trips back
+  // through our codec, so we stash the array in a hidden sheet with a known
+  // name. On import we look for that sheet, decode, restore to data.resources,
+  // and drop the sheet from sheetOrder before handing the snapshot to Univer.
+  if (Array.isArray(data.resources) && data.resources.length > 0) {
+    const meta = wb.addWorksheet(RESOURCES_SHEET);
+    meta.state = 'veryHidden';
+    // Split into chunks so Excel's 32k character-per-cell cap doesn't trip
+    // for big workbooks.
+    const json = JSON.stringify(data.resources);
+    const CHUNK = 30_000;
+    for (let i = 0, row = 1; i < json.length; i += CHUNK, row++) {
+      meta.getCell(row, 1).value = json.slice(i, i + CHUNK);
+    }
+  }
+
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 }
+
+/**
+ * Name of the hidden sheet we stash Univer plugin resources in. Exported so
+ * the importer can recognize and unpack it.
+ */
+export const RESOURCES_SHEET = '__casual_sheets_resources__';
