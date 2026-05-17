@@ -1,0 +1,31 @@
+diff --git a/lib/cjs/index.js b/lib/cjs/index.js
+index e6e624594f7a0a412a2b89a36709a49fc64c33d4..de04190fb94487338b102e40f49747a847220e84 100644
+--- a/lib/cjs/index.js
++++ b/lib/cjs/index.js
+@@ -206,7 +206,8 @@ let SheetsTableUiService = class SheetsTableUiService extends _univerjs_core.Dis
+ 		const map = /* @__PURE__ */ new Map();
+ 		let allItemsCount = 0;
+ 		for (let row = startRow; row <= endRow; row++) {
+-			if (worksheet.isRowFiltered(row)) continue;
++			// PATCH(casual-sheets): see lib/es/index.js — walk every row so the
++			// dropdown can re-show values this column already filtered out.
+ 			let stringItem = this._sheetTableService.getCellValueWithConditionType(worksheet, row, column);
+ 			if (stringItem === void 0) stringItem = this._localeService.t("sheets-table.condition.empty");
+ 			if (!map.has(stringItem)) data.push({
+diff --git a/lib/es/index.js b/lib/es/index.js
+index e79f8ceb254a90df2bc1947b7c9f23b71e0d7cd3..9fb01e91c36dfb3f8e288fb4e94a22173fa334ee 100644
+--- a/lib/es/index.js
++++ b/lib/es/index.js
+@@ -205,7 +205,11 @@ let SheetsTableUiService = class SheetsTableUiService extends Disposable {
+ 		const map = /* @__PURE__ */ new Map();
+ 		let allItemsCount = 0;
+ 		for (let row = startRow; row <= endRow; row++) {
+-			if (worksheet.isRowFiltered(row)) continue;
++			// PATCH(casual-sheets): originally skipped rows where
++			// worksheet.isRowFiltered(row) is true, which includes rows hidden
++			// by THIS column's own filter — so reopening the dropdown lost the
++			// values that were filtered out. Walk every row so users can re-check
++			// previously-unchecked values, matching Excel's behavior.
+ 			let stringItem = this._sheetTableService.getCellValueWithConditionType(worksheet, row, column);
+ 			if (stringItem === void 0) stringItem = this._localeService.t("sheets-table.condition.empty");
+ 			if (!map.has(stringItem)) data.push({
