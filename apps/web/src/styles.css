@@ -464,6 +464,36 @@ button {
   flex: 1;
 }
 
+.titlebar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 14px;
+}
+
+.titlebar__share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: var(--weight-semibold, 600);
+}
+
+.titlebar__roompill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-accent-soft, var(--color-surface-alt));
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: var(--weight-medium, 500);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
 /* Ribbon */
 .ribbon {
   display: flex;
@@ -1522,6 +1552,149 @@ button {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Loading overlay — shown while a multi-MB workbook is being opened.
+   Render-blocking modal with a phase label + indeterminate stripe.
+   ───────────────────────────────────────────────────────────────────────── */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6000;
+  animation: backdrop-in 120ms var(--ease-out, ease-out);
+}
+
+.loading-overlay__card {
+  width: min(420px, 92vw);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  padding: 24px 28px;
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.loading-overlay__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-accent-soft, var(--color-surface-alt));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 4px;
+}
+
+.loading-overlay__icon-inner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
+  animation: loading-spin 0.9s linear infinite;
+}
+
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-overlay__title {
+  font-size: 15px;
+  font-weight: var(--weight-semibold, 600);
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.loading-overlay__title strong {
+  font-weight: var(--weight-semibold, 600);
+}
+
+.loading-overlay__size {
+  color: var(--color-text-soft, var(--color-text));
+  font-weight: var(--weight-regular, 400);
+}
+
+.loading-overlay__phase {
+  font-size: 13px;
+  color: var(--color-text-soft, var(--color-text));
+  margin: 2px 0 8px;
+}
+
+.loading-overlay__bar {
+  position: relative;
+  height: 4px;
+  width: 100%;
+  background: var(--color-surface-alt);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.loading-overlay__bar-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-accent) 50%,
+    transparent 100%
+  );
+  width: 40%;
+  border-radius: 999px;
+  animation: loading-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-sweep {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+.loading-overlay__elapsed {
+  font-size: 12px;
+  color: var(--color-text-soft, var(--color-text));
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.loading-overlay__hint {
+  font-size: 12px;
+  color: var(--color-text-soft, var(--color-text));
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
+.loading-overlay__card--error {
+  border-top: 3px solid #d93025;
+}
+
+.loading-overlay__icon--error {
+  background: color-mix(in srgb, #d93025 14%, transparent);
+  color: #d93025;
+}
+.loading-overlay__icon--error .material-symbols-outlined { font-size: 22px; }
+
+.loading-overlay__error-text {
+  text-align: left;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 8px 0 0;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    Modal dialog (Properties dialog and future modals)
    ───────────────────────────────────────────────────────────────────────── */
 .dialog-backdrop {
@@ -1550,6 +1723,8 @@ button {
   flex-direction: column;
   overflow: hidden;
 }
+
+.dialog--narrow { width: min(420px, 92vw); }
 
 .dialog__header {
   display: flex;
@@ -1794,6 +1969,58 @@ button {
 .btn-secondary:hover { background: var(--color-hover); }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Collab status indicator. Small pill in the sheet-tabs strip showing the
+   transport state: Solo (no room), Connecting, Live (green), Offline.
+   ───────────────────────────────────────────────────────────────────────── */
+.collab-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: var(--weight-semibold, 600);
+  letter-spacing: 0.02em;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft, var(--color-text-secondary, var(--color-text)));
+  user-select: none;
+}
+
+.collab-indicator__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted, #999);
+}
+
+.collab-indicator--live {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+.collab-indicator--live .collab-indicator__dot {
+  background: var(--color-accent);
+  box-shadow: 0 0 6px var(--color-accent);
+}
+
+.collab-indicator--connecting .collab-indicator__dot {
+  background: #e7a851;
+  animation: collab-pulse 1.2s ease-in-out infinite;
+}
+
+.collab-indicator--offline {
+  color: #d93025;
+  border-color: color-mix(in srgb, #d93025 35%, transparent);
+}
+.collab-indicator--offline .collab-indicator__dot { background: #d93025; }
+
+@keyframes collab-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    Co-edit "self-host required" banner. Appears when a /r/:roomId URL hits
    a build that doesn't ship co-editing (the GitHub Pages demo). Pure
    informational; doesn't intercept the user's editing session.
@@ -1846,6 +2073,240 @@ button {
 }
 
 .collab-banner__close:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Neutral variant (view-only notice) — softer, doesn't feel like an alert. */
+.collab-banner--neutral {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.collab-banner--neutral .collab-banner__body code {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+.collab-banner--neutral .collab-banner__body a {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-accent);
+}
+.collab-banner--neutral .collab-banner__close { color: var(--color-text-soft, var(--color-text)); }
+.collab-banner--neutral .collab-banner__close:hover { background: var(--color-hover); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Live presence: remote cursors / selections + avatar stack.
+   The cursor overlay is an absolutely-positioned layer over the grid;
+   each peer's selection is a colored rectangle with a name tag at the
+   top-right. Avatar stack lives next to the connection pill.
+   ───────────────────────────────────────────────────────────────────────── */
+.presence-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 60;
+}
+
+.presence-cursor {
+  position: absolute;
+  border: 2px solid var(--presence-color, #1a73e8);
+  background: color-mix(in srgb, var(--presence-color, #1a73e8) 12%, transparent);
+  border-radius: 2px;
+  transition: top 80ms linear, left 80ms linear, width 80ms linear, height 80ms linear;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+}
+
+.presence-cursor__label {
+  position: absolute;
+  top: -20px;
+  left: -2px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: var(--weight-semibold, 600);
+  color: #fff;
+  background: var(--presence-color, #1a73e8);
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+/* Live-typing variant — the peer is typing in this cell. Cursor pulses
+   subtly to draw the eye; the ghost text overlay shows what they're
+   typing before they commit. */
+.presence-cursor--editing {
+  background: color-mix(in srgb, var(--presence-color, #1a73e8) 18%, transparent);
+  animation: presence-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes presence-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset; }
+  50%      { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset,
+                         0 0 0 2px color-mix(in srgb, var(--presence-color, #1a73e8) 35%, transparent); }
+}
+
+.presence-cursor__ghost {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--presence-color, #1a73e8) 80%, #000);
+  background: color-mix(in srgb, #fff 92%, var(--presence-color, #1a73e8));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  font-family: var(--font-sans, -apple-system, system-ui, sans-serif);
+  line-height: 1;
+}
+
+.presence-avatars {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.presence-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: var(--weight-semibold, 600);
+  border: 2px solid var(--color-surface);
+  margin-left: -8px;
+  position: relative;
+  cursor: default;
+  user-select: none;
+}
+.presence-avatar:first-child { margin-left: 0; }
+.presence-avatar--more {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  border-color: var(--color-surface);
+}
+.presence-avatar--idle {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Share-for-co-edit dialog. Stacks input rows, then renders the generated
+   URLs in monospace boxes with a copy button on the right.
+   ───────────────────────────────────────────────────────────────────────── */
+.share-room {
+  display: grid;
+  gap: 14px;
+}
+.share-room__row { display: grid; gap: 6px; }
+.share-room__label {
+  font-size: 12px;
+  font-weight: var(--weight-semibold, 600);
+  color: var(--color-text-soft, var(--color-text));
+  letter-spacing: 0.02em;
+}
+.share-room__hint {
+  font-size: 12px;
+  color: var(--color-text-soft, var(--color-text));
+  margin: 0;
+}
+.share-room__file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.share-room__file-name {
+  font-size: 13px;
+  color: var(--color-text-soft, var(--color-text));
+  flex: 1 1 auto;
+  min-width: 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.share-room__segment {
+  display: inline-flex;
+  gap: 8px;
+}
+.share-room__seg-opt {
+  flex: 1 1 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  text-align: left;
+}
+.share-room__seg-opt:hover { background: var(--color-hover); }
+.share-room__seg-opt--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+  color: var(--color-accent);
+}
+.share-room__seg-opt-desc {
+  font-size: 11px;
+  font-weight: var(--weight-regular, 400);
+  color: var(--color-text-soft, var(--color-text));
+}
+.share-room__seg-opt--active .share-room__seg-opt-desc { color: var(--color-accent); }
+
+.share-room__urls {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+.share-room__url {
+  display: grid;
+  gap: 4px;
+}
+.share-room__url-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.share-room__url-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+.share-room__copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 13px;
+}
+.share-room__copy:hover { background: var(--color-hover); }
+.share-room__copy--done {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Outline (group) side panel. Mirrors the TablesPanel surface treatment —
@@ -2034,3 +2495,96 @@ button {
   color: var(--color-text-soft, var(--color-text));
   font-variant-numeric: tabular-nums;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Responsive shell — keep the app usable on a phone-sized viewport.
+   The Univer canvas grid already handles touch (pinch-zoom, drag-scroll,
+   long-press selection). The chrome around it is what breaks: a 7-tab
+   menu bar + a wide ribbon both want >600 px horizontal. Below ~720 px
+   we let the menu bar and the toolbar scroll horizontally instead of
+   wrapping, drop the title-bar's auxiliary fields, and shrink the chrome
+   heights so more pixels go to the grid.
+
+   Co-edit on mobile works today; the bridge does not care about viewport.
+   Editing comfort is a future polish — Phase 3 ships a proper touch UX.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  :root {
+    --title-bar-h: 40px;
+    --toolbar-h: 40px;
+    --sheet-tabs-h: 36px;
+  }
+
+  /* Menu bar: items can ride a single scroll strip. Don't wrap them onto
+     two rows — that eats grid real estate every time the user opens the app. */
+  .menubar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .menubar::-webkit-scrollbar { display: none; }
+  .menubar__item { flex: 0 0 auto; }
+
+  /* Toolbar: same trick. The buttons stay full-size for tap targets. */
+  .toolbar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .toolbar::-webkit-scrollbar { display: none; }
+  .toolbar__inner { padding: 0 8px; }
+
+  /* Ribbon groups pack tighter. */
+  .ribbon__group { padding: 0 4px; }
+  .ribbon__group-label { display: none; }
+
+  /* Title bar: hide the auxiliary metadata buttons; keep just the brand
+     + workbook name editor. */
+  .title-bar__meta,
+  .title-bar__actions { display: none; }
+
+  /* Formula bar: name box stays at 64 px (still legible). */
+  .formula-bar__name-box {
+    min-width: 64px;
+    width: 64px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  /* Sheet tabs strip: smaller paddings, scroll horizontally as usual.
+     Drop the zoom slider on phones — pinch-zoom on the canvas covers it. */
+  .sheet-tabs { padding: 0 6px; gap: 4px; }
+  .sheet-tabs__zoom-slider { display: none; }
+  .sheet-tabs__sep { display: none; }
+  .sheet-tabs__stats { display: none; }
+
+  /* Tighter dialog padding so phone-width modals don't lose chrome to gutters. */
+  .dialog__body { padding: 14px 16px; }
+  .dialog__footer { padding: 12px 16px; }
+
+  /* Side panels (Tables, Outline) replace the grid on phones rather than
+     squeezing it — full-width overlay feels more native than a 40 % strip. */
+  .tables-panel,
+  .outline-panel {
+    position: fixed;
+    inset: var(--title-bar-h) 0 var(--sheet-tabs-h) 0;
+    width: auto;
+    flex: none;
+    z-index: 100;
+    border-left: 0;
+  }
+
+  /* Save / message toast stays out of the way of the sheet-tab strip. */
+  .collab-banner { bottom: 72px; max-width: calc(100vw - 16px); }
+}
+
+@media (max-width: 480px) {
+  /* Very narrow: hide the entire toolbar — menus carry the same commands.
+     The grid + formula bar are the working surface; everything else is
+     scrollable chrome the user can swipe to when they need it. */
+  .toolbar { display: none; }
+}
+

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { LocaleType, LogLevel, Univer, UniverInstanceType, type IWorkbookData } from '@univerjs/core';
 import { FUniver } from '@univerjs/core/facade';
 import type { FWorkbook } from '@univerjs/sheets/facade';
@@ -13,13 +13,23 @@ import { useSetUniverAPI } from './use-univer';
 import { extendContextMenu } from './context-menu-extensions';
 import { registerPlugins } from './univer/plugins';
 import { installDevHelpers } from './univer/dev-helpers';
+import { timeIt } from './perf';
+import { WorkbookContext } from './workbook-context';
 
-type Props = { snapshot: IWorkbookData };
+type Props = {
+  /** First snapshot used to mount Univer. Only consulted on initial mount;
+   *  subsequent swaps come through `WorkbookContext.snapshotRef`. */
+  initialSnapshot: IWorkbookData;
+  /** Bumped by `replaceWorkbook` — drives the swap effect without us having
+   *  to hold a snapshot reference in React state (Stage 3 memory win). */
+  revision: number;
+};
 
-export function UniverSheet({ snapshot }: Props) {
+export function UniverSheet({ initialSnapshot, revision }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const setApi = useSetUniverAPI();
+  const ctx = useContext(WorkbookContext);
   // Hold the live Univer instance + API across snapshot swaps so Open replaces
   // the workbook unit rather than tearing the whole Univer (and its internal
   // React root) down — the latter races React's render phase and leaves the
@@ -40,7 +50,7 @@ export function UniverSheet({ snapshot }: Props) {
 
     registerPlugins(univer, hostRef.current);
 
-    univer.createUnit(UniverInstanceType.UNIVER_SHEET, snapshot);
+    timeIt('mount-unit', () => univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialSnapshot));
 
     // Augment the built-in cell context menu with Merge / Unmerge entries.
     extendContextMenu(univer);
@@ -69,16 +79,21 @@ export function UniverSheet({ snapshot }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Swap the active workbook unit when the snapshot changes, without
-  // tearing down the Univer instance itself. Dispose the old unit BEFORE
-  // creating the new one so we never collide on unit ids (Univer's
-  // IUniverInstanceService throws on duplicate ids).
-  const lastSnapshotRef = useRef<IWorkbookData>(snapshot);
+  // Swap the active workbook unit when `revision` bumps. We never read
+  // the next snapshot from React state — it lives on `ctx.snapshotRef`
+  // for the brief window between replaceWorkbook and this effect, then
+  // gets cleared so the workbook tree is GC-eligible.
+  const lastRevisionRef = useRef<number>(revision);
   useEffect(() => {
-    if (lastSnapshotRef.current === snapshot) return;
+    if (lastRevisionRef.current === revision) return;
     const api = apiRef.current;
     if (!api) {
       console.warn('[open-xlsx] swap aborted: api not ready yet');
+      return;
+    }
+    const snapshot = ctx?.snapshotRef.current ?? null;
+    if (!snapshot) {
+      console.warn('[open-xlsx] swap aborted: snapshotRef is empty for revision', revision);
       return;
     }
     const current = api.getActiveWorkbook() as unknown as FWorkbook | null;
@@ -95,15 +110,17 @@ export function UniverSheet({ snapshot }: Props) {
     }
     console.info('[open-xlsx] swapping unit', { from: currentId, to: snapshot.id });
     try {
-      if (currentId) disposeUnit?.call(api, currentId);
-      createSheet.call(api, snapshot);
-      lastSnapshotRef.current = snapshot;
+      timeIt('swap-unit', () => {
+        if (currentId) disposeUnit?.call(api, currentId);
+        createSheet.call(api, snapshot);
+      });
+      lastRevisionRef.current = revision;
       console.info('[open-xlsx] swap complete');
     } catch (err) {
       console.error('[open-xlsx] swap failed', err);
       throw err;
     }
-  }, [snapshot]);
+  }, [revision, ctx]);
 
   return (
     <>

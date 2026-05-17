@@ -1,14 +1,11 @@
 import { CustomRangeType, type IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
-import { AddHyperLinkCommand } from '@univerjs/sheets-hyper-link';
 import { IMessageService } from '@univerjs/ui';
 import { MessageType } from '@univerjs/design';
 import { workbookDataToXlsx, xlsxToWorkbookData } from '../xlsx';
+import { timeIt } from '../perf';
 import type { ExportExtras } from '../xlsx/export';
-import type { PendingHyperlink } from '../xlsx/import';
 import type { OutlineState } from '../outline/types';
-
-export type { PendingHyperlink };
 import {
   csvToWorkbookData,
   odsToWorkbookData,
@@ -22,15 +19,25 @@ import {
  * (e.g. lifting the workbook snapshot so a new Open replaces the active unit).
  */
 
+/** Optional progress reporter called as the open flow transitions
+ *  between phases (read buffer → parse → mount). Used by the loading
+ *  overlay; ignored by callers that don't want UI feedback. */
+export type OpenProgress = (phase: 'reading' | 'parsing' | 'mounting') => void;
+
 /**
  * Open a spreadsheet from disk. We auto-detect by file extension and
- * dispatch to the right parser. xlsx files go through ExcelJS; ods files
- * through SheetJS Community.
+ * dispatch to the right parser. xlsx files go through ExcelJS (in a
+ * worker); ods files through SheetJS Community.
  */
-export async function openSpreadsheetFile(file: File): Promise<IWorkbookData> {
+export async function openSpreadsheetFile(
+  file: File,
+  onProgress?: OpenProgress,
+): Promise<IWorkbookData> {
   console.info('[open] reading file', { name: file.name, size: file.size });
+  onProgress?.('reading');
   const buf = await file.arrayBuffer();
   console.info('[open] buffer read', buf.byteLength, 'bytes — parsing');
+  onProgress?.('parsing');
   const lower = file.name.toLowerCase();
   let data: IWorkbookData;
   if (lower.endsWith('.ods')) data = await odsToWorkbookData(buf);
@@ -66,24 +73,18 @@ function inferFormat(filename: string): WorkbookFormat {
  */
 export async function loadSpreadsheetFile(
   file: File,
-  api: FUniver | null,
+  _api: FUniver | null,
   replaceWorkbook: (data: IWorkbookData, format: WorkbookFormat) => void,
+  onProgress?: OpenProgress,
 ): Promise<void> {
-  const data = await openSpreadsheetFile(file);
+  const data = await openSpreadsheetFile(file, onProgress);
   const format = inferFormat(file.name);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pending = (data as any).__pendingHyperlinks as
-    | PendingHyperlink[]
-    | undefined;
+  onProgress?.('mounting');
   replaceWorkbook(data, format);
-  if (api && Array.isArray(pending) && pending.length > 0) {
-    const targetUnitId = data.id;
-    const dispose = api.onUniverSheetCreated((fwb) => {
-      if (fwb.getId() !== targetUnitId) return;
-      void replayPendingHyperlinks(api, targetUnitId, pending);
-      dispose.dispose();
-    });
-  }
+  // Hyperlinks are now baked into cell.p inline by the parser (see
+  // parse-impl.ts `buildHyperlinkBody`). The previous side-channel
+  // (`data.__pendingHyperlinks`) + per-link AddHyperLinkCommand replay
+  // is gone — that was O(N) awaited round-trips per open.
 }
 
 export type SaveOptions = {
@@ -98,15 +99,38 @@ export async function saveAsXlsx(
 ) {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  // wb.save() is a deep clone of the whole workbook — measurable on big
+  // sheets. Capture it once and pass it down to anything that needs the
+  // snapshot (xlsx writer + hyperlink extractor).
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const extras: ExportExtras = {
-    ...collectExportExtras(api),
+    ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
   };
   const blob = await workbookDataToXlsx(snapshot, extras);
   const finalName = ensureExt(filename, 'xlsx');
   triggerDownload(blob, finalName);
   toast(api, `Saved as ${finalName}`);
+}
+
+/**
+ * Snapshot the active workbook to xlsx bytes WITHOUT triggering a
+ * download. Used by the co-edit share flow to upload the room's
+ * starting workbook to the server. Returns null if no workbook is
+ * mounted.
+ */
+export async function exportCurrentWorkbookAsXlsxBlob(
+  api: FUniver,
+  options: SaveOptions = {},
+): Promise<Blob | null> {
+  const wb = api.getActiveWorkbook();
+  if (!wb) return null;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
+  const extras: ExportExtras = {
+    ...collectExportExtras(snapshot),
+    ...(options.outline ? { outline: options.outline } : {}),
+  };
+  return workbookDataToXlsx(snapshot, extras);
 }
 
 /**
@@ -151,10 +175,7 @@ function toast(api: FUniver, content: string): void {
  * source of truth — we just have to look inside `cell.p`, which the plain
  * xlsx exporter otherwise ignores.
  */
-function collectExportExtras(api: FUniver): ExportExtras {
-  const wb = api.getActiveWorkbook();
-  if (!wb) return {};
-  const snapshot = wb.save() as IWorkbookData;
+function collectExportExtras(snapshot: IWorkbookData): ExportExtras {
   return { hyperlinks: extractHyperlinks(snapshot) };
 }
 
@@ -200,43 +221,11 @@ function extractHyperlinks(
   return out;
 }
 
-/**
- * Replay hyperlinks captured during xlsx import. Fires AddHyperLinkCommand
- * per link — the command writes both the rich-text cell body (so the link
- * underlines / clicks) and the HyperLinkModel entry, in one mutation pair.
- * Caller must invoke this AFTER the new unit is mounted (use
- * FUniver.onUniverSheetCreated).
- */
-/**
- * @param unitId  Target unit id. Caller passes this explicitly because we
- *   replay from inside `onUniverSheetCreated`, where `api.getActiveWorkbook()`
- *   returns null — `__addUnit` emits `unitAdded$` before promoting the new
- *   unit to current.
- */
-export async function replayPendingHyperlinks(
-  api: FUniver,
-  unitId: string,
-  pending: PendingHyperlink[],
-): Promise<void> {
-  for (const hl of pending) {
-    await api.executeCommand(AddHyperLinkCommand.id, {
-      unitId,
-      subUnitId: hl.subUnitId,
-      link: {
-        id: hl.id,
-        row: hl.row,
-        column: hl.column,
-        payload: hl.payload,
-        display: hl.display,
-      },
-    });
-  }
-}
 
 export async function saveAsOds(api: FUniver, filename = 'workbook.ods') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const blob = await workbookDataToOds(snapshot);
   const finalName = ensureExt(filename, 'ods');
   triggerDownload(blob, finalName);
@@ -246,7 +235,7 @@ export async function saveAsOds(api: FUniver, filename = 'workbook.ods') {
 export async function saveAsCsv(api: FUniver, filename = 'workbook.csv') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const blob = await workbookDataToDelimited(snapshot, 'csv');
   const finalName = ensureExt(filename, 'csv');
   triggerDownload(blob, finalName);
@@ -256,7 +245,7 @@ export async function saveAsCsv(api: FUniver, filename = 'workbook.csv') {
 export async function saveAsTsv(api: FUniver, filename = 'workbook.tsv') {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const snapshot = wb.save() as IWorkbookData;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
   const blob = await workbookDataToDelimited(snapshot, 'tsv');
   const finalName = ensureExt(filename, 'tsv');
   triggerDownload(blob, finalName);

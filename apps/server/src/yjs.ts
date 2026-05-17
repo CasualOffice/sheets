@@ -70,8 +70,31 @@ export function attachHocuspocus(
     socket: import('node:net').Socket,
     head: Buffer,
   ) => {
-    const url = req.url ?? '/';
-    if (!url.startsWith(pathPrefix)) return;
+    const rawUrl = req.url ?? '/';
+    if (!rawUrl.startsWith(pathPrefix)) return;
+    // Parse query string so the client can authenticate the WS upgrade
+    // with `?room=<id>&p=<password>`. Without the room id we can't
+    // validate, so we reject — Hocuspocus would otherwise let the
+    // connection through and discover the room name from the protocol
+    // handshake AFTER we've already accepted.
+    const parsed = new URL(rawUrl, 'http://internal');
+    const roomId = parsed.searchParams.get('room');
+    const password = parsed.searchParams.get('p');
+    if (roomId) {
+      const room = rooms.get(roomId);
+      if (room && !rooms.passwordOk(roomId, password)) {
+        // 4401: app-defined close code for "unauthorized". Hocuspocus
+        // ignores this and falls back to its own handshake otherwise.
+        socket.write(
+          'HTTP/1.1 401 Unauthorized\r\n' +
+            'Connection: close\r\n' +
+            'Content-Length: 0\r\n' +
+            '\r\n',
+        );
+        socket.destroy();
+        return;
+      }
+    }
     wss.handleUpgrade(req, socket, head, (ws) => handleConnection(ws, req));
   };
 

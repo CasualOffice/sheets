@@ -95,8 +95,13 @@ test.describe('xlsx hyperlinks & resources round-trip', () => {
     await exposeConverters(page);
   });
 
-  test('importer captures cell hyperlinks into __pendingHyperlinks', async ({ page }) => {
-    const pending = await page.evaluate(async () => {
+  test('importer encodes cell hyperlinks inline in cell.p.body', async ({ page }) => {
+    // Stage 5 of the large-file pipeline: hyperlinks ship directly in the
+    // snapshot (cell.p.body.customRanges with rangeType: HYPERLINK), not
+    // via a __pendingHyperlinks side-channel that gets replayed through
+    // AddHyperLinkCommand per link. This locks the new on-disk shape so
+    // the export side keeps round-tripping.
+    const probe = await page.evaluate(async () => {
       const original = {
         id: 'wb-1',
         rev: 1,
@@ -111,7 +116,7 @@ test.describe('xlsx hyperlinks & resources round-trip', () => {
             name: 'Sheet1',
             cellData: { 0: { 0: { v: 'Anthropic' } } },
             rowCount: 1024,
-            columnCount: 128,
+            columnCount: 26,
           },
         },
       };
@@ -122,21 +127,28 @@ test.describe('xlsx hyperlinks & resources round-trip', () => {
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const reloaded: any = await window.__xlsx!.xlsxToWorkbookData(await blob.arrayBuffer());
-      return reloaded.__pendingHyperlinks ?? null;
+      const firstSheetId = reloaded.sheetOrder[0];
+      const cell = reloaded.sheets[firstSheetId].cellData[0][0];
+      return {
+        pending: reloaded.__pendingHyperlinks ?? null,
+        v: cell.v,
+        body: cell.p?.body ?? null,
+      };
     });
 
-    expect(pending).not.toBeNull();
-    expect(pending).toHaveLength(1);
-    const [link] = pending!;
-    expect(link.row).toBe(0);
-    expect(link.column).toBe(0);
-    expect(link.payload).toBe('https://anthropic.com');
-    expect(link.display).toBe('Anthropic');
-    expect(typeof link.id).toBe('string');
-    expect(link.id.length).toBeGreaterThan(0);
-    // sheetId on the side-channel must match what the importer produced for
-    // this worksheet, so the replay step targets the right subUnit.
-    expect(typeof link.subUnitId).toBe('string');
+    // The legacy side-channel is gone.
+    expect(probe.pending).toBeNull();
+    // Cell text is preserved.
+    expect(probe.v).toBe('Anthropic');
+    // Rich-text body carries the link as a customRange.
+    expect(probe.body).not.toBeNull();
+    expect(probe.body.dataStream.startsWith('Anthropic')).toBe(true);
+    const cr = probe.body.customRanges?.[0];
+    expect(cr).toBeTruthy();
+    expect(cr.rangeType).toBe(0); // CustomRangeType.HYPERLINK
+    expect(cr.properties?.url).toBe('https://anthropic.com');
+    expect(cr.startIndex).toBe(0);
+    expect(cr.endIndex).toBe('Anthropic'.length - 1);
   });
 
   test('resources blob round-trips via the hidden sheet', async ({ page }) => {
@@ -255,18 +267,30 @@ test.describe('xlsx hyperlinks & resources round-trip', () => {
     const buf = fs.readFileSync(downloadPath!);
 
     // Re-import the saved bytes and confirm the hyperlinks survived the
-    // collectExportExtras → workbook write → re-parse loop.
-    const pending = await page.evaluate(async (bytes) => {
+    // collectExportExtras → workbook write → re-parse loop. Stage 5 of
+    // the pipeline put hyperlinks inline in cell.p; walk the snapshot
+    // to recover them.
+    const payloads = await page.evaluate(async (bytes) => {
       const ab = new Uint8Array(bytes).buffer;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const reloaded: any = await window.__xlsx!.xlsxToWorkbookData(ab);
-      return reloaded.__pendingHyperlinks ?? [];
+      const found: string[] = [];
+      for (const sheetId of reloaded.sheetOrder) {
+        const cellData = reloaded.sheets[sheetId].cellData ?? {};
+        for (const r of Object.keys(cellData)) {
+          for (const c of Object.keys(cellData[r])) {
+            const ranges = cellData[r][c]?.p?.body?.customRanges ?? [];
+            for (const cr of ranges) {
+              if (cr.rangeType === 0 && typeof cr.properties?.url === 'string') {
+                found.push(cr.properties.url);
+              }
+            }
+          }
+        }
+      }
+      return found.sort();
     }, Array.from(buf));
 
-    expect(pending).toHaveLength(2);
-    const payloads = (pending as Array<{ payload: string }>)
-      .map((p) => p.payload)
-      .sort();
     expect(payloads).toEqual(
       ['https://anthropic.com', 'https://github.com/schnsrw/sheets'].sort(),
     );

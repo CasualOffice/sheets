@@ -2,12 +2,13 @@ import type { Univer } from '@univerjs/core';
 
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
+import { UniverRPCMainThreadPlugin } from '@univerjs/rpc';
 import { UniverUIPlugin } from '@univerjs/ui';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
-import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
+import { UniverSheetsFormulaPlugin, CalculationMode } from '@univerjs/sheets-formula';
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
@@ -51,7 +52,25 @@ import { UniverSheetsDrawingUIPlugin } from '@univerjs/sheets-drawing-ui';
  */
 export function registerPlugins(univer: Univer, container: HTMLElement): void {
   univer.registerPlugin(UniverRenderEnginePlugin);
-  univer.registerPlugin(UniverFormulaEnginePlugin);
+  // Formula engine runs in a worker — main thread still loads the plugin
+  // (for shared types, mutations) but skips the actual compute. The worker
+  // ships the heavy `evaluate` path so paste / sort / fill on large
+  // workbooks doesn't freeze the UI thread.
+  // See apps/web/src/univer/formula-worker.ts for the worker side.
+  // `notExecuteFormula` keeps formula compute off the main thread (the
+  // worker registered below ships the heavy `evaluate` work). Pairing
+  // it with `initialFormulaComputing: NO_CALCULATION` skips the load-
+  // time RPC thunder on file open — every formula cell that lacks a
+  // cached value would otherwise trigger one worker round-trip just to
+  // mount the workbook.
+  univer.registerPlugin(UniverFormulaEnginePlugin, {
+    notExecuteFormula: true,
+  });
+  const worker = new Worker(new URL('./formula-worker.ts', import.meta.url), {
+    type: 'module',
+    name: 'formula-worker',
+  });
+  univer.registerPlugin(UniverRPCMainThreadPlugin, { workerURL: worker });
   univer.registerPlugin(UniverUIPlugin, {
     container,
     header: false,
@@ -61,9 +80,12 @@ export function registerPlugins(univer: Univer, container: HTMLElement): void {
   });
   univer.registerPlugin(UniverDocsPlugin);
   univer.registerPlugin(UniverDocsUIPlugin);
-  univer.registerPlugin(UniverSheetsPlugin);
+  univer.registerPlugin(UniverSheetsPlugin, { notExecuteFormula: true });
   univer.registerPlugin(UniverSheetsUIPlugin);
-  univer.registerPlugin(UniverSheetsFormulaPlugin);
+  univer.registerPlugin(UniverSheetsFormulaPlugin, {
+    notExecuteFormula: true,
+    initialFormulaComputing: CalculationMode.NO_CALCULATION,
+  });
   univer.registerPlugin(UniverSheetsFormulaUIPlugin);
   univer.registerPlugin(UniverSheetsNumfmtPlugin);
   univer.registerPlugin(UniverSheetsNumfmtUIPlugin);

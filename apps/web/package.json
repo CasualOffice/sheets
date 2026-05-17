@@ -30,6 +30,7 @@
     "@univerjs/sheets-filter": "0.22.1",
     "@univerjs/sheets-filter-ui": "0.22.1",
     "@univerjs/sheets-find-replace": "0.22.1",
+    "@univerjs/rpc": "0.22.1",
     "@univerjs/sheets-formula": "0.22.1",
     "@univerjs/sheets-formula-ui": "0.22.1",
     "@univerjs/sheets-hyper-link": "0.22.1",

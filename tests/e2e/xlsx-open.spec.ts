@@ -80,8 +80,20 @@ test('File → Open replaces grid contents with the picked file', async ({ page 
   ]);
   await chooser.setFiles(fixture);
 
-  // Allow the new workbook unit to mount; nothing to await on directly.
-  await page.waitForTimeout(800);
+  // The xlsx parser runs in a Web Worker (slower on CI runners). Wait
+  // until the new workbook is actually mounted instead of a fixed
+  // sleep — otherwise the assertion races the post-overlay swap.
+  await page.waitForFunction(
+    () => {
+      const api = window.__univerAPI;
+      if (!api) return false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()?.getActiveSheet();
+      return ws?.getRange('A1').getValue() === 'FILE_X';
+    },
+    null,
+    { timeout: 15_000 },
+  );
 
   const after = await page.evaluate(() => {
     const api = window.__univerAPI!;

@@ -45,17 +45,36 @@ type ProviderProps = { children: ReactNode };
  */
 export function OutlineProvider({ children }: ProviderProps) {
   const api = useUniverAPI();
-  const { snapshot } = useWorkbook();
-  const [state, setState] = useState<OutlineState>(() => readOutlineFromSnapshot(snapshot));
+  const { meta, snapshotRef } = useWorkbook();
+  const [state, setState] = useState<OutlineState>(() =>
+    snapshotRef.current ? readOutlineFromSnapshot(snapshotRef.current) : {},
+  );
 
-  // Re-hydrate every time the workbook is replaced (Open / New). We key on
-  // snapshot identity, which the WorkbookContext re-creates per swap.
-  const lastSnapshotRef = useRef(snapshot);
+  // Re-hydrate every time the workbook is replaced (Open / New). The
+  // snapshot itself isn't in React state (Stage 3 memory win) — it
+  // lives on `snapshotRef.current` only for the brief window between
+  // replaceWorkbook and the post-render flush, which is exactly the
+  // window we need to read it from here.
+  const lastRevisionRef = useRef(meta.revision);
   useEffect(() => {
-    if (lastSnapshotRef.current === snapshot) return;
-    lastSnapshotRef.current = snapshot;
-    setState(readOutlineFromSnapshot(snapshot));
-  }, [snapshot]);
+    if (lastRevisionRef.current === meta.revision) return;
+    lastRevisionRef.current = meta.revision;
+    const snap = snapshotRef.current;
+    if (!snap) {
+      // Ref already cleared (revision bump arrived from a stale tab
+      // path) — fall back to whatever Univer currently has. wb.save()
+      // is a deep clone so we only do this on rare misses.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb = api?.getActiveWorkbook?.() as any;
+      const fresh = wb?.save?.();
+      if (fresh) setState(readOutlineFromSnapshot(fresh));
+      return;
+    }
+    setState(readOutlineFromSnapshot(snap));
+    // snapshotRef is a stable ref object, never re-created — safe to
+    // exclude from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta.revision, api]);
 
   const getSheet = useCallback(
     (sheetId: string) => state[sheetId] ?? EMPTY_SHEET,

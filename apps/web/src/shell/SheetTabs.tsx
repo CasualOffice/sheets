@@ -14,6 +14,7 @@ import { redo, undo } from './home-tab-actions';
 import { setZoom } from './tab-actions';
 import { Icon } from './Icon';
 import { Tooltip } from './Tooltip';
+import { CollabIndicator } from './CollabIndicator';
 
 const NUM = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 const ZOOM_STEPS = [25, 50, 75, 100, 125, 150, 200, 300, 400];
@@ -143,6 +144,8 @@ export function SheetTabs() {
       )}
 
       <div className="sheet-tabs__right">
+        <CollabIndicator />
+        <span className="sheet-tabs__sep" aria-hidden="true" />
         <Tooltip label="Undo (Ctrl+Z)" side="top">
           <button
             type="button"

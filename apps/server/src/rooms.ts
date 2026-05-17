@@ -3,6 +3,8 @@
  * across restarts. See docs/CO-EDITING.md §"Room lifecycle".
  */
 
+import { createHash, timingSafeEqual } from 'node:crypto';
+
 type RoomState = {
   id: string;
   /** Number of currently connected websocket clients. */
@@ -12,8 +14,23 @@ type RoomState = {
   /** Optional initial snapshot (e.g. from xlsx upload) — Hocuspocus seeds
    *  the Y.Doc with this on first connect. */
   seed?: Uint8Array;
+  /** Optional xlsx bytes representing the room's *starting workbook*.
+   *  Joiners fetch this once at /api/rooms/:id/seed and import it locally
+   *  before the bridge takes over for incremental edits. The op-log alone
+   *  doesn't carry pre-existing cells — the owner's "Share current
+   *  workbook" flow uploads here so peers see the same starting state. */
+  xlsxSeed?: Uint8Array;
+  /** Optional gzipped JSON snapshot (`IWorkbookData`) — server-side cache
+   *  so joiners skip the multi-second xlsx parse on join. Same content
+   *  as `xlsxSeed`, just in a form the client can apply via
+   *  `replaceWorkbook` without re-running ExcelJS. Lives alongside the
+   *  xlsx (not instead of it) so existing tooling that wants the .xlsx
+   *  bytes still has them. */
+  snapshotGz?: Uint8Array;
   /** ISO timestamp the room was created. */
   createdAt: string;
+  /** SHA-256 hash of the room password, hex-encoded. `null` = open room. */
+  passwordHash: string | null;
 };
 
 const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MIN ?? 5) * 60_000;
@@ -36,13 +53,14 @@ export class RoomRegistry {
   }
 
   /** Create a fresh room; returns its id. */
-  create(seed?: Uint8Array): string {
+  create(opts: { password?: string; seed?: Uint8Array } = {}): string {
     const id = makeRoomId();
     this.rooms.set(id, {
       id,
       clients: 0,
       idleSince: Date.now(),
-      seed,
+      seed: opts.seed,
+      passwordHash: opts.password ? hashPassword(opts.password) : null,
       createdAt: new Date().toISOString(),
     });
     return id;
@@ -52,6 +70,35 @@ export class RoomRegistry {
     return this.rooms.get(id);
   }
 
+  /** Attach an xlsx-format starting workbook to a room. Returns false if
+   *  the room doesn't exist. Idempotent — re-uploading replaces. */
+  setXlsxSeed(id: string, bytes: Uint8Array): boolean {
+    const room = this.rooms.get(id);
+    if (!room) return false;
+    room.xlsxSeed = bytes;
+    return true;
+  }
+
+  /** Cache the gzipped JSON snapshot for fast-path joiner load. */
+  setSnapshotGz(id: string, bytes: Uint8Array): boolean {
+    const room = this.rooms.get(id);
+    if (!room) return false;
+    room.snapshotGz = bytes;
+    return true;
+  }
+
+  /** Constant-time compare a user-supplied password against the room's hash. */
+  passwordOk(id: string, candidate: string | undefined | null): boolean {
+    const room = this.rooms.get(id);
+    if (!room) return false;
+    if (!room.passwordHash) return true; // open room
+    if (!candidate) return false;
+    const a = Buffer.from(hashPassword(candidate), 'hex');
+    const b = Buffer.from(room.passwordHash, 'hex');
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  }
+
   /** Idempotently mark a client joining the room. */
   onConnect(id: string): RoomState {
     const room = this.rooms.get(id) ?? {
@@ -59,6 +106,7 @@ export class RoomRegistry {
       clients: 0,
       idleSince: Date.now(),
       createdAt: new Date().toISOString(),
+      passwordHash: null,
     };
     room.clients += 1;
     room.idleSince = -1;
@@ -80,6 +128,7 @@ export class RoomRegistry {
       clients: r.clients,
       idleSince: r.idleSince,
       createdAt: r.createdAt,
+      protected: r.passwordHash !== null,
     }));
   }
 
@@ -102,4 +151,15 @@ function makeRoomId(): string {
     out += Math.floor(Math.random() * 36).toString(36);
   }
   return out;
+}
+
+/**
+ * Hash a room password before storing. SHA-256 is enough — this is a
+ * knowledge-of-secret gate, not an authentication-grade credential
+ * (anonymous self-hosted v1 with no accounts). Salting would only help
+ * if a memory dump and a rainbow-table attack were realistic threats;
+ * neither is in scope.
+ */
+function hashPassword(plain: string): string {
+  return createHash('sha256').update(plain, 'utf8').digest('hex');
 }

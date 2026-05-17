@@ -1,0 +1,67 @@
+name: Publish Docker image
+
+# Triggers on every push of a semver-style tag (v0.0.4, v1.2.3, …).
+# Manual `workflow_dispatch` is also wired so you can re-push a tag's
+# image without re-tagging.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.0.4). Required for manual runs.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        # Strip the leading `v` from the git ref tag (or the dispatched
+        # input) so the Docker tag matches the package.json version.
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "raw=${raw}"
+          echo "raw=${raw}" >> "$GITHUB_OUTPUT"
+          echo "version=${raw#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout (at tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.raw }}
+
+      - name: Set up QEMU
+        # Needed so buildx can produce arm64 layers on the amd64 runner.
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        # Multi-arch so the image runs on both Linux servers (amd64) and
+        # Apple Silicon laptops (arm64) without an emulation hit.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            schnsrw/casual-sheets:${{ steps.tag.outputs.version }}
+            schnsrw/casual-sheets:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
