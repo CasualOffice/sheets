@@ -6,7 +6,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.17-brightgreen)](#develop)
 [![E2E tests](https://img.shields.io/badge/e2e-120%20passing-brightgreen)](./tests/e2e)
 
-**Live demo: <https://schnsrw.live/sheets/>** — auto-deployed from `main` on every push (CI → Pages).
+**Live demo: <https://sheet.schnsrw.live/>** — auto-deployed from `main` on every push (CI → Pages).
 
 A web-based, Excel-flavored spreadsheet editor with real-time collaboration on the roadmap. Built on [Univer](https://github.com/dream-num/univer) (Apache-2.0 OSS).
 
@@ -19,7 +19,7 @@ Phase 1 — single-user editor is feature-rich and locked down by 120 Playwright
 - **CI** runs `lint`, `typecheck`, and the full Playwright suite on every PR and `main` push ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)).
 - **Deploy** publishes `apps/web` to GitHub Pages on every `main` push ([`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml)).
 - **Tests**: 120 e2e specs in [`tests/e2e/`](./tests/e2e); xlsx / ods / csv / tsv round-trip, hyperlinks, drag-fill, drag-and-drop file open, formula evaluation, tables, freeze, comments, and more.
-- **Live URL**: <https://schnsrw.live/sheets/>
+- **Live URL**: <https://sheet.schnsrw.live/>
 
 | Working | Coming |
 | --- | --- |

@@ -42,27 +42,39 @@ jobs:
 
       - name: Build web
         env:
-          # Sheet app is served from /sheets/ on every URL it lives at:
-          #   schnsrw.live/sheets/             (custom domain, primary)
-          #   schnsrw.github.io/sheets/        (GitHub-provided URL)
-          # so asset paths are baked with that prefix.
-          PAGES_BASE: /sheets/
+          # Canonical URL is the apex of the subdomain — sheet.schnsrw.live/
+          # — so assets are root-relative. A small /sheets/ redirect (added
+          # below) keeps the GitHub-provided URL working
+          # (schnsrw.github.io/sheets/ → 301 → sheet.schnsrw.live/sheets/
+          # → redirect → /).
+          PAGES_BASE: /
         run: pnpm --filter @sheet/web build
 
-      - name: Assemble combined Pages artifact
-        # One Pages site serves both surfaces from the apex of the custom
-        # domain:
-        #   /              → apex landing page (site/)
-        #   /sheets/       → sheet app          (apps/web/dist/)
-        # The CNAME at the artifact root tells GitHub Pages which host to
-        # serve. Without it in every deploy the custom-domain config in the
-        # Pages UI gets silently dropped.
+      - name: Assemble Pages artifact
+        # CNAME tells GitHub Pages which host to serve; without it in every
+        # deploy, the custom-domain config in the Pages UI gets dropped.
+        # The /sheets/index.html redirect makes the schnsrw.github.io URL
+        # land on the app instead of 404.
         run: |
           set -euo pipefail
           mkdir -p public/sheets
-          cp -R site/. public/
-          cp -R apps/web/dist/. public/sheets/
-          echo "schnsrw.live" > public/CNAME
+          cp -R apps/web/dist/. public/
+          echo "sheet.schnsrw.live" > public/CNAME
+          cat > public/sheets/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <title>Casual Sheets</title>
+              <meta http-equiv="refresh" content="0; url=/" />
+              <link rel="canonical" href="https://sheet.schnsrw.live/" />
+              <script>location.replace('/');</script>
+            </head>
+            <body>
+              <p>Redirecting to <a href="/">sheet.schnsrw.live</a>…</p>
+            </body>
+          </html>
+          HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
