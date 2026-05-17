@@ -42,18 +42,32 @@ jobs:
 
       - name: Build web
         env:
-          # Served at the apex of the custom domain (sheet.schnsrw.live), so
-          # assets are root-relative. `apps/web/public/CNAME` is copied into
-          # the artifact by Vite and tells GitHub Pages which host to serve;
-          # without it, every deploy strips the custom-domain config in the
-          # GitHub Pages UI.
-          PAGES_BASE: /
+          # Sheet app is served from /sheets/ on every URL it lives at:
+          #   schnsrw.live/sheets/             (custom domain, primary)
+          #   schnsrw.github.io/sheets/        (GitHub-provided URL)
+          # so asset paths are baked with that prefix.
+          PAGES_BASE: /sheets/
         run: pnpm --filter @sheet/web build
+
+      - name: Assemble combined Pages artifact
+        # One Pages site serves both surfaces from the apex of the custom
+        # domain:
+        #   /              → apex landing page (site/)
+        #   /sheets/       → sheet app          (apps/web/dist/)
+        # The CNAME at the artifact root tells GitHub Pages which host to
+        # serve. Without it in every deploy the custom-domain config in the
+        # Pages UI gets silently dropped.
+        run: |
+          set -euo pipefail
+          mkdir -p public/sheets
+          cp -R site/. public/
+          cp -R apps/web/dist/. public/sheets/
+          echo "schnsrw.live" > public/CNAME
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/web/dist
+          path: public
 
   deploy:
     needs: build
