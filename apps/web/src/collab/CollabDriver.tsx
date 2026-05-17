@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { useUniverAPI } from '../use-univer';
 import { startBridge, type BridgeHandle } from './bridge';
+import { CollabContext, type CollabStatus } from './collab-context';
 
 /**
  * Mounts the Yjs ↔ Univer bridge when:
@@ -15,49 +16,77 @@ import { startBridge, type BridgeHandle } from './bridge';
  * `/r/:roomId` URL see a small banner pointing them to the self-host
  * docs instead. Co-editing only ships through the Docker image.
  */
-export function CollabDriver() {
+export function CollabDriver({ children }: { children?: ReactNode }) {
   const api = useUniverAPI();
   const handleRef = useRef<BridgeHandle | null>(null);
   const providerRef = useRef<HocuspocusProvider | null>(null);
   const docRef = useRef<Y.Doc | null>(null);
   const [needsSelfHost, setNeedsSelfHost] = useState(false);
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [status, setStatus] = useState<CollabStatus>('off');
 
   useEffect(() => {
     if (!api) return;
-    const roomId = readRoomFromLocation();
-    if (!roomId) return;
+    const id = readRoomFromLocation();
+    if (!id) return;
 
     if (!isCollabEnabled()) {
       setNeedsSelfHost(true);
       console.info(
         '[collab] /r/%s requested but this build has VITE_COLLAB_ENABLED unset — self-host with Docker to enable',
-        roomId,
+        id,
       );
       return;
     }
 
+    setRoomId(id);
+    setStatus('connecting');
+
     const url = wsUrl();
     const doc = new Y.Doc();
-    const provider = new HocuspocusProvider({ url, name: roomId, document: doc });
+    const provider = new HocuspocusProvider({ url, name: id, document: doc });
     const handle = startBridge(api, doc);
+
+    // HocuspocusProvider emits `status` { status: 'connected' | 'connecting'
+    // | 'disconnected' } as its transport changes. Map to our public type so
+    // the indicator badge has a stable enum to render.
+    const onStatus = (ev: { status: string }) => {
+      if (ev.status === 'connected') setStatus('live');
+      else if (ev.status === 'connecting') setStatus('connecting');
+      else setStatus('offline');
+    };
+    provider.on('status', onStatus);
 
     docRef.current = doc;
     providerRef.current = provider;
     handleRef.current = handle;
 
-    console.info('[collab] joined room', roomId, 'via', url);
+    console.info('[collab] joined room', id, 'via', url);
 
     return () => {
+      provider.off('status', onStatus);
       handle.dispose();
       provider.destroy();
       doc.destroy();
       handleRef.current = null;
       providerRef.current = null;
       docRef.current = null;
+      setStatus('off');
+      setRoomId(null);
     };
   }, [api]);
 
-  return needsSelfHost ? <SelfHostBanner /> : null;
+  const ctx = useMemo(
+    () => ({ enabled: isCollabEnabled(), roomId, status }),
+    [roomId, status],
+  );
+
+  return (
+    <CollabContext.Provider value={ctx}>
+      {needsSelfHost && <SelfHostBanner />}
+      {children}
+    </CollabContext.Provider>
+  );
 }
 
 /**

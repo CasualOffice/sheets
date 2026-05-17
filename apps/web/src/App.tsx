@@ -59,24 +59,25 @@ export function App() {
           <OutlineProvider>
             <GrowthDriver />
             <FileDropDriver />
-            <CollabDriver />
-            <div
-              className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
-              data-testid="app-shell"
-            >
-              <TitleBar />
-              <MenuBar />
-              <Toolbar />
-              {formulaBarVisible && <FormulaBar />}
-              <div className="grid-row">
-                <main className="grid-host" data-testid="grid-host">
-                  <UniverSheet snapshot={snapshot} />
-                </main>
-                {tablesPanelVisible && <TablesPanel />}
-                {outlinePanelVisible && <OutlinePanel />}
+            <CollabDriver>
+              <div
+                className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
+                data-testid="app-shell"
+              >
+                <TitleBar />
+                <MenuBar />
+                <Toolbar />
+                {formulaBarVisible && <FormulaBar />}
+                <div className="grid-row">
+                  <main className="grid-host" data-testid="grid-host">
+                    <UniverSheet snapshot={snapshot} />
+                  </main>
+                  {tablesPanelVisible && <TablesPanel />}
+                  {outlinePanelVisible && <OutlinePanel />}
+                </div>
+                <SheetTabs />
               </div>
-              <SheetTabs />
-            </div>
+            </CollabDriver>
           </OutlineProvider>
         </WorkbookContext.Provider>
       </UIContext.Provider>

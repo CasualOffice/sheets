@@ -2,6 +2,7 @@ import type { Univer } from '@univerjs/core';
 
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
+import { UniverRPCMainThreadPlugin } from '@univerjs/rpc';
 import { UniverUIPlugin } from '@univerjs/ui';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
@@ -51,7 +52,17 @@ import { UniverSheetsDrawingUIPlugin } from '@univerjs/sheets-drawing-ui';
  */
 export function registerPlugins(univer: Univer, container: HTMLElement): void {
   univer.registerPlugin(UniverRenderEnginePlugin);
-  univer.registerPlugin(UniverFormulaEnginePlugin);
+  // Formula engine runs in a worker — main thread still loads the plugin
+  // (for shared types, mutations) but skips the actual compute. The worker
+  // ships the heavy `evaluate` path so paste / sort / fill on large
+  // workbooks doesn't freeze the UI thread.
+  // See apps/web/src/univer/formula-worker.ts for the worker side.
+  univer.registerPlugin(UniverFormulaEnginePlugin, { notExecuteFormula: true });
+  const worker = new Worker(new URL('./formula-worker.ts', import.meta.url), {
+    type: 'module',
+    name: 'formula-worker',
+  });
+  univer.registerPlugin(UniverRPCMainThreadPlugin, { workerURL: worker });
   univer.registerPlugin(UniverUIPlugin, {
     container,
     header: false,
@@ -61,9 +72,9 @@ export function registerPlugins(univer: Univer, container: HTMLElement): void {
   });
   univer.registerPlugin(UniverDocsPlugin);
   univer.registerPlugin(UniverDocsUIPlugin);
-  univer.registerPlugin(UniverSheetsPlugin);
+  univer.registerPlugin(UniverSheetsPlugin, { notExecuteFormula: true });
   univer.registerPlugin(UniverSheetsUIPlugin);
-  univer.registerPlugin(UniverSheetsFormulaPlugin);
+  univer.registerPlugin(UniverSheetsFormulaPlugin, { notExecuteFormula: true });
   univer.registerPlugin(UniverSheetsFormulaUIPlugin);
   univer.registerPlugin(UniverSheetsNumfmtPlugin);
   univer.registerPlugin(UniverSheetsNumfmtUIPlugin);

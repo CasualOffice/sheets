@@ -18,6 +18,7 @@ import {
 import { loadPrintOptions, printActiveSheet, savePrintOptions } from './print';
 import { PageSetupDialog } from './PageSetupDialog';
 import { openBugReport } from './report-bug';
+import { startCoEditRoom } from './share-room';
 import { useOutlineActions } from '../outline/use-outline-actions';
 import { useOutline } from '../outline/outline-context';
 import {
@@ -192,6 +193,8 @@ export function MenuBar() {
         },
         { kind: 'separator', id: 'sep-1' },
         { kind: 'item', id: 'print', label: 'Print', icon: 'print', shortcut: 'Ctrl+P', onClick: () => setShowPageSetup(true) },
+        { kind: 'separator', id: 'sep-coedit' },
+        { kind: 'item', id: 'start-room', label: 'Start co-edit room…', icon: 'group_add', onClick: () => void startCoEditRoom() },
         { kind: 'separator', id: 'sep-2' },
         { kind: 'item', id: 'properties', label: 'Properties', icon: 'info', onClick: () => setShowProperties(true) },
       ],
