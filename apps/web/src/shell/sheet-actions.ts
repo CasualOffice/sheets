@@ -38,6 +38,20 @@ export function addSheet(api: FUniver) {
 }
 
 /**
+ * Duplicate a sheet (Excel "Move or Copy → Create a copy"). Univer ships the
+ * heavy lifting — we just dispatch the command with the source subUnitId.
+ * The unit's active sheet ends up on the new copy.
+ */
+export function duplicateSheet(api: FUniver, sheetId: string): void {
+  const wb = api.getActiveWorkbook();
+  if (!wb) return;
+  void api.executeCommand('sheet.command.copy-sheet', {
+    unitId: wb.getId(),
+    subUnitId: sheetId,
+  });
+}
+
+/**
  * Move a sheet to a new index in the tab order.
  */
 export function moveSheetTo(api: FUniver, sheetId: string, toIndex: number) {

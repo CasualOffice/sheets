@@ -5,6 +5,7 @@ import { useActiveCellState } from '../hooks/useActiveCellState';
 import {
   addSheet,
   deleteSheetById,
+  duplicateSheet,
   moveSheetTo,
   renameSheet,
   switchToSheet,
@@ -35,6 +36,7 @@ export function SheetTabs() {
   const [draftName, setDraftName] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [tabMenu, setTabMenu] = useState<{ sheetId: string; x: number; y: number } | null>(null);
 
   // Zoom — synced from set-zoom-ratio command params, accurate.
   const [zoomPct, setZoomPct] = useState(100);
@@ -104,6 +106,10 @@ export function SheetTabs() {
             onCommit={commitRename}
             onCancel={cancelRename}
             onDelete={() => api && deleteSheetById(api, s.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setTabMenu({ sheetId: s.id, x: e.clientX, y: e.clientY });
+            }}
             onDragStart={() => setDraggingId(s.id)}
             onDragOverIndex={() => setDragOverIndex(i)}
             onDragLeaveIndex={() =>
@@ -208,6 +214,113 @@ export function SheetTabs() {
           {zoomPct}%
         </button>
       </div>
+
+      {tabMenu && (
+        <TabContextMenu
+          x={tabMenu.x}
+          y={tabMenu.y}
+          canDelete={canDelete}
+          onClose={() => setTabMenu(null)}
+          onRename={() => {
+            const target = sheets.find((s) => s.id === tabMenu.sheetId);
+            if (target) startRename(target.id, target.name);
+          }}
+          onDuplicate={() => api && duplicateSheet(api, tabMenu.sheetId)}
+          onDelete={() => api && deleteSheetById(api, tabMenu.sheetId)}
+        />
+      )}
+    </div>
+  );
+}
+
+function TabContextMenu({
+  x,
+  y,
+  canDelete,
+  onClose,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: {
+  x: number;
+  y: number;
+  canDelete: boolean;
+  onClose: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (!popRef.current?.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  // Clamp to viewport so a right-click near the bottom edge doesn't render
+  // the menu off-screen.
+  const top = Math.min(y, window.innerHeight - 160);
+  const left = Math.min(x, window.innerWidth - 200);
+
+  return (
+    <div
+      ref={popRef}
+      className="menu"
+      role="menu"
+      data-testid="sheet-tab-context-menu"
+      style={{ position: 'fixed', top, left }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="menu__item"
+        data-testid="sheet-tab-menu-rename"
+        onClick={() => {
+          onRename();
+          onClose();
+        }}
+      >
+        <Icon name="edit" size="sm" className="menu__item-icon" />
+        <span>Rename</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="menu__item"
+        data-testid="sheet-tab-menu-duplicate"
+        onClick={() => {
+          onDuplicate();
+          onClose();
+        }}
+      >
+        <Icon name="content_copy" size="sm" className="menu__item-icon" />
+        <span>Duplicate</span>
+      </button>
+      <div className="menu__divider" />
+      <button
+        type="button"
+        role="menuitem"
+        className="menu__item"
+        data-testid="sheet-tab-menu-delete"
+        disabled={!canDelete}
+        onClick={() => {
+          onDelete();
+          onClose();
+        }}
+      >
+        <Icon name="delete" size="sm" className="menu__item-icon" />
+        <span>Delete</span>
+      </button>
     </div>
   );
 }
@@ -226,6 +339,7 @@ type ItemProps = {
   onCommit: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  onContextMenu: (e: { preventDefault: () => void; clientX: number; clientY: number }) => void;
   onDragStart: () => void;
   onDragOverIndex: () => void;
   onDragLeaveIndex: () => void;
@@ -247,6 +361,7 @@ function SheetTabItem({
   onCommit,
   onCancel,
   onDelete,
+  onContextMenu,
   onDragStart,
   onDragOverIndex,
   onDragLeaveIndex,
@@ -275,6 +390,7 @@ function SheetTabItem({
       data-testid={`sheet-tab-${sheet.id}`}
       draggable={!editing}
       onClick={() => !editing && onSwitch()}
+      onContextMenu={onContextMenu}
       onDoubleClick={onStartRename}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
