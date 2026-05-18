@@ -10,9 +10,14 @@ import './univer/facade';
 
 import { LOCALES } from './locale';
 import { useSetUniverAPI } from './use-univer';
+import { useLoading } from './loading-context';
 import { extendContextMenu } from './context-menu-extensions';
 import { registerPlugins } from './univer/plugins';
-import { eagerLoadForSnapshot, idleLoadAll } from './univer/lazy-plugins';
+import {
+  eagerLoadForSnapshot,
+  idleLoadAll,
+  setUniverForLazyLoad,
+} from './univer/lazy-plugins';
 import { installDevHelpers } from './univer/dev-helpers';
 import { timeIt, timeItAsync } from './perf';
 import { WorkbookContext } from './workbook-context';
@@ -31,6 +36,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
   const [ready, setReady] = useState(false);
   const setApi = useSetUniverAPI();
   const ctx = useContext(WorkbookContext);
+  const loading = useLoading();
   // Hold the live Univer instance + API across snapshot swaps so Open replaces
   // the workbook unit rather than tearing the whole Univer (and its internal
   // React root) down — the latter races React's render phase and leaves the
@@ -48,6 +54,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
       logLevel: LogLevel.WARN,
     });
     univerRef.current = univer;
+    setUniverForLazyLoad(univer);
 
     registerPlugins(univer, hostRef.current);
 
@@ -90,6 +97,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
       const toDispose = univer;
       apiRef.current = null;
       univerRef.current = null;
+      setUniverForLazyLoad(null);
       setApi(null);
       queueMicrotask(() => toDispose.dispose());
       teardownDevHelpers?.();
@@ -147,11 +155,19 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
         lastRevisionRef.current = revision;
         console.info('[open-xlsx] swap complete');
       } catch (err) {
+        // Surface to the loading overlay so a failed swap doesn't leave
+        // the user staring at a forever-spinner. The overlay's error
+        // mode stays open until the user dismisses it.
+        const msg = err instanceof Error ? err.message : String(err);
         console.error('[open-xlsx] swap failed', err);
-        throw err;
+        loading.set({
+          fileName: snapshot.name ?? 'workbook',
+          phase: 'mounting',
+          error: `Couldn't mount the workbook: ${msg}`,
+        });
       }
     })();
-  }, [revision, ctx]);
+  }, [revision, ctx, loading]);
 
   return (
     <>

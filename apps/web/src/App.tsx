@@ -99,6 +99,7 @@ export function App() {
               phase: next.phase,
               sizeBytes: next.sizeBytes,
               startedAt: Date.now(),
+              error: next.error,
             };
           }
           return { ...prev, ...next, startedAt: prev.startedAt };

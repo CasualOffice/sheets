@@ -14,6 +14,13 @@ import type { ImportedWorkbook } from './import';
 
 let nextId = 0;
 
+// Cap the wait at 3 minutes. A multi-hundred-MB ExcelJS parse can take
+// over a minute on slow hardware; anything past 3 minutes is almost
+// certainly a hung/deadlocked worker (e.g. crashed without firing
+// `error`). Reject so the UI shows an actionable message instead of
+// spinning forever.
+const PARSE_TIMEOUT_MS = 180_000;
+
 export function parseXlsxInWorker(buffer: ArrayBuffer): Promise<ImportedWorkbook> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./parser.worker.ts', import.meta.url), {
@@ -21,7 +28,19 @@ export function parseXlsxInWorker(buffer: ArrayBuffer): Promise<ImportedWorkbook
       name: 'xlsx-parser',
     });
     const id = ++nextId;
-    const cleanup = () => worker.terminate();
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const cleanup = () => {
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+      worker.terminate();
+    };
+    timeoutHandle = setTimeout(() => {
+      cleanup();
+      reject(
+        new Error(
+          `xlsx parser worker timed out after ${Math.round(PARSE_TIMEOUT_MS / 1000)}s. The workbook may be corrupted or too large to parse in this browser.`,
+        ),
+      );
+    }, PARSE_TIMEOUT_MS);
     worker.addEventListener(
       'message',
       (e: MessageEvent<{ id: number; ok: true; data: ImportedWorkbook } | { id: number; ok: false; error: string }>) => {
@@ -35,9 +54,19 @@ export function parseXlsxInWorker(buffer: ArrayBuffer): Promise<ImportedWorkbook
     worker.addEventListener('error', (e) => {
       cleanup();
       // ErrorEvent.message is "" when the worker crashes from OOM in
-      // some browsers; fall back to filename/line for context. Common
-      // cause: a workbook too large to allocate during ExcelJS load.
-      const detail = e.message || `${e.filename ?? ''}:${e.lineno ?? ''}` || 'unknown';
+      // some browsers; with no message AND no filename it's almost
+      // always OOM mid-allocation. Emit a clear hint instead of the
+      // useless "(unknown)" we used to show.
+      const hasDetail = Boolean(e.message || e.filename);
+      if (!hasDetail) {
+        reject(
+          new Error(
+            'xlsx parser worker ran out of memory parsing this file. Try a smaller workbook or close other browser tabs.',
+          ),
+        );
+        return;
+      }
+      const detail = e.message || `${e.filename ?? ''}:${e.lineno ?? ''}`;
       reject(
         new Error(
           `xlsx parser worker crashed (${detail}). The workbook may be too large for this browser to allocate.`,

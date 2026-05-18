@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -9,7 +10,14 @@ import {
 import { flushSync } from 'react-dom';
 import { useUniverAPI } from '../use-univer';
 import { useActiveCellState } from '../hooks/useActiveCellState';
-import { commitToActiveCell } from './cell-actions';
+import {
+  canInsertRefAtCaret,
+  commitToActiveCell,
+  cycleAbsoluteRefAtCaret,
+  insertRefAtCaret,
+  quoteSheetName,
+  type CommitDirection,
+} from './cell-actions';
 import { Icon } from './Icon';
 import { Tooltip } from './Tooltip';
 import {
@@ -36,8 +44,32 @@ export function FormulaBar() {
 
   const draftCellRef = useRef<string | null>(null);
 
+  // Excel-style range picker: while editing a formula (draft starts with
+  // `=`), clicking a sheet tab or a cell on the grid should insert a
+  // reference at the caret instead of committing the draft. The origin
+  // — the sheet + cell where editing started — is captured up front so
+  // Enter commits back to it even after the user has been clicking
+  // around other sheets.
+  const isFormulaEdit = editing && (draft ?? '').startsWith('=');
+  const originSheetIdRef = useRef<string | null>(null);
+  const originRowRef = useRef<number | null>(null);
+  const originColRef = useRef<number | null>(null);
+  /** Set while we programmatically restore the origin sheet+cell on
+   *  commit/cancel, so the SelectionChanged listener doesn't loop back
+   *  and insert the origin's own ref into the draft. */
+  const restoringOriginRef = useRef(false);
+  /** Caret position the user last had in the input — read from the live
+   *  input when it has focus, falls back to this ref while focus is
+   *  elsewhere (canvas, sheet tab). Without this fallback the picker
+   *  inserts every ref at position 0 once the input has blurred. */
+  const lastCaretRef = useRef<number>(0);
+
   useEffect(() => {
     if (!editing) return;
+    // In picker mode the active cell intentionally changes while the
+    // user picks ranges — don't auto-commit on that change. Commit
+    // happens only via Enter / Tab / Shift+Tab / commit button.
+    if (isFormulaEdit) return;
     if (draftCellRef.current && draftCellRef.current !== a1 && api) {
       const original = draftCellRef.current;
       const text = draft ?? '';
@@ -55,6 +87,81 @@ export function FormulaBar() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a1]);
+
+  // Capture the origin sheet+cell the moment formula edit begins.
+  useEffect(() => {
+    if (!isFormulaEdit) {
+      originSheetIdRef.current = null;
+      originRowRef.current = null;
+      originColRef.current = null;
+      return;
+    }
+    if (originSheetIdRef.current !== null || !api) return;
+    const wb = api.getActiveWorkbook();
+    const sheet = wb?.getActiveSheet();
+    const range = sheet?.getActiveRange();
+    if (!sheet || !range) return;
+    originSheetIdRef.current = sheet.getSheetId();
+    originRowRef.current = range.getRow();
+    originColRef.current = range.getColumn();
+  }, [isFormulaEdit, api]);
+
+  // Track the live caret position so the picker can splice refs in
+  // even after the canvas has stolen focus. `selectionStart` returns
+  // null on a blurred input in some browsers, so we cache the last
+  // known value on every input event.
+  const trackCaret = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const c = input.selectionStart;
+    if (typeof c === 'number') lastCaretRef.current = c;
+  }, []);
+
+  // Listen for canvas-driven selection changes (sheet-ui's
+  // `SelectionChanged` event fires only on user input — programmatic
+  // `range.activate()` calls go through a different code path, so our
+  // commit/cancel restore won't trigger this).
+  useEffect(() => {
+    if (!api || !isFormulaEdit) return;
+    const disp = api.addEvent(api.Event.SelectionChanged, () => {
+      if (restoringOriginRef.current) return;
+      const wb = api.getActiveWorkbook();
+      const sheet = wb?.getActiveSheet();
+      const range = sheet?.getActiveRange();
+      if (!wb || !sheet || !range) return;
+      // Skip if the user is at the origin cell on the origin sheet —
+      // that's just "click to refocus the start", not a pick.
+      const sheetId = sheet.getSheetId();
+      if (
+        sheetId === originSheetIdRef.current &&
+        range.getRow() === originRowRef.current &&
+        range.getColumn() === originColRef.current &&
+        range.getWidth() === 1 &&
+        range.getHeight() === 1
+      ) {
+        return;
+      }
+      const caret = lastCaretRef.current;
+      const currentDraft = draft ?? '';
+      if (!canInsertRefAtCaret(currentDraft, caret)) return;
+      const localA1 = range.getA1Notation();
+      const refStr =
+        sheetId === originSheetIdRef.current
+          ? localA1
+          : `${quoteSheetName(sheet.getSheetName())}!${localA1}`;
+      const next = insertRefAtCaret(currentDraft, caret, refStr);
+      flushSync(() => setDraft(next.value));
+      lastCaretRef.current = next.caret;
+      // Refocus the input so the user can keep typing operators / commit
+      // with Enter. requestAnimationFrame so the focus call lands after
+      // React's state flush settles.
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(next.caret, next.caret);
+      });
+    });
+    return () => disp.dispose();
+  }, [api, isFormulaEdit, draft]);
 
   const value = editing ? (draft ?? '') : displayValue;
 
@@ -97,18 +204,56 @@ export function FormulaBar() {
     });
   };
 
-  const commit = () => {
+  /** Programmatically switch back to the origin sheet+cell that was
+   *  active when the user started typing the formula. Used by commit
+   *  and revert to undo any sheet-tab / cell clicks the picker made.
+   *  Wraps the work in `restoringOriginRef` so the SelectionChanged
+   *  listener treats this as a no-op instead of inserting the origin's
+   *  own ref into the (already-finalized) draft. */
+  const restoreOrigin = (): void => {
+    if (!api || originSheetIdRef.current === null) return;
+    const wb = api.getActiveWorkbook();
+    if (!wb) return;
+    const sheet = wb.getSheets().find((s) => s.getSheetId() === originSheetIdRef.current);
+    if (!sheet) return;
+    restoringOriginRef.current = true;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (wb as any).setActiveSheet(sheet);
+      const r = originRowRef.current ?? 0;
+      const c = originColRef.current ?? 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (sheet as any).getRange(r, c).activate();
+    } finally {
+      // Release on the next tick — Univer's selection update may fire
+      // async, so we keep the guard up for one frame.
+      requestAnimationFrame(() => {
+        restoringOriginRef.current = false;
+      });
+    }
+  };
+
+  const commit = (direction: CommitDirection = 'none') => {
     if (!api || !editing) return;
-    commitToActiveCell(api, draft ?? '');
+    const text = draft ?? '';
+    restoreOrigin();
+    commitToActiveCell(api, text, direction);
     flushSync(() => setDraft(null));
     setSuggestions([]);
     draftCellRef.current = null;
+    originSheetIdRef.current = null;
+    originRowRef.current = null;
+    originColRef.current = null;
   };
 
   const revert = () => {
+    restoreOrigin();
     flushSync(() => setDraft(null));
     setSuggestions([]);
     draftCellRef.current = null;
+    originSheetIdRef.current = null;
+    originRowRef.current = null;
+    originColRef.current = null;
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -123,7 +268,10 @@ export function FormulaBar() {
         setSelectedIdx((i) => (i - 1 + suggestions.length) % suggestions.length);
         return;
       }
-      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+      // Tab / Enter with an open suggestion list ⇒ accept the selected
+      // suggestion (Excel-equivalent). Shift+Tab and Shift+Enter still
+      // commit-and-navigate — don't hijack those.
+      if ((e.key === 'Tab' && !e.shiftKey) || (e.key === 'Enter' && !e.shiftKey)) {
         e.preventDefault();
         insertSuggestion(suggestions[selectedIdx]);
         return;
@@ -135,9 +283,34 @@ export function FormulaBar() {
       }
     }
 
+    // F4 — cycle absolute/relative on the ref under the caret. Excel's
+    // muscle memory. Works mid-edit (formula or plain text); a no-op
+    // if there's no recognizable ref under the caret.
+    if (e.key === 'F4' && editing) {
+      e.preventDefault();
+      const input = inputRef.current;
+      if (!input) return;
+      const caret = input.selectionStart ?? (draft ?? '').length;
+      const rewrite = cycleAbsoluteRefAtCaret(draft ?? '', caret);
+      if (!rewrite) return;
+      flushSync(() => setDraft(rewrite.value));
+      requestAnimationFrame(() => {
+        input.setSelectionRange(rewrite.caret, rewrite.caret);
+        input.focus();
+      });
+      return;
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault();
-      commit();
+      commit(e.shiftKey ? 'up' : 'down');
+      inputRef.current?.blur();
+    } else if (e.key === 'Tab') {
+      // Excel: Tab commits and moves right, Shift+Tab commits and moves
+      // left. Without this handler the browser's focus trap would steal
+      // Tab and leave the value uncommitted.
+      e.preventDefault();
+      commit(e.shiftKey ? 'left' : 'right');
       inputRef.current?.blur();
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -201,12 +374,18 @@ export function FormulaBar() {
         spellCheck={false}
         value={value}
         disabled={!ready}
-        onChange={onChange}
+        onChange={(e) => {
+          trackCaret();
+          onChange(e);
+        }}
         onKeyDown={onKeyDown}
+        onKeyUp={trackCaret}
+        onClick={trackCaret}
         onSelect={() => {
-          // Recompute suggestions when the user moves the caret with arrows.
           if (!editing || !inputRef.current) return;
           const caret = inputRef.current.selectionStart ?? value.length;
+          lastCaretRef.current = caret;
+          // Recompute suggestions when the user moves the caret with arrows.
           const frag = extractFunctionFragment(value, caret);
           setSuggestions(frag ? suggestFunctions(frag) : []);
         }}
@@ -215,6 +394,11 @@ export function FormulaBar() {
           // briefly into the popover). Re-focus heuristic: check if the
           // relatedTarget is the suggestion list.
           if ((e.relatedTarget as HTMLElement | null)?.closest('[data-testid="formula-suggestions"]')) return;
+          // In picker mode (formula edit) the user is clicking the
+          // grid / sheet tabs to build refs — blur is expected. The
+          // SelectionChanged listener splices refs in; commit happens
+          // only on Enter/Tab/Esc, not on focus loss.
+          if (isFormulaEdit) return;
           if (editing) commit();
         }}
       />

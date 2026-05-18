@@ -112,7 +112,10 @@ export function MenuBar() {
   // Intercept Ctrl/Cmd+P globally — the default would print the whole web
   // page (chrome + grid). We print only the active sheet via an offscreen
   // iframe instead. Capture-phase so we beat browser shortcuts on focused
-  // inputs as well. Same hook owns Ctrl/Cmd+S → Save (in source format).
+  // inputs as well. Same hook owns Ctrl/Cmd+S → Save (in source format)
+  // and Ctrl/Cmd+F → Find & Replace (the latter would otherwise no-op
+  // until Univer's find-replace plugin finishes its idle load — see
+  // `openFindReplace`, which awaits `ensurePluginByName('findReplace')`).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -124,6 +127,14 @@ export function MenuBar() {
         } else if (k === 's' && !e.shiftKey) {
           e.preventDefault();
           void handleSave();
+        } else if (k === 'f' && !e.shiftKey) {
+          // Skip when focus is in a plain text input — browsers expect
+          // Ctrl+F to do in-page find there. The find dialog is for the
+          // sheet, not the formula bar / name box.
+          const tag = (e.target as HTMLElement | null)?.tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          e.preventDefault();
+          if (api) void openFindReplace(api);
         }
       }
     };

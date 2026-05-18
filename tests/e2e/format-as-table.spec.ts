@@ -90,4 +90,28 @@ test.describe('Format as Table', () => {
     expect(range.endRow).toBe(3);
     expect(range.endColumn).toBe(2);
   });
+
+  test('Rapid double-click on Format as Table creates ONE table, not two', async ({ page }) => {
+    // Repro for the "duplicate table created in background thread" bug —
+    // a fast user-click sequence used to race the lazy-plugin load and
+    // dispatch `add-table` twice. The in-flight guard in formatAsTable
+    // (`apps/web/src/shell/tab-actions.ts`) plus the awaited plugin
+    // ensure should now coalesce them.
+    await selectRange(page, 'A1:C4');
+    const btn = page.getByTestId('ribbon-dropdown-format-as-table-apply');
+    // Two clicks within the same event-loop tick — the second click
+    // arrives while the first is still awaiting ensurePlugin/addTable.
+    await Promise.all([btn.click(), btn.click()]);
+    // Give both clicks time to complete their async work before
+    // counting tables.
+    await page.waitForTimeout(800);
+
+    const count = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      const wb = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((wb as any).getTableList?.() ?? []).length;
+    });
+    expect(count).toBe(1);
+  });
 });

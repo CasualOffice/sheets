@@ -154,6 +154,20 @@ const loaded = new Set<LazyPluginGroup>();
 const inflight = new Map<LazyPluginGroup, Promise<void>>();
 
 /**
+ * Module-level reference to the live Univer instance, set by
+ * `UniverSheet.tsx` immediately after `new Univer()`. Lets shell code
+ * call `ensurePluginByName(group)` without plumbing the Univer
+ * instance through React context (the FUniver facade doesn't expose
+ * its host). Cleared on dispose so callers fail loudly if they hit
+ * the lazy path after teardown.
+ */
+let currentUniver: Univer | null = null;
+
+export function setUniverForLazyLoad(univer: Univer | null): void {
+  currentUniver = univer;
+}
+
+/**
  * Idempotent: subsequent calls for the same group resolve immediately
  * if the plugin is already loaded; concurrent calls share the same
  * in-flight promise so we never double-register.
@@ -174,6 +188,19 @@ export function ensurePlugin(univer: Univer, group: LazyPluginGroup): Promise<vo
   });
   inflight.set(group, p);
   return p;
+}
+
+/**
+ * Shell-friendly variant of `ensurePlugin` that pulls the Univer
+ * instance from the module-level holder set by `UniverSheet.tsx`. Use
+ * this anywhere we only have the FUniver facade (toolbar callbacks,
+ * panel handlers). Returns a resolved promise if the holder is empty —
+ * the worst case is a no-op, never a throw.
+ */
+export function ensurePluginByName(group: LazyPluginGroup): Promise<void> {
+  if (loaded.has(group)) return Promise.resolve();
+  if (!currentUniver) return Promise.resolve();
+  return ensurePlugin(currentUniver, group);
 }
 
 /**

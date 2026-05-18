@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
+import { ensurePluginByName } from '../univer/lazy-plugins';
 import { Icon } from './Icon';
 import { TABLE_THEMES, type TableThemeId } from './tab-actions';
 
@@ -98,7 +99,7 @@ export function TablesPanel() {
 
   const empty = tables.length === 0;
 
-  const onRenameCommit = (id: string, currentName: string) => {
+  const onRenameCommit = async (id: string, currentName: string) => {
     if (!api || !renaming || renaming.id !== id) return;
     const next = renaming.draft.trim();
     setRenaming(null);
@@ -106,14 +107,28 @@ export function TablesPanel() {
     const wb = api.getActiveWorkbook();
     const sheet = wb?.getActiveSheet();
     if (!wb || !sheet) return;
+    // Table plugin is lazy-loaded; without the await `setTableName` is
+    // `undefined` on the facade until the plugin finishes registering
+    // and the optional chain silently swallows the call. The rename
+    // appears to do nothing.
+    await ensurePluginByName('table');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (sheet as any).setTableName?.(id, next);
+    const result = (sheet as any).setTableName?.(id, next);
+    // `setTableName` returns `false` when validation rejects the name
+    // (duplicate / forbidden characters per `customNameCharacterCheck`
+    // in sheets-table). Surface that to the console so a "rename did
+    // nothing" report has a breadcrumb.
+    const ok = await Promise.resolve(result);
+    if (ok === false) {
+      console.warn(`[tables] rename rejected — invalid or duplicate name: "${next}"`);
+    }
   };
 
-  const onPickTheme = (id: string, themeId: TableThemeId) => {
+  const onPickTheme = async (id: string, themeId: TableThemeId) => {
     if (!api) return;
     const wb = api.getActiveWorkbook();
     if (!wb) return;
+    await ensurePluginByName('table');
     api.executeCommand('sheet.command.set-table-config', {
       unitId: wb.getId(),
       tableId: id,
@@ -121,10 +136,11 @@ export function TablesPanel() {
     });
   };
 
-  const onDelete = (id: string) => {
+  const onDelete = async (id: string) => {
     if (!api) return;
     const wb = api.getActiveWorkbook();
     if (!wb) return;
+    await ensurePluginByName('table');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (wb as any).removeTable?.(id);
   };

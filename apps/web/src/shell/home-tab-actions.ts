@@ -1,5 +1,6 @@
 import { BorderStyleTypes, BorderType } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
+import { ensurePluginByName } from '../univer/lazy-plugins';
 
 /**
  * Imperative command dispatchers for Home-tab buttons.
@@ -150,7 +151,12 @@ export function startFormatPainter(api: FUniver) {
 
 /* ── Find & Replace ─────────────────────────────────────────────────────── */
 
-export function openFindReplace(api: FUniver) {
+export async function openFindReplace(api: FUniver) {
+  // find-replace is lazy-loaded. Without the await, hitting Ctrl+F on
+  // a fresh page (before the idle-load fires) dispatches the operation
+  // to a not-yet-registered handler and silently no-ops. ensurePluginByName
+  // is idempotent: it resolves immediately once the plugin is in.
+  await ensurePluginByName('findReplace');
   // Operation id from @univerjs/find-replace
   // (find-replace.operation.ts:23 in the vendored source).
   api.executeCommand('ui.operation.open-find-dialog');

@@ -101,6 +101,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       // so they skip the round-trip (they already *have* the workbook
       // in memory — replacing it would just churn).
       if ((info?.hasSnapshot || info?.hasSeed) && !wasOwnerOfRoom(id)) {
+        let loadFailed = false;
         try {
           setStatus('connecting');
           // Show the loading overlay for the joiner. We don't know the
@@ -113,14 +114,22 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
           // Browser handles `content-encoding: gzip` transparently, so
           // we just read the JSON.
           let data: import('@univerjs/core').IWorkbookData | null = null;
+          let snapshotAttempted = false;
           if (info?.hasSnapshot && typeof DecompressionStream !== 'undefined') {
+            snapshotAttempted = true;
             try {
               const res = await fetch(`/api/rooms/${encodeURIComponent(id)}/snapshot`);
               if (res.ok) {
                 loading.set({ phase: 'mounting' });
                 data = (await res.json()) as import('@univerjs/core').IWorkbookData;
+              } else if (!info?.hasSeed) {
+                // No seed fallback — propagate the HTTP error.
+                throw new Error(`Server returned ${res.status} fetching room snapshot.`);
+              } else {
+                console.warn('[collab] snapshot fast-path returned', res.status, '— falling back to xlsx');
               }
             } catch (err) {
+              if (!info?.hasSeed) throw err;
               console.warn('[collab] snapshot fast-path failed, falling back to xlsx', err);
             }
           }
@@ -128,14 +137,13 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
           // Slow path: parse the xlsx in the worker.
           if (!data && info?.hasSeed) {
             const res = await fetch(`/api/rooms/${encodeURIComponent(id)}/seed`);
-            if (res.ok) {
-              const buf = await res.arrayBuffer();
-              loading.set({ phase: 'parsing', sizeBytes: buf.byteLength });
-              data = await xlsxToWorkbookData(buf);
-              loading.set({ phase: 'mounting' });
-            } else {
-              console.warn('[collab] seed fetch failed', res.status);
+            if (!res.ok) {
+              throw new Error(`Server returned ${res.status} fetching room seed.`);
             }
+            const buf = await res.arrayBuffer();
+            loading.set({ phase: 'parsing', sizeBytes: buf.byteLength });
+            data = await xlsxToWorkbookData(buf);
+            loading.set({ phase: 'mounting' });
           }
 
           if (cancelled) return;
@@ -144,13 +152,25 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
             // Univer's unit-swap is async — wait a frame so the new
             // unit is wired into the facade before the bridge attaches.
             await new Promise((r) => requestAnimationFrame(() => r(null)));
+          } else if (snapshotAttempted || info?.hasSeed) {
+            throw new Error('Room contents could not be loaded (no snapshot or seed returned).');
           }
         } catch (err) {
-          console.warn('[collab] failed to apply seed', err);
+          loadFailed = true;
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[collab] failed to apply seed', err);
+          loading.set({
+            fileName: `room ${id}`,
+            phase: 'reading',
+            error: `Couldn't load this room: ${msg}`,
+          });
         } finally {
-          requestAnimationFrame(() => loading.set(null));
+          // Only auto-dismiss when the load succeeded. If it failed, the
+          // overlay stays open in error mode so the user can read why
+          // before clicking Dismiss.
+          if (!loadFailed) requestAnimationFrame(() => loading.set(null));
         }
-        if (cancelled) return;
+        if (cancelled || loadFailed) return;
       }
 
       if (!info) {

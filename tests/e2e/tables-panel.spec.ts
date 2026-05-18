@@ -37,6 +37,60 @@ test.describe('Tables panel', () => {
     // One row, range rendered in A1 notation.
     await expect(panel).toContainText('A1:B2');
   });
+
+  test('Renaming a table actually persists the new name', async ({ page }) => {
+    // Repro for the "table name doesn't change" bug — setTableName was
+    // optional-chained without awaiting ensurePluginByName, so it
+    // silently no-op'd when the lazy plugin hadn't registered yet.
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 'Name' });
+      ws.getRange('A2').setValue({ v: 'Ada' });
+      ws.getRange('B1').setValue({ v: 'Score' });
+      ws.getRange('B2').setValue({ v: 92 });
+    });
+    await selectRange(page, 'A1:B2');
+    await page.getByTestId('ribbon-dropdown-format-as-table-apply').click();
+    await page.waitForTimeout(600);
+
+    // Open the panel.
+    await page.getByTestId('menubar-data').click();
+    await page.getByTestId('menu-item-tables-panel').click();
+    const panel = page.getByTestId('tables-panel');
+    await expect(panel).toBeVisible();
+
+    // Click the auto-generated name to enter rename mode.
+    const nameBtn = panel.locator('.tables-panel__name-btn').first();
+    await nameBtn.click();
+
+    // Type the new name and commit with Enter.
+    const input = panel.locator('.tables-panel__name-input');
+    await expect(input).toBeVisible();
+    await input.fill('MyRevenue');
+    await input.press('Enter');
+
+    // The rename mutation is async (await ensurePluginByName +
+    // workbook command). Wait for the underlying table to report the
+    // new name through the facade.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const api = window.__univerAPI!;
+            const wb = api.getActiveWorkbook()!;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const all = (wb as any).getTableList?.() ?? [];
+            return all[0]?.name as string | undefined;
+          }),
+        { timeout: 3_000, message: 'waiting for table.name to update' },
+      )
+      .toBe('MyRevenue');
+
+    // Panel UI should reflect it too (it subscribes to set-table-config).
+    await expect(panel).toContainText('MyRevenue');
+  });
 });
 
 test('growth hook skips Select-All so corner click doesn\'t freeze', async ({ page }) => {

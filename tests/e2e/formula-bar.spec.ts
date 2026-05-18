@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readCell, selectRange, waitForUniver } from './_helpers';
 
 test.describe('Formula bar', () => {
@@ -69,6 +69,9 @@ test.describe('Formula bar', () => {
 
     const data = await readCell(page, 'A1');
     expect(data?.v).toBe('Hello world');
+    // After Enter the active cell moves down (Excel-equivalent), so the
+    // formula bar now reflects A2 (empty). Re-select A1 to read it back.
+    await selectRange(page, 'A1');
     await expect(input).toHaveValue('Hello world');
   });
 
@@ -137,5 +140,93 @@ test.describe('Formula bar', () => {
 
     const data = await readCell(page, 'A1');
     expect(data?.v == null || data?.v === '').toBe(true);
+  });
+
+  // Excel-equivalent commit-and-navigate keybindings. Keyboard-heavy
+  // users rely on these — losing them is a "the app feels wrong"
+  // regression even if the value still commits correctly.
+
+  async function activeA1(page: Page) {
+    return page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      const r = ws.getActiveRange();
+      const colLetter = (col: number) => {
+        let s = '';
+        let n = col;
+        while (n >= 0) {
+          s = String.fromCharCode(65 + (n % 26)) + s;
+          n = Math.floor(n / 26) - 1;
+        }
+        return s;
+      };
+      return `${colLetter(r.getColumn())}${r.getRow() + 1}`;
+    });
+  }
+
+  test('Enter commits and moves DOWN', async ({ page }) => {
+    await selectRange(page, 'B2');
+    await page.getByTestId('formula-input').fill('one');
+    await page.getByTestId('formula-input').press('Enter');
+    expect(await activeA1(page)).toBe('B3');
+    expect((await readCell(page, 'B2'))?.v).toBe('one');
+  });
+
+  test('Shift+Enter commits and moves UP', async ({ page }) => {
+    await selectRange(page, 'B5');
+    await page.getByTestId('formula-input').fill('two');
+    await page.getByTestId('formula-input').press('Shift+Enter');
+    expect(await activeA1(page)).toBe('B4');
+    expect((await readCell(page, 'B5'))?.v).toBe('two');
+  });
+
+  test('Tab commits and moves RIGHT', async ({ page }) => {
+    await selectRange(page, 'C3');
+    await page.getByTestId('formula-input').fill('right');
+    await page.getByTestId('formula-input').press('Tab');
+    expect(await activeA1(page)).toBe('D3');
+    expect((await readCell(page, 'C3'))?.v).toBe('right');
+  });
+
+  test('Shift+Tab commits and moves LEFT', async ({ page }) => {
+    await selectRange(page, 'D3');
+    await page.getByTestId('formula-input').fill('left');
+    await page.getByTestId('formula-input').press('Shift+Tab');
+    expect(await activeA1(page)).toBe('C3');
+    expect((await readCell(page, 'D3'))?.v).toBe('left');
+  });
+
+  test('Navigation at sheet edge clamps (no wrap, like Excel)', async ({ page }) => {
+    // Shift+Tab at column A should stay at column A — Excel does not
+    // wrap to the previous row's last column.
+    await selectRange(page, 'A4');
+    await page.getByTestId('formula-input').fill('edge');
+    await page.getByTestId('formula-input').press('Shift+Tab');
+    expect(await activeA1(page)).toBe('A4');
+    expect((await readCell(page, 'A4'))?.v).toBe('edge');
+  });
+
+  test('F4 cycles absolute/relative on the ref under the caret', async ({ page }) => {
+    const input = page.getByTestId('formula-input');
+    await selectRange(page, 'A1');
+    await input.click();
+    await input.fill('=A1+B2');
+    // Place caret inside A1 (after "=A").
+    await input.evaluate((el: HTMLInputElement) => el.setSelectionRange(2, 2));
+    await input.press('F4');
+    await expect(input).toHaveValue('=$A$1+B2');
+
+    // Second F4 → A$1
+    await input.press('F4');
+    await expect(input).toHaveValue('=A$1+B2');
+
+    // Third F4 → $A1
+    await input.press('F4');
+    await expect(input).toHaveValue('=$A1+B2');
+
+    // Fourth F4 → back to A1
+    await input.press('F4');
+    await expect(input).toHaveValue('=A1+B2');
   });
 });

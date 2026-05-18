@@ -1,5 +1,6 @@
 import type { FUniver } from '@univerjs/core/facade';
 import type { FRange } from '@univerjs/sheets/facade';
+import { ensurePluginByName } from '../univer/lazy-plugins';
 
 /** Imperative dispatchers used by Insert / Formulas / Data tabs. */
 
@@ -202,13 +203,29 @@ export function autoFitColumns(api: FUniver) {
   sheetWithAutoWidth.setColumnAutoWidth?.(range.getColumn(), range.getWidth());
 }
 
+/** Soft cap on per-row autofit work — Univer's `autoFitRow` is O(cells
+ *  in row) and we loop one call per row. A whole-column selection
+ *  expands to the sheet's row count (often 8k+ even for blank sheets,
+ *  millions after growth), which blocks the main thread for seconds.
+ *  Excel's behavior on whole-column "Auto-fit Row Height" only touches
+ *  rows that actually contain content; capping here matches that
+ *  expectation closely enough without traversing every cell to detect
+ *  emptiness. */
+const AUTO_FIT_ROW_CAP = 500;
+
 export function autoFitRows(api: FUniver) {
   const range = activeRange(api);
   const sheet = activeSheet(api);
   if (!range || !sheet) return;
-  // FWorksheet.autoFitRow takes a single row index. Loop the selection.
   const start = range.getRow();
-  for (let r = 0; r < range.getHeight(); r++) {
+  const requested = range.getHeight();
+  const count = Math.min(requested, AUTO_FIT_ROW_CAP);
+  if (count < requested) {
+    console.info(
+      `[autofit-rows] capped ${requested} → ${AUTO_FIT_ROW_CAP} rows to keep the UI responsive`,
+    );
+  }
+  for (let r = 0; r < count; r++) {
     sheet.autoFitRow(start + r);
   }
 }
@@ -277,13 +294,15 @@ export function insertComment(api: FUniver) {
   api.executeCommand('sheet.operation.show-comment-modal');
 }
 
-export function insertTable(api: FUniver) {
+export async function insertTable(api: FUniver) {
   const range = activeRange(api);
   const sheet = activeSheet(api);
   const wb = api.getActiveWorkbook();
   if (!range || !sheet || !wb) return;
-  // `sheet.command.add-table` is the public command from sheets-table.
-  // It needs unitId / subUnitId / range params.
+  // Table plugin is lazy-loaded; await before dispatch so the command
+  // handler is registered. Without this, fast clicks on a fresh page
+  // silently no-op (queued or dropped).
+  await ensurePluginByName('table');
   api.executeCommand('sheet.command.add-table', {
     unitId: wb.getId(),
     subUnitId: sheet.getSheetId(),
@@ -311,42 +330,85 @@ export const TABLE_THEMES = [
 
 export type TableThemeId = (typeof TABLE_THEMES)[number]['id'];
 
+/** Guard against double-fire while a previous formatAsTable is in flight
+ *  (plugin lazy-load + addTable round-trip). Without this, two fast clicks
+ *  on the "Format as Table" dropdown create two overlapping tables. */
+let formatAsTableInFlight = false;
+
 /**
  * Convert the active selection — or the contiguous data block around a
  * single-cell selection — into a styled Univer table, then auto-fit its
  * column widths. Mirrors Excel's "Format as Table".
  */
-export function formatAsTable(api: FUniver, themeId?: TableThemeId) {
-  const wb = api.getActiveWorkbook();
-  const sheet = activeSheet(api);
-  const range = activeRange(api);
-  if (!wb || !sheet || !range) return;
+export async function formatAsTable(api: FUniver, themeId?: TableThemeId) {
+  if (formatAsTableInFlight) return;
+  formatAsTableInFlight = true;
+  try {
+    const wb = api.getActiveWorkbook();
+    const sheet = activeSheet(api);
+    const range = activeRange(api);
+    if (!wb || !sheet || !range) return;
 
-  const bounds = detectTableBounds(api, range);
-  if (!bounds) return;
+    const bounds = detectTableBounds(api, range);
+    if (!bounds) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fws = sheet as any;
-  if (typeof fws.addTable !== 'function') return;
+    // Table plugin is lazy-loaded — without this await, `addTable` is
+    // undefined on the facade until the plugin finishes registering,
+    // and a fast click is silently dropped. The in-flight guard above
+    // covers the case where the plugin loads BETWEEN two clicks (the
+    // second click finds `addTable` defined and creates a second table).
+    await ensurePluginByName('table');
 
-  const id = `table-${Date.now().toString(36)}`;
-  const name = `Table_${Date.now().toString(36)}`;
-  const options = themeId ? { tableStyleId: themeId } : undefined;
-  const result = fws.addTable(name, bounds, id, options);
-
-  const after = () => {
-    const sheetAny = sheet as unknown as {
-      setColumnAutoWidth?: (col: number, n: number) => unknown;
-    };
-    sheetAny.setColumnAutoWidth?.(
-      bounds.startColumn,
-      bounds.endColumn - bounds.startColumn + 1,
+    // Second-fire guard: if a table already overlaps `bounds` on this
+    // sheet, the user almost certainly clicked twice. Excel surfaces
+    // an explicit error here; we just no-op (less intrusive). Without
+    // this, a sequential rapid click — where the first click's table
+    // has finished registering by the time the second click runs —
+    // creates a duplicate. The `formatAsTableInFlight` boolean only
+    // catches truly synchronous double-fires.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = (wb as any).getTableList?.() ?? [];
+    const overlaps = existing.some(
+      (t: { subUnitId?: string; range?: typeof bounds }) =>
+        t.subUnitId === sheet.getSheetId() &&
+        t.range &&
+        !(
+          t.range.endRow < bounds.startRow ||
+          t.range.startRow > bounds.endRow ||
+          t.range.endColumn < bounds.startColumn ||
+          t.range.startColumn > bounds.endColumn
+        ),
     );
-  };
-  if (result && typeof (result as Promise<boolean>).then === 'function') {
-    (result as Promise<boolean>).then(after).catch(() => {});
-  } else {
-    after();
+    if (overlaps) {
+      console.info('[format-as-table] skipped — a table already covers this range');
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fws = sheet as any;
+    if (typeof fws.addTable !== 'function') return;
+
+    const id = `table-${Date.now().toString(36)}`;
+    const name = `Table_${Date.now().toString(36)}`;
+    const options = themeId ? { tableStyleId: themeId } : undefined;
+    const result = fws.addTable(name, bounds, id, options);
+
+    const after = () => {
+      const sheetAny = sheet as unknown as {
+        setColumnAutoWidth?: (col: number, n: number) => unknown;
+      };
+      sheetAny.setColumnAutoWidth?.(
+        bounds.startColumn,
+        bounds.endColumn - bounds.startColumn + 1,
+      );
+    };
+    if (result && typeof (result as Promise<boolean>).then === 'function') {
+      await (result as Promise<boolean>).then(after).catch(() => {});
+    } else {
+      after();
+    }
+  } finally {
+    formatAsTableInFlight = false;
   }
 }
 
