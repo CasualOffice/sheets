@@ -1,10 +1,16 @@
 import * as Y from 'yjs';
 import type { FUniver } from '@univerjs/core/facade';
+import type { IWorkbookData } from '@univerjs/core';
 import {
   ICommandService,
   type ICommandInfo,
   type IExecutionOptions,
 } from '@univerjs/core';
+// y-protocols ships type declarations only as ESM and our tsconfig
+// doesn't pick them up cleanly; loose-type the Awareness surface we
+// actually use (getStates → Map keyed by clientID).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Awareness = { getStates(): Map<number, any> };
 
 /**
  * Yjs ↔ Univer mutation bridge. See docs/CO-EDITING.md for the design.
@@ -73,7 +79,8 @@ const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   'sheet.mutation.update-hyper-link',
 ]);
 
-type OpRecord = {
+type MutationRecord = {
+  kind?: 'op';
   /** Yjs client id of the emitter (string for portability via JSON). */
   c: string;
   /** Wall-clock at emit; diagnostic only. */
@@ -83,6 +90,29 @@ type OpRecord = {
   /** Mutation params, JSON-serializable. */
   p: unknown;
 };
+
+/**
+ * Snapshot entry written into the op log by the designated compactor
+ * client (lowest awareness clientId). Replaces all prior entries; any
+ * mutation records that come AFTER it in the array are post-compaction
+ * incremental edits and replay normally.
+ *
+ * Pipeline Stage 6 — keeps long-lived rooms from accumulating an
+ * unbounded op log. A 24-hour room with light editing could otherwise
+ * grow to thousands of records, slowing every late join. Compaction
+ * collapses it back to "snapshot + a handful of recent ops".
+ */
+type SnapshotRecord = {
+  kind: 'snapshot';
+  c: string;
+  t: number;
+  /** Full IWorkbookData. Yes, this is large for big workbooks — but
+   *  it ships once per compaction interval, not per mutation. The
+   *  trade-off vs. unbounded op-log growth is straightforward. */
+  wb: IWorkbookData;
+};
+
+type OpRecord = MutationRecord | SnapshotRecord;
 
 export type BridgeHandle = {
   /** Underlying Yjs document — exposed so tests / devtools can introspect. */
@@ -99,7 +129,33 @@ export type BridgeOptions = {
    * URL. Server-side enforcement is a follow-up hardening pass.
    */
   role?: 'view' | 'write';
+  /**
+   * Provider's Yjs awareness. Used (a) to determine which peer is the
+   * designated compactor (lowest known clientId — deterministic and
+   * race-free) and (b) so view-only clients don't try to compact. If
+   * omitted, compaction is disabled.
+   */
+  awareness?: Awareness;
+  /**
+   * Hand a fresh workbook snapshot to the host when a compaction
+   * record arrives from a peer. The bridge can't call
+   * `replaceWorkbook` directly (it lives in React state); the host
+   * (`CollabDriver`) wires this through.
+   */
+  onSnapshotReceived?: (wb: IWorkbookData) => void;
 };
+
+/**
+ * Compaction thresholds. We only attempt to compact when the log has
+ * grown past `COMPACT_OPS_THRESHOLD` AND at least
+ * `COMPACT_MIN_INTERVAL_MS` has elapsed since the last compaction.
+ * The interval guard prevents two designated-writer candidates from
+ * racing the compaction; the ops threshold avoids compacting a quiet
+ * room over and over.
+ */
+const COMPACT_OPS_THRESHOLD = 200;
+const COMPACT_MIN_INTERVAL_MS = 60_000;
+const COMPACT_CHECK_INTERVAL_MS = 30_000;
 
 export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}): BridgeHandle {
   const role = opts.role ?? 'write';
@@ -171,11 +227,34 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
 
   const replayPending = (): void => {
     const total = log.length;
+    // Stage 6 compaction shrinks the log atomically. If our cursor
+    // is past the new end, reset to 0 and replay the snapshot record
+    // (which is always at position 0 right after compaction).
+    if (appliedCount > total) {
+      appliedCount = 0;
+    }
     while (appliedCount < total) {
       const rec = log.get(appliedCount);
       appliedCount += 1;
       if (!rec) continue;
       if (rec.c === myClientId) continue; // our own write — Univer already ran it
+      if (rec.kind === 'snapshot') {
+        // Compaction record from a peer — replace the local workbook
+        // with the snapshot. Without `onSnapshotReceived` wired (e.g.
+        // in unit tests that drive the bridge directly), skip the
+        // record; the next post-snapshot mutations may still apply
+        // cleanly if state is close enough.
+        if (opts.onSnapshotReceived) {
+          try {
+            opts.onSnapshotReceived(rec.wb);
+          } catch (err) {
+            console.warn('[collab] failed to apply compaction snapshot', err);
+          }
+        } else {
+          console.warn('[collab] received compaction snapshot but no handler — workbook may diverge');
+        }
+        continue;
+      }
       // Each browser creates its workbook with its OWN random unit id, so
       // raw replay would target the sender's unit (which doesn't exist
       // here) — rewrite to our local active unit. Sheet ids (`sheet-1`)
@@ -200,6 +279,78 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // once on mount to catch up.
   replayPending();
 
+  // ── Stage 6: periodic compaction by the designated writer ────────
+  // Only one client in the room compacts at a time — the one with the
+  // lowest known clientId. The interval guard prevents an over-eager
+  // compactor from churning. View-only clients never compact.
+  let lastCompactedAt = 0;
+  let compactionTimer: ReturnType<typeof setInterval> | null = null;
+  if (role !== 'view' && opts.awareness) {
+    const awareness = opts.awareness;
+    const tryCompact = (): void => {
+      try {
+        if (log.length < COMPACT_OPS_THRESHOLD) return;
+        if (Date.now() - lastCompactedAt < COMPACT_MIN_INTERVAL_MS) return;
+        // Designated writer = lowest clientId currently in awareness.
+        // Math.min over the awareness keys, then compare to ours.
+        const keys = Array.from(awareness.getStates().keys()) as number[];
+        if (keys.length === 0) return;
+        const designated = Math.min(...keys);
+        if (designated !== doc.clientID) return;
+        // Snapshot the live workbook.
+        const wb = api.getActiveWorkbook();
+        if (!wb) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const snap = (wb as any).save() as IWorkbookData;
+        const snapshotRec: SnapshotRecord = {
+          kind: 'snapshot',
+          c: myClientId,
+          t: Date.now(),
+          wb: snap,
+        };
+        const opsBefore = log.length;
+        // Atomic swap: clear then append. Yjs serializes the whole
+        // transaction so subscribers see one consistent change.
+        doc.transact(() => {
+          log.delete(0, log.length);
+          log.push([snapshotRec]);
+        });
+        // We just rewrote the log; our cursor must stay PAST the
+        // snapshot (we already have its state). The replayer's
+        // appliedCount > length reset would otherwise re-apply our
+        // own snapshot which is a no-op but pointless.
+        appliedCount = 1;
+        lastCompactedAt = Date.now();
+        console.info(
+          '[collab] op-log compacted: %d ops → 1 snapshot record',
+          opsBefore,
+        );
+      } catch (err) {
+        console.warn('[collab] compaction attempt failed', err);
+      }
+    };
+    compactionTimer = setInterval(tryCompact, COMPACT_CHECK_INTERVAL_MS);
+    // Don't keep the interval alive in tests / SSR where this
+    // module might be imported but never torn down.
+    compactionTimer.unref?.();
+
+    // Dev-only sinks for the compaction e2e — lets a test trigger
+    // the compaction without waiting for the 30 s interval and read
+    // the live log length. Tree-shaken from production builds via
+    // import.meta.env.DEV.
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).__bridgeLogLength = () => log.length;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).__bridgeForceCompact = () => {
+        // Bypass the COMPACT_MIN_INTERVAL_MS guard so the test
+        // doesn't have to sleep a minute.
+        lastCompactedAt = 0;
+        tryCompact();
+      };
+    }
+  }
+
   return {
     doc,
     dispose: () => {
@@ -208,6 +359,7 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       // the last keystroke on the floor.
       if (pending.length > 0) flush();
       log.unobserve(observer);
+      if (compactionTimer) clearInterval(compactionTimer);
     },
   };
 }

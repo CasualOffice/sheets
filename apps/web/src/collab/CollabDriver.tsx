@@ -225,7 +225,16 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
 
     const doc = new Y.Doc();
     const next = new HocuspocusProvider({ url, name: id, document: doc });
-    const handle = startBridge(api, doc, { role: joinRole });
+    const handle = startBridge(api, doc, {
+      role: joinRole,
+      awareness: next.awareness ?? undefined,
+      // When a peer's compaction snapshot lands, replace our local
+      // workbook with it — same path File→Open uses. Without this,
+      // late joiners + restored sessions miss the workbook state.
+      onSnapshotReceived: (wb) => {
+        workbook.replaceWorkbook(wb, 'xlsx');
+      },
+    });
 
     const onStatus = (ev: { status: string }) => {
       if (ev.status === 'connected') setStatus('live');
