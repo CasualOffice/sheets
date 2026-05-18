@@ -1685,6 +1685,17 @@ button {
   font-weight: var(--weight-regular, 400);
 }
 
+/* "Step 2 of 3" pip-style indicator above the phase text. Reassures
+   the user that progress is forward when ExcelJS gives no other
+   signal during a multi-second parse. */
+.loading-overlay__step {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin: 0 0 2px;
+}
+
 .loading-overlay__phase {
   font-size: 13px;
   color: var(--color-text-soft, var(--color-text));

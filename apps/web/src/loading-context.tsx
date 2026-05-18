@@ -21,6 +21,11 @@ export type LoadingState = {
   /** Set when the load failed. The overlay flips into an error card with
    *  this message + a Dismiss button. */
   error?: string;
+  /** Optional retry handler called when the user clicks "Try again" on
+   *  the error card. The overlay dismisses itself first, then invokes
+   *  this — the action is then free to re-open the picker / re-fetch
+   *  the seed / etc. If omitted, no Retry button is shown. */
+  onRetry?: () => void;
 };
 
 export type LoadingCtxValue = {
