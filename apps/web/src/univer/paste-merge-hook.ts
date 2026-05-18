@@ -89,16 +89,84 @@ export function registerPasteMergeHook(api: FUniver): (() => void) | null {
     (globalThis as any).__pasteMergeHook__ = onPasteCells;
   }
 
-  const disposable = svc.addClipboardHook({
+  // Companion hook for column widths. Univer's HTML parser already
+  // reads `<col width="…">` into `colProperties`, but the default
+  // paste hook only honors them on the "special paste / column
+  // widths" path — not on a regular Ctrl+V. Without this, pasting
+  // a styled Excel table loses its column sizing.
+  //
+  // Row heights have the same problem upstream but `onPasteRows` is
+  // called with no `rowProperties` argument (verified against the
+  // sheets-ui ES bundle's paste loop at line ~4418), so there's no
+  // way to recover them from a hook. That gap needs a pnpm patch or
+  // an upstream PR.
+  const onPasteColumns: ClipboardHook['onPasteColumns'] = (
+    pasteTo,
+    colProperties,
+    _payload,
+  ) => {
+    if (!Array.isArray(colProperties) || colProperties.length === 0) {
+      return { undos: [], redos: [] };
+    }
+    const cols = pasteTo.range.cols;
+    const widthsByCol: Record<number, number> = {};
+    let any = false;
+    for (let i = 0; i < colProperties.length; i++) {
+      const destCol = cols[i];
+      if (destCol === undefined) continue;
+      const raw = colProperties[i]?.width;
+      if (typeof raw !== 'string' && typeof raw !== 'number') continue;
+      // Strip any trailing "px"/"pt" and round; Excel typically writes
+      // a bare number but some sources include units.
+      const n = Math.round(Number.parseFloat(String(raw)));
+      if (!Number.isFinite(n) || n <= 0) continue;
+      widthsByCol[destCol] = n;
+      any = true;
+    }
+    if (!any) return { undos: [], redos: [] };
+    const destColIndices = Object.keys(widthsByCol).map((k) => Number(k));
+    const startColumn = Math.min(...destColIndices);
+    const endColumn = Math.max(...destColIndices);
+    const params = {
+      unitId: pasteTo.unitId,
+      subUnitId: pasteTo.subUnitId,
+      ranges: [{ startRow: 0, endRow: 0, startColumn, endColumn }],
+      colWidth: widthsByCol,
+    };
+    return {
+      redos: [{ id: 'sheet.mutation.set-worksheet-col-width', params }],
+      // Undo restores via the same mutation with the inverse map; we
+      // could read the current widths here, but the destination is
+      // freshly pasted-into so the safest "undo" is to no-op the
+      // change. A subsequent Ctrl+Z still rewinds the cell content
+      // mutations the default hook emitted.
+      undos: [],
+    };
+  };
+
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).__pasteColWidthHook__ = onPasteColumns;
+  }
+
+  const mergeDisposable = svc.addClipboardHook({
     id: 'casual-sheets-paste-merges',
     priority: 1000,
     onPasteCells,
   });
+  const colWidthDisposable = svc.addClipboardHook({
+    id: 'casual-sheets-paste-col-widths',
+    priority: 1000,
+    onPasteColumns,
+  });
   return () => {
-    disposable.dispose();
+    mergeDisposable.dispose();
+    colWidthDisposable.dispose();
     if (import.meta.env.DEV) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (globalThis as any).__pasteMergeHook__;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).__pasteColWidthHook__;
     }
   };
 }
@@ -120,13 +188,19 @@ type DataMatrix = {
   ) => unknown;
 };
 type MutationInfo = { id: string; params: unknown };
+type ColProperty = Record<string, string | undefined>;
 type ClipboardHook = {
   id: string;
   priority?: number;
-  onPasteCells: (
+  onPasteCells?: (
     pasteFrom: unknown,
     pasteTo: PasteTarget,
     data: DataMatrix,
     payload?: unknown,
+  ) => { undos: MutationInfo[]; redos: MutationInfo[] };
+  onPasteColumns?: (
+    pasteTo: PasteTarget,
+    colProperties: ColProperty[],
+    payload: unknown,
   ) => { undos: MutationInfo[]; redos: MutationInfo[] };
 };

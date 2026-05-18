@@ -90,6 +90,73 @@ test.describe('Excel-paste merge hook', () => {
     expect(m.undos).toEqual([]);
   });
 
+  test('col-width hook emits set-worksheet-col-width with parsed widths', async ({ page }) => {
+    const r = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hook = (window as any).__pasteColWidthHook__ as
+        | ((
+            to: { range: { rows: number[]; cols: number[] }; unitId: string; subUnitId: string },
+            colProperties: Record<string, string>[],
+            payload: unknown,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ) => { undos: any[]; redos: any[] })
+        | undefined;
+      if (!hook) return { found: false };
+      const api = window.__univerAPI!;
+      const wb = api.getActiveWorkbook()!;
+      const pasteTo = {
+        range: { rows: [0], cols: [5, 6, 7] },
+        unitId: wb.getId(),
+        subUnitId: wb.getActiveSheet()!.getSheetId(),
+      };
+      const colProperties = [
+        { width: '120' },
+        { width: '60px' }, // strips px
+        { width: '' }, // skipped (empty)
+      ];
+      return { found: true, mutations: hook(pasteTo, colProperties, {}) };
+    });
+    expect(r.found).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = (r as any).mutations as { redos: any[] };
+    expect(m.redos).toHaveLength(1);
+    expect(m.redos[0].id).toBe('sheet.mutation.set-worksheet-col-width');
+    const params = m.redos[0].params;
+    // Only the two columns with valid widths should land.
+    expect(params.colWidth).toEqual({ 5: 120, 6: 60 });
+    expect(params.ranges[0].startColumn).toBe(5);
+    expect(params.ranges[0].endColumn).toBe(6);
+  });
+
+  test('col-width hook is a no-op when nothing parseable comes in', async ({ page }) => {
+    const r = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hook = (window as any).__pasteColWidthHook__ as
+        | ((
+            to: { range: { rows: number[]; cols: number[] }; unitId: string; subUnitId: string },
+            colProperties: Record<string, string>[],
+            payload: unknown,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ) => { undos: any[]; redos: any[] })
+        | undefined;
+      if (!hook) return { found: false };
+      const api = window.__univerAPI!;
+      const wb = api.getActiveWorkbook()!;
+      const pasteTo = {
+        range: { rows: [0], cols: [5, 6] },
+        unitId: wb.getId(),
+        subUnitId: wb.getActiveSheet()!.getSheetId(),
+      };
+      return {
+        found: true,
+        mutations: hook(pasteTo, [{ width: 'auto' }, { width: '' }], {}),
+      };
+    });
+    expect(r.found).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((r as any).mutations.redos).toEqual([]);
+  });
+
   test('multiple merges in one paste batch into a single mutation', async ({ page }) => {
     const r = await callHook(page, [
       [0, 0, { colSpan: 2 }],
