@@ -23,8 +23,18 @@ import { Tooltip } from './Tooltip';
 import {
   extractFunctionFragment,
   suggestFunctions,
+  suggestSheetNames,
   type FormulaFn,
 } from './formula-functions';
+
+/**
+ * Suggestion list entry — a function call (insert `NAME(`) or a sheet
+ * name (insert `Name!`). Keyboard nav + click handling treats them
+ * uniformly; only the display + insertion text differ.
+ */
+type Suggestion =
+  | { kind: 'fn'; fn: FormulaFn }
+  | { kind: 'sheet'; name: string };
 
 /**
  * Office-style formula bar: [ NameBox ] [ × ✓ fx ] [ formula input ]
@@ -38,7 +48,7 @@ export function FormulaBar() {
   const editing = draft !== null;
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [suggestions, setSuggestions] = useState<FormulaFn[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [suggestionsAnchor, setSuggestionsAnchor] = useState<DOMRect | null>(null);
 
@@ -165,7 +175,10 @@ export function FormulaBar() {
 
   const value = editing ? (draft ?? '') : displayValue;
 
-  // Recompute suggestions whenever the value or caret changes during editing.
+  // Recompute suggestions whenever the value or caret changes during
+  // editing. Mix function names + sheet names — both are valid things
+  // to type after `=` (functions go first, sheet names below them with
+  // a `Sheet` badge so users can tell them apart).
   useLayoutEffect(() => {
     if (!editing || !inputRef.current) {
       setSuggestions([]);
@@ -173,26 +186,42 @@ export function FormulaBar() {
     }
     const caret = inputRef.current.selectionStart ?? value.length;
     const frag = extractFunctionFragment(value, caret);
-    const next = frag ? suggestFunctions(frag) : [];
+    if (!frag) {
+      setSuggestions([]);
+      return;
+    }
+    const fnList = suggestFunctions(frag);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sheets = ((api?.getActiveWorkbook?.()?.getSheets?.() as any[]) ?? [])
+      .map((s) => s.getSheetName?.())
+      .filter((n): n is string => typeof n === 'string');
+    const sheetList = suggestSheetNames(frag, sheets);
+    const next: Suggestion[] = [
+      ...fnList.map((fn): Suggestion => ({ kind: 'fn', fn })),
+      ...sheetList.map((name): Suggestion => ({ kind: 'sheet', name })),
+    ];
     setSuggestions(next);
     setSelectedIdx(0);
     if (next.length > 0) {
       setSuggestionsAnchor(inputRef.current.getBoundingClientRect());
     }
-  }, [value, editing]);
+  }, [value, editing, api]);
 
   const onChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (!editing) draftCellRef.current = a1;
     setDraft(e.target.value);
   };
 
-  const insertSuggestion = (fn: FormulaFn) => {
+  const insertSuggestion = (s: Suggestion) => {
     if (!inputRef.current) return;
     const caret = inputRef.current.selectionStart ?? value.length;
     const frag = extractFunctionFragment(value, caret) ?? '';
     const before = value.slice(0, caret - frag.length);
     const after = value.slice(caret);
-    const insertion = `${fn.name}(`;
+    // Functions insert `NAME(` (open paren for argument typing).
+    // Sheet names insert `Name!` (the bang for the cell ref that
+    // follows).
+    const insertion = s.kind === 'fn' ? `${s.fn.name}(` : `${s.name}!`;
     const next = `${before}${insertion}${after}`;
     const nextCaret = before.length + insertion.length;
 
@@ -418,8 +447,20 @@ export function FormulaBar() {
           const caret = inputRef.current.selectionStart ?? value.length;
           lastCaretRef.current = caret;
           // Recompute suggestions when the user moves the caret with arrows.
+          // Mirrors the main recompute effect — keep both in lockstep.
           const frag = extractFunctionFragment(value, caret);
-          setSuggestions(frag ? suggestFunctions(frag) : []);
+          if (!frag) {
+            setSuggestions([]);
+            return;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sheets = ((api?.getActiveWorkbook?.()?.getSheets?.() as any[]) ?? [])
+            .map((s) => s.getSheetName?.())
+            .filter((n): n is string => typeof n === 'string');
+          setSuggestions([
+            ...suggestFunctions(frag).map((fn): Suggestion => ({ kind: 'fn', fn })),
+            ...suggestSheetNames(frag, sheets).map((name): Suggestion => ({ kind: 'sheet', name })),
+          ]);
         }}
         onBlur={(e) => {
           // Don't dismiss when the user clicks a suggestion (focus moves
@@ -446,23 +487,28 @@ export function FormulaBar() {
             width: Math.max(280, suggestionsAnchor.width / 2),
           }}
         >
-          {suggestions.map((fn, i) => (
-            <li
-              key={fn.name}
-              role="option"
-              aria-selected={i === selectedIdx}
-              className={`formula-suggestions__item${i === selectedIdx ? ' formula-suggestions__item--selected' : ''}`}
-              data-testid={`formula-suggestion-${fn.name}`}
-              onMouseDown={(e) => {
-                // mousedown not click — so the input doesn't blur first.
-                e.preventDefault();
-                insertSuggestion(fn);
-              }}
-            >
-              <span className="formula-suggestions__name">{fn.name}</span>
-              <span className="formula-suggestions__desc">{fn.description}</span>
-            </li>
-          ))}
+          {suggestions.map((s, i) => {
+            const name = s.kind === 'fn' ? s.fn.name : s.name;
+            const desc = s.kind === 'fn' ? s.fn.description : 'Sheet';
+            return (
+              <li
+                key={`${s.kind}-${name}`}
+                role="option"
+                aria-selected={i === selectedIdx}
+                className={`formula-suggestions__item${i === selectedIdx ? ' formula-suggestions__item--selected' : ''}${s.kind === 'sheet' ? ' formula-suggestions__item--sheet' : ''}`}
+                data-testid={`formula-suggestion-${name}`}
+                data-kind={s.kind}
+                onMouseDown={(e) => {
+                  // mousedown not click — so the input doesn't blur first.
+                  e.preventDefault();
+                  insertSuggestion(s);
+                }}
+              >
+                <span className="formula-suggestions__name">{name}</span>
+                <span className="formula-suggestions__desc">{desc}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

@@ -963,6 +963,17 @@ button {
   line-height: 1.35;
 }
 
+/* Sheet-name suggestions get a small grid icon + soft tint so they're
+   visually distinct from function suggestions without forcing a
+   separate dropdown — Excel mixes the two in one list too. */
+.formula-suggestions__item--sheet {
+  background: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+.formula-suggestions__item--sheet .formula-suggestions__desc {
+  color: var(--color-accent);
+  font-weight: var(--weight-medium);
+}
+
 /* Row containing the grid host + any of our React side panels (Tables
    panel today; more later). Univer's own side panels still mount inside
    .grid-host because they hook into Univer's render tree. */

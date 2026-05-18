@@ -102,6 +102,37 @@ export function suggestFunctions(prefix: string, limit = 8): FormulaFn[] {
 }
 
 /**
+ * Match active workbook sheet names against a prefix. Excel-style
+ * autocomplete: typing `=Sa` in the formula bar shows `Sales` (and
+ * any other sheets starting with "Sa") alongside the function
+ * suggestions. Returns the names case-insensitively filtered, in
+ * the order they appear on the workbook.
+ *
+ * Sheets containing characters outside `[A-Za-z0-9_]` need to be
+ * quoted in formulas (e.g. `'My Sheet'!A1`); v0.1.1 only suggests
+ * names that the fragment extractor can match (alphanumeric +
+ * underscore). Names with spaces / symbols are still type-able
+ * manually with the apostrophe quoting Excel uses, just not
+ * auto-completed yet.
+ */
+export function suggestSheetNames(
+  prefix: string,
+  sheetNames: readonly string[],
+  limit = 5,
+): string[] {
+  if (!prefix) return [];
+  const lower = prefix.toLowerCase();
+  const out: string[] = [];
+  for (const name of sheetNames) {
+    if (name.toLowerCase().startsWith(lower) && /^[A-Za-z0-9_]+$/.test(name)) {
+      out.push(name);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+/**
  * Inspect the formula-bar value at caret position and return the
  * "in-flight" function name fragment, if any. E.g.:
  *   "=SU" at caret 3 → "SU"
