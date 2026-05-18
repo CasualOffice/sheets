@@ -12,8 +12,9 @@ import { LOCALES } from './locale';
 import { useSetUniverAPI } from './use-univer';
 import { extendContextMenu } from './context-menu-extensions';
 import { registerPlugins } from './univer/plugins';
+import { eagerLoadForSnapshot, idleLoadAll } from './univer/lazy-plugins';
 import { installDevHelpers } from './univer/dev-helpers';
-import { timeIt } from './perf';
+import { timeIt, timeItAsync } from './perf';
 import { WorkbookContext } from './workbook-context';
 
 type Props = {
@@ -50,19 +51,38 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
 
     registerPlugins(univer, hostRef.current);
 
-    timeIt('mount-unit', () => univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialSnapshot));
+    let teardownDevHelpers: (() => void) | null = null;
+    let raf = 0;
+    let cancelled = false;
+    void (async () => {
+      // Eager-load any plugin the initial snapshot needs (CF rules,
+      // table defs, hyperlinks, etc.) BEFORE createUnit. Skipping this
+      // would silently drop the resource keys for plugins that aren't
+      // registered when Univer's resource manager reads the snapshot.
+      await timeItAsync('eager-plugins', () => eagerLoadForSnapshot(univer, initialSnapshot));
+      if (cancelled) return;
+      timeIt('mount-unit', () => univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialSnapshot));
 
-    // Augment the built-in cell context menu with Merge / Unmerge entries.
-    extendContextMenu(univer);
+      // Augment the built-in cell context menu with Merge / Unmerge entries.
+      extendContextMenu(univer);
 
-    const api = FUniver.newAPI(univer);
-    apiRef.current = api;
-    setApi(api);
+      const api = FUniver.newAPI(univer);
+      apiRef.current = api;
+      setApi(api);
 
-    const raf = requestAnimationFrame(() => setReady(true));
-    const teardownDevHelpers = installDevHelpers(api);
+      raf = requestAnimationFrame(() => setReady(true));
+      teardownDevHelpers = installDevHelpers(api);
+
+      // Idle-load every remaining lazy plugin so the user finds them
+      // ready when they reach the Insert / Data / Format tabs. The
+      // bundle split (per Stage 4) is the persistent boot-time win;
+      // this just ensures runtime feature parity with the previous
+      // monolithic mount.
+      idleLoadAll(univer);
+    })();
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(raf);
       // Defer disposal so it can't fire during React's render phase — Univer
       // owns its own React root and a synchronous unmount mid-render warns and
@@ -72,7 +92,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
       univerRef.current = null;
       setApi(null);
       queueMicrotask(() => toDispose.dispose());
-      teardownDevHelpers();
+      teardownDevHelpers?.();
     };
     // Mount Univer exactly once. Snapshot changes are handled by the swap
     // effect below — recreating Univer per snapshot would race React's render.
@@ -109,17 +129,28 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
       return;
     }
     console.info('[open-xlsx] swapping unit', { from: currentId, to: snapshot.id });
-    try {
-      timeIt('swap-unit', () => {
-        if (currentId) disposeUnit?.call(api, currentId);
-        createSheet.call(api, snapshot);
-      });
-      lastRevisionRef.current = revision;
-      console.info('[open-xlsx] swap complete');
-    } catch (err) {
-      console.error('[open-xlsx] swap failed', err);
-      throw err;
-    }
+    // Eager-load any plugin the new snapshot needs BEFORE swap, then
+    // run the swap synchronously inside a timed block. The await is
+    // unavoidable for fresh feature plugins — but most opens hit
+    // ones we've already loaded (cached `loaded` set), so this is
+    // effectively a no-op fast path after warm-up.
+    void (async () => {
+      try {
+        const u = univerRef.current;
+        if (u) {
+          await timeItAsync('eager-plugins', () => eagerLoadForSnapshot(u, snapshot));
+        }
+        timeIt('swap-unit', () => {
+          if (currentId) disposeUnit?.call(api, currentId);
+          createSheet.call(api, snapshot);
+        });
+        lastRevisionRef.current = revision;
+        console.info('[open-xlsx] swap complete');
+      } catch (err) {
+        console.error('[open-xlsx] swap failed', err);
+        throw err;
+      }
+    })();
   }, [revision, ctx]);
 
   return (

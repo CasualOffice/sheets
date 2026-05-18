@@ -12,57 +12,27 @@ import { UniverSheetsFormulaPlugin, CalculationMode } from '@univerjs/sheets-for
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
-import { UniverSheetsSortPlugin } from '@univerjs/sheets-sort';
-import { UniverSheetsSortUIPlugin } from '@univerjs/sheets-sort-ui';
-import { UniverSheetsFilterPlugin } from '@univerjs/sheets-filter';
-import { UniverSheetsFilterUIPlugin } from '@univerjs/sheets-filter-ui';
-import { UniverFindReplacePlugin } from '@univerjs/find-replace';
-import { UniverSheetsFindReplacePlugin } from '@univerjs/sheets-find-replace';
-import { UniverSheetsConditionalFormattingPlugin } from '@univerjs/sheets-conditional-formatting';
-import { UniverSheetsConditionalFormattingUIPlugin } from '@univerjs/sheets-conditional-formatting-ui';
-import { UniverSheetsDataValidationPlugin } from '@univerjs/sheets-data-validation';
-import { UniverSheetsDataValidationUIPlugin } from '@univerjs/sheets-data-validation-ui';
-import { UniverSheetsHyperLinkPlugin } from '@univerjs/sheets-hyper-link';
-import { UniverSheetsHyperLinkUIPlugin } from '@univerjs/sheets-hyper-link-ui';
-import { UniverSheetsNotePlugin } from '@univerjs/sheets-note';
-import { UniverSheetsNoteUIPlugin } from '@univerjs/sheets-note-ui';
-import { UniverSheetsTablePlugin } from '@univerjs/sheets-table';
-import { UniverSheetsTableUIPlugin } from '@univerjs/sheets-table-ui';
-import { UniverSheetsThreadCommentPlugin } from '@univerjs/sheets-thread-comment';
-import { UniverSheetsThreadCommentUIPlugin } from '@univerjs/sheets-thread-comment-ui';
-import { UniverThreadCommentPlugin } from '@univerjs/thread-comment';
-import { UniverThreadCommentUIPlugin } from '@univerjs/thread-comment-ui';
-import { UniverDrawingPlugin } from '@univerjs/drawing';
-import { UniverDrawingUIPlugin } from '@univerjs/drawing-ui';
-import { UniverSheetsDrawingPlugin } from '@univerjs/sheets-drawing';
-import { UniverSheetsDrawingUIPlugin } from '@univerjs/sheets-drawing-ui';
 
 /**
- * Register every Univer plugin our app uses, in the order Univer expects them.
+ * Register the EAGER plugin set. These are the plugins every workbook
+ * needs to render and compute (render/formula/RPC/UI/docs/sheets/
+ * sheets-ui/sheets-formula/numfmt). All the feature-specific plugins
+ * — CF, DV, hyperlink, table, note, thread-comment, drawing, sort,
+ * filter, find-replace — are deferred and loaded lazily by
+ * `lazy-plugins.ts`, either when the user reaches for them or when
+ * the snapshot's resources reference their data (eager-load-on-mount).
  *
- * Order matters here: render/formula engines must be present before sheets,
- * sheets before sheets-ui, every base plugin before its `-ui` counterpart.
- * If you add a plugin, slot it next to its peers — don't reorder existing rows
- * without verifying the lifecycle.
- *
- * Eventually some of these (CF, DV, drawing, thread-comment, note) can be
- * dynamic-imported at first-feature-use to trim the initial bundle. Doing that
- * means routing through `registerPlugin` after Univer has constructed; the
- * call sites already exist here, so the change is local.
+ * Plugin order matters: render/formula engines before sheets,
+ * sheets before sheets-ui, every base plugin before its `-ui`
+ * counterpart. If you add an eager plugin, slot it next to its peers.
  */
 export function registerPlugins(univer: Univer, container: HTMLElement): void {
   univer.registerPlugin(UniverRenderEnginePlugin);
   // Formula engine runs in a worker — main thread still loads the plugin
-  // (for shared types, mutations) but skips the actual compute. The worker
-  // ships the heavy `evaluate` path so paste / sort / fill on large
-  // workbooks doesn't freeze the UI thread.
-  // See apps/web/src/univer/formula-worker.ts for the worker side.
-  // `notExecuteFormula` keeps formula compute off the main thread (the
-  // worker registered below ships the heavy `evaluate` work). Pairing
-  // it with `initialFormulaComputing: NO_CALCULATION` skips the load-
-  // time RPC thunder on file open — every formula cell that lacks a
-  // cached value would otherwise trigger one worker round-trip just to
-  // mount the workbook.
+  // (for shared types, mutations) but skips the actual compute. The
+  // worker ships the heavy `evaluate` path so paste / sort / fill on
+  // large workbooks doesn't freeze the UI thread. See
+  // apps/web/src/univer/formula-worker.ts for the worker side.
   univer.registerPlugin(UniverFormulaEnginePlugin, {
     notExecuteFormula: true,
   });
@@ -89,28 +59,4 @@ export function registerPlugins(univer: Univer, container: HTMLElement): void {
   univer.registerPlugin(UniverSheetsFormulaUIPlugin);
   univer.registerPlugin(UniverSheetsNumfmtPlugin);
   univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
-  univer.registerPlugin(UniverSheetsSortPlugin);
-  univer.registerPlugin(UniverSheetsSortUIPlugin);
-  univer.registerPlugin(UniverSheetsFilterPlugin);
-  univer.registerPlugin(UniverSheetsFilterUIPlugin);
-  univer.registerPlugin(UniverFindReplacePlugin);
-  univer.registerPlugin(UniverSheetsFindReplacePlugin);
-  univer.registerPlugin(UniverSheetsConditionalFormattingPlugin);
-  univer.registerPlugin(UniverSheetsConditionalFormattingUIPlugin);
-  univer.registerPlugin(UniverSheetsDataValidationPlugin);
-  univer.registerPlugin(UniverSheetsDataValidationUIPlugin);
-  univer.registerPlugin(UniverSheetsHyperLinkPlugin);
-  univer.registerPlugin(UniverSheetsHyperLinkUIPlugin);
-  univer.registerPlugin(UniverSheetsNotePlugin);
-  univer.registerPlugin(UniverSheetsNoteUIPlugin);
-  univer.registerPlugin(UniverSheetsTablePlugin);
-  univer.registerPlugin(UniverSheetsTableUIPlugin);
-  univer.registerPlugin(UniverThreadCommentPlugin);
-  univer.registerPlugin(UniverThreadCommentUIPlugin);
-  univer.registerPlugin(UniverSheetsThreadCommentPlugin);
-  univer.registerPlugin(UniverSheetsThreadCommentUIPlugin);
-  univer.registerPlugin(UniverDrawingPlugin);
-  univer.registerPlugin(UniverDrawingUIPlugin);
-  univer.registerPlugin(UniverSheetsDrawingPlugin);
-  univer.registerPlugin(UniverSheetsDrawingUIPlugin);
 }
