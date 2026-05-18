@@ -20,6 +20,8 @@ import { PageSetupDialog } from './PageSetupDialog';
 import { openBugReport } from './report-bug';
 import { useCollab } from '../collab/collab-context';
 import { useLoading } from '../loading-context';
+import { useCharts } from '../charts/charts-context';
+import { buildChartModelFromActiveSelection } from '../charts/insert-chart';
 import { useOutlineActions } from '../outline/use-outline-actions';
 import { useOutline } from '../outline/outline-context';
 import {
@@ -108,6 +110,7 @@ export function MenuBar() {
   const outline = useOutline();
   const collab = useCollab();
   const loading = useLoading();
+  const charts = useCharts();
   const [open, setOpen] = useState<MenuId | null>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -385,6 +388,20 @@ export function MenuBar() {
         { kind: 'separator', id: 'sep-3' },
         { kind: 'item', id: 'new-sheet', label: 'New sheet', icon: 'add_box', run: insertNewSheet },
         { kind: 'item', id: 'insert-table', label: 'Table', icon: 'table_rows', run: insertTable },
+        {
+          kind: 'item',
+          id: 'insert-chart',
+          label: 'Chart',
+          icon: 'bar_chart',
+          // P0: bare column chart from the active selection. P1 will
+          // swap this for a real dialog (range picker + type picker).
+          onClick: () => {
+            if (!api) return;
+            const model = buildChartModelFromActiveSelection(api, 'bar');
+            if (!model) return;
+            charts.insert(model);
+          },
+        },
         { kind: 'item', id: 'insert-image', label: 'Image', icon: 'image', run: insertImage },
         { kind: 'item', id: 'insert-link', label: 'Hyperlink', icon: 'link', shortcut: 'Ctrl+K', run: insertHyperlink },
         { kind: 'item', id: 'insert-comment', label: 'Comment', icon: 'comment', run: insertComment },

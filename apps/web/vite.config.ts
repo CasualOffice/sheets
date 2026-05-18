@@ -46,6 +46,12 @@ export default defineConfig({
   // duplicates Univer modules in the dep cache — the symptom is "Identifier
   // ... already exists" DI errors and a blank grid until a hard reload.
   optimizeDeps: {
-    include: ['@e965/xlsx'],
+    // Same rationale as @e965/xlsx — pre-bundle echarts at dev-server
+    // start. Without this, the first dynamic import of echarts (when
+    // a user clicks Insert > Chart, or when a workbook with charts
+    // mounts) triggers a re-optimize pass mid-run that duplicates
+    // Univer modules in the dep cache. Symptom: "Identifier ...
+    // already exists" DI errors and a blank grid until hard reload.
+    include: ['@e965/xlsx', 'echarts', 'echarts/core', 'echarts/charts', 'echarts/components', 'echarts/renderers'],
   },
 });

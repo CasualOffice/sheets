@@ -25,6 +25,8 @@ import { CreateRoomDialog } from './shell/CreateRoomDialog';
 import { LoadingOverlay } from './shell/LoadingOverlay';
 import { LoadingContext, type LoadingCtxValue, type LoadingState } from './loading-context';
 import { BusyProvider } from './busy-context';
+import { ChartsProvider } from './charts/charts-context';
+import { ChartLayer } from './charts/ChartLayer';
 
 export function App() {
   // Snapshot lives in a ref, NOT React state — see workbook-context.tsx.
@@ -130,6 +132,7 @@ export function App() {
         <WorkbookContext.Provider value={wbValue}>
         <LoadingContext.Provider value={loadingValue}>
         <BusyProvider>
+        <ChartsProvider>
           <OutlineProvider>
             <GrowthDriver />
             <FileDropDriver />
@@ -156,7 +159,9 @@ export function App() {
               </div>
             </CollabDriver>
             <LoadingOverlay />
+            <ChartLayer />
           </OutlineProvider>
+        </ChartsProvider>
         </BusyProvider>
         </LoadingContext.Provider>
         </WorkbookContext.Provider>
