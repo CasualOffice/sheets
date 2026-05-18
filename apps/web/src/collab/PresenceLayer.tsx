@@ -33,7 +33,22 @@ type Rect = {
   /** Live in-progress text for this peer's cell, if any. Renders as a
    *  ghost overlay inside the cursor rect. */
   liveText?: string;
+  /** Vertical offset (px) for the floating name label above the
+   *  cursor. Default is -20 (one row above the cell). When two peers
+   *  sit on adjacent cells their labels overlap horizontally —
+   *  collision avoidance bumps later peers up by multiples of
+   *  LABEL_SLOT_HEIGHT so they stack instead of stomping. */
+  labelTop: number;
 };
+
+const LABEL_HEIGHT = 18;
+const LABEL_SLOT_HEIGHT = 20;
+const LABEL_BASE_TOP = -20;
+/** Rough px-per-character for label width estimation. Lets us detect
+ *  collisions without measuring DOM (the layer rebuilds every 4
+ *  frames, so DOM measurement would thrash). */
+const LABEL_CHAR_WIDTH = 6.5;
+const LABEL_PAD = 12;
 
 export function PresenceLayer() {
   const api = useUniverAPI();
@@ -181,11 +196,14 @@ export function PresenceLayer() {
             width: right - left,
             height: bottom - top,
             liveText,
+            labelTop: LABEL_BASE_TOP,
           });
         } catch {
           /* getCellRect can throw mid-resize — drop this frame for that peer */
         }
       }
+
+      assignLabelSlots(next);
 
       // Cheap diff: only setState when the rect set actually changed,
       // so we don't churn React 15× per second.
@@ -226,7 +244,12 @@ export function PresenceLayer() {
             } as React.CSSProperties
           }
         >
-          <span className="presence-cursor__label">{r.name}</span>
+          <span
+            className="presence-cursor__label"
+            style={{ top: `${r.labelTop}px` }}
+          >
+            {r.name}
+          </span>
           {r.liveText !== undefined && r.liveText.length > 0 && (
             <span className="presence-cursor__ghost" data-testid="presence-cursor-ghost">
               {r.liveText}
@@ -252,10 +275,59 @@ function rectsEqual(a: Rect[], b: Rect[]): boolean {
       x.height !== y.height ||
       x.name !== y.name ||
       x.color !== y.color ||
-      x.liveText !== y.liveText
+      x.liveText !== y.liveText ||
+      x.labelTop !== y.labelTop
     ) {
       return false;
     }
   }
   return true;
+}
+
+/**
+ * Greedy label-collision pass. Walks the cursor rects in display order
+ * and, for each label, finds the first vertical "slot" above the cursor
+ * cell that doesn't overlap any earlier-placed label's bounding box.
+ * Labels stack upward in 20 px increments — matches Google Sheets and
+ * Office Online behavior when peers cluster.
+ *
+ * Mutates the array in place. Runs O(n²) which is fine — a typical
+ * collab session has < 10 active peers in view at once.
+ */
+function assignLabelSlots(rects: Rect[]): void {
+  const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+  // Sort by cursor top so the topmost cursor takes slot 0 — feels
+  // more natural visually than "first peer in the map wins".
+  const order = rects
+    .map((_, i) => i)
+    .sort((a, b) => rects[a].top - rects[b].top);
+  for (const idx of order) {
+    const r = rects[idx];
+    const labelLeft = r.left - 2;
+    const labelRight = labelLeft + Math.ceil(r.name.length * LABEL_CHAR_WIDTH) + LABEL_PAD;
+    let slot = 0;
+    // Try increasing slots until we don't intersect any placed label.
+    while (slot < 20) {
+      const labelTopAbs = r.top + LABEL_BASE_TOP - slot * LABEL_SLOT_HEIGHT;
+      const labelBottomAbs = labelTopAbs + LABEL_HEIGHT;
+      const conflict = placed.some(
+        (p) =>
+          labelLeft < p.right &&
+          labelRight > p.left &&
+          labelTopAbs < p.bottom &&
+          labelBottomAbs > p.top,
+      );
+      if (!conflict) {
+        rects[idx] = { ...r, labelTop: LABEL_BASE_TOP - slot * LABEL_SLOT_HEIGHT };
+        placed.push({
+          left: labelLeft,
+          right: labelRight,
+          top: labelTopAbs,
+          bottom: labelBottomAbs,
+        });
+        break;
+      }
+      slot += 1;
+    }
+  }
 }

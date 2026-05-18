@@ -381,6 +381,38 @@ export function FormulaBar() {
         onKeyDown={onKeyDown}
         onKeyUp={trackCaret}
         onClick={trackCaret}
+        onPaste={(e) => {
+          // Multi-line formulas are valid for readability — Excel
+          // allows newlines inside the formula bar for SUM/IF style
+          // wrapping. Native <input type="text"> drops newlines in
+          // some browsers and replaces them with U+000A in others;
+          // either way the visible single-line input can't render
+          // them. Normalize newlines to spaces so the *formula* stays
+          // valid even though the editor doesn't show line breaks.
+          //
+          // (Switching to <textarea> would let the bar show real
+          // line breaks, but that breaks the existing Enter-commits
+          // / Tab-commits semantics across the suite — bigger change
+          // than this bug warrants.)
+          const text = e.clipboardData?.getData('text/plain');
+          if (!text || !/[\r\n]/.test(text)) return;
+          e.preventDefault();
+          const normalized = text.replace(/\r\n?|\n/g, ' ');
+          const input = inputRef.current;
+          if (!input) return;
+          const start = input.selectionStart ?? value.length;
+          const end = input.selectionEnd ?? start;
+          const before = value.slice(0, start);
+          const after = value.slice(end);
+          const next = `${before}${normalized}${after}`;
+          if (!editing) draftCellRef.current = a1;
+          flushSync(() => setDraft(next));
+          requestAnimationFrame(() => {
+            const caret = before.length + normalized.length;
+            input.setSelectionRange(caret, caret);
+            lastCaretRef.current = caret;
+          });
+        }}
         onSelect={() => {
           if (!editing || !inputRef.current) return;
           const caret = inputRef.current.selectionStart ?? value.length;
