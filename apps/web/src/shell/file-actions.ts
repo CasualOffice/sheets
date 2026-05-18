@@ -25,15 +25,52 @@ import {
 export type OpenProgress = (phase: 'reading' | 'parsing' | 'mounting') => void;
 
 /**
+ * Hard limit on uploads. Past this size, Chrome reliably OOMs the tab
+ * mid-parse — better to fail fast with a clear error than crash. The
+ * supported ceiling matches the pipeline doc; soft warning lives in
+ * the overlay (the user has time to read it during the parse stage).
+ *
+ * Both knobs are baked at Vite build time from `VITE_MAX_OPEN_MB` /
+ * `VITE_SOFT_WARN_MB` so a self-host can raise them per their tab's
+ * memory ceiling (or lower them on weaker hardware). Defaults are
+ * sized for a typical desktop Chrome — pipeline doc §"Recommended
+ * limits".
+ *
+ * If you raise these, also bump the server's multipart limit
+ * (`MAX_UPLOAD_MB` env in `apps/server/src/index.ts`) so the co-edit
+ * seed upload doesn't 413.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const envMaxOpenMb = Number((import.meta.env as any).VITE_MAX_OPEN_MB);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const envSoftWarnMb = Number((import.meta.env as any).VITE_SOFT_WARN_MB);
+export const MAX_OPEN_BYTES =
+  (Number.isFinite(envMaxOpenMb) && envMaxOpenMb > 0 ? envMaxOpenMb : 100) * 1024 * 1024;
+export const SOFT_WARN_BYTES =
+  (Number.isFinite(envSoftWarnMb) && envSoftWarnMb > 0 ? envSoftWarnMb : 25) * 1024 * 1024;
+
+/**
  * Open a spreadsheet from disk. We auto-detect by file extension and
  * dispatch to the right parser. xlsx files go through ExcelJS (in a
  * worker); ods files through SheetJS Community.
+ *
+ * Throws if `file.size` exceeds `MAX_OPEN_BYTES` — the worker can't
+ * hold the parsed `IWorkbookData` for a 100+ MB xlsx without OOM-ing
+ * the tab. Caller is expected to catch and surface the error via the
+ * loading overlay.
  */
 export async function openSpreadsheetFile(
   file: File,
   onProgress?: OpenProgress,
 ): Promise<IWorkbookData> {
   console.info('[open] reading file', { name: file.name, size: file.size });
+  if (file.size > MAX_OPEN_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(0);
+    const cap = (MAX_OPEN_BYTES / (1024 * 1024)).toFixed(0);
+    throw new Error(
+      `File too large to open in the browser (${mb} MB). The current ceiling is ${cap} MB — past that, the worker can't allocate the parsed workbook without crashing the tab. Split the workbook or strip unused sheets before opening.`,
+    );
+  }
   onProgress?.('reading');
   const buf = await file.arrayBuffer();
   console.info('[open] buffer read', buf.byteLength, 'bytes — parsing');

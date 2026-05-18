@@ -39,10 +39,17 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 # ─────────────── build-web ───────────────
 FROM deps AS build-web
 COPY apps/web apps/web
-# Co-editing is gated by this flag at build time so the GitHub Pages
-# bundle stays single-user (its workflow leaves it unset). The Docker
-# image ships co-edit ON since it bundles the Hocuspocus server.
-ENV VITE_COLLAB_ENABLED=1
+
+# Build-time knobs the Vite bundle bakes in. Override via
+# `--build-arg VITE_MAX_OPEN_MB=200` on `docker build` or via the
+# `args:` block of `docker-compose.yml`. Defaults match `.env.example`.
+ARG VITE_COLLAB_ENABLED=1
+ARG VITE_MAX_OPEN_MB=100
+ARG VITE_SOFT_WARN_MB=25
+ENV VITE_COLLAB_ENABLED=${VITE_COLLAB_ENABLED}
+ENV VITE_MAX_OPEN_MB=${VITE_MAX_OPEN_MB}
+ENV VITE_SOFT_WARN_MB=${VITE_SOFT_WARN_MB}
+
 # Same base path the production deploy expects — assets resolve from the
 # server's root. PAGES_BASE only matters for the GitHub Pages build.
 RUN pnpm --filter @sheet/web build

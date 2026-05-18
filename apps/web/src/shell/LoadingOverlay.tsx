@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLoading, type LoadingPhase } from '../loading-context';
 import { Icon } from './Icon';
+import { SOFT_WARN_BYTES } from './file-actions';
 
 /**
  * Centered modal shown while a multi-MB workbook is being opened. The
@@ -73,7 +74,11 @@ export function LoadingOverlay() {
   }
 
   const showElapsed = elapsed > 1500;
-  const showBigFileHint = elapsed > 4000;
+  // Show the "big file" hint immediately once the user picks something
+  // over the soft warning, instead of waiting 4 s — they already know
+  // it's going to be slow; tell them up front.
+  const isHugeFile = (state.sizeBytes ?? 0) > SOFT_WARN_BYTES;
+  const showBigFileHint = isHugeFile || elapsed > 4000;
   const sizeText = state.sizeBytes ? formatBytes(state.sizeBytes) : null;
 
   return (
@@ -99,7 +104,9 @@ export function LoadingOverlay() {
         )}
         {showBigFileHint && (
           <div className="loading-overlay__hint">
-            Large workbooks can take a few extra seconds to open.
+            {isHugeFile
+              ? 'This is a large workbook. Opening can take 10+ seconds and may use multiple GB of memory.'
+              : 'Large workbooks can take a few extra seconds to open.'}
           </div>
         )}
       </div>

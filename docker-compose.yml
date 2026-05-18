@@ -13,19 +13,30 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Vite bakes these into the bundle at build time — override here
+        # if you want the image to ship with different file-size guards
+        # than the defaults.
+        VITE_COLLAB_ENABLED: ${VITE_COLLAB_ENABLED:-1}
+        VITE_MAX_OPEN_MB: ${VITE_MAX_OPEN_MB:-100}
+        VITE_SOFT_WARN_MB: ${VITE_SOFT_WARN_MB:-25}
     container_name: casual-sheets
     restart: unless-stopped
     ports:
       - '3000:3000'
     environment:
       NODE_ENV: production
-      HOST: 0.0.0.0
-      PORT: '3000'
-      REDIS_URL: redis://redis:6379
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-3000}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       # Eviction window for idle rooms (minutes). After the last client
       # leaves and this elapses, the room is freed in-process and its
       # Redis snapshot will also lapse via RedisStorage's 7-day TTL.
-      ROOM_TTL_MIN: '15'
+      ROOM_TTL_MIN: ${ROOM_TTL_MIN:-15}
+      # Cap on multipart + raw-binary uploads (xlsx seed + gzipped
+      # snapshot). Defaults to 100 MB. Raise alongside VITE_MAX_OPEN_MB
+      # in the build args below if you need bigger workbooks.
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
     depends_on:
       redis:
         condition: service_healthy

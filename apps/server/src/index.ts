@@ -11,23 +11,29 @@ import { createStorage } from './storage.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
+// Cap on multipart + raw-binary uploads — bounds the seed/snapshot
+// path. If you raise this, also bump the web client's VITE_MAX_OPEN_MB
+// so the share dialog doesn't get rejected here after the user picked
+// a workbook the browser said it could open.
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB ?? 100);
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, bodyLimit: MAX_UPLOAD_BYTES });
 
 await app.register(cors, { origin: true });
-await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
+await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES } });
 
 // Accept raw binary uploads (used by /api/rooms/:id/snapshot for the
 // gzipped IWorkbookData cache). Cap matches the multipart limit so a
 // single content-type isn't an end-run around the size guard.
 app.addContentTypeParser(
   'application/gzip',
-  { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 },
+  { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES },
   (_req, body, done) => done(null, body),
 );
 app.addContentTypeParser(
   'application/octet-stream',
-  { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 },
+  { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES },
   (_req, body, done) => done(null, body),
 );
 
