@@ -21,6 +21,7 @@ export const MAX_ROWS = 8192;
 export const MAX_COLUMNS = 1024;
 
 export function emptyWorkbook(): IWorkbookData {
+  const nowIso = new Date().toISOString();
   return {
     // Unique per call — Univer's IUniverInstanceService rejects duplicate unit
     // ids, so a fresh blank workbook must not collide with the one it's
@@ -40,6 +41,13 @@ export function emptyWorkbook(): IWorkbookData {
         rowCount: INITIAL_ROWS,
         columnCount: INITIAL_COLUMNS,
       },
+    },
+    // Stamp creation time up front so a never-saved workbook still has
+    // an honest "Created" in the Properties dialog. modifiedAt bumps
+    // on every Save (export-impl always writes new Date() to xlsx),
+    // and re-reads on the next open.
+    custom: {
+      properties: { createdAt: nowIso, modifiedAt: nowIso },
     },
   };
 }

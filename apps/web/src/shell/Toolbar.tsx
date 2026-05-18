@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
+import { useBusy } from '../busy-context';
 import { useActiveCellState, type HAlign, type VAlign } from '../hooks/useActiveCellState';
 import { Icon } from './Icon';
 import {
@@ -133,6 +134,7 @@ function useScrollOverflow(ref: React.RefObject<HTMLElement>) {
 export function Toolbar() {
   const api = useUniverAPI();
   const ui = useUI();
+  const busy = useBusy();
   const state = useActiveCellState();
   const ready = Boolean(api) && state.ready;
 
@@ -314,11 +316,19 @@ export function Toolbar() {
                 icon: 'table_chart',
               })),
             ]}
-            onDefault={() => api && formatAsTable(api, 'table-default-0')}
+            // Format-as-Table can take seconds on big selections — wrap
+            // with the busy pill so the user knows the click registered.
+            onDefault={() => {
+              if (!api) return;
+              void busy.runBusy('Creating table…', () => formatAsTable(api, 'table-default-0'));
+            }}
             onChoose={(id) => {
               if (!api) return;
-              if (id === 'plain') formatAsTable(api, undefined);
-              else formatAsTable(api, id as TableThemeId);
+              void busy.runBusy('Creating table…', () =>
+                id === 'plain'
+                  ? formatAsTable(api, undefined)
+                  : formatAsTable(api, id as TableThemeId),
+              );
             }}
           />
           <ToolbarButton

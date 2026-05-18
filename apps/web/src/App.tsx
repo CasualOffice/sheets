@@ -24,6 +24,7 @@ import { CollabDriver } from './collab/CollabDriver';
 import { CreateRoomDialog } from './shell/CreateRoomDialog';
 import { LoadingOverlay } from './shell/LoadingOverlay';
 import { LoadingContext, type LoadingCtxValue, type LoadingState } from './loading-context';
+import { BusyProvider } from './busy-context';
 
 export function App() {
   // Snapshot lives in a ref, NOT React state — see workbook-context.tsx.
@@ -128,6 +129,7 @@ export function App() {
       <UIContext.Provider value={uiValue}>
         <WorkbookContext.Provider value={wbValue}>
         <LoadingContext.Provider value={loadingValue}>
+        <BusyProvider>
           <OutlineProvider>
             <GrowthDriver />
             <FileDropDriver />
@@ -155,6 +157,7 @@ export function App() {
             </CollabDriver>
             <LoadingOverlay />
           </OutlineProvider>
+        </BusyProvider>
         </LoadingContext.Provider>
         </WorkbookContext.Provider>
       </UIContext.Provider>

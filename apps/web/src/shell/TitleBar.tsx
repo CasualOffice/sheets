@@ -5,6 +5,7 @@ import { useUniverAPI } from '../use-univer';
 import { useCollab } from '../collab/collab-context';
 import { AvatarStack } from '../collab/AvatarStack';
 import { Icon } from './Icon';
+import { BusyPill } from './BusyPill';
 
 /**
  * Title bar — brand on the left, editable filename in the middle. Click the
@@ -108,6 +109,7 @@ export function TitleBar() {
       <span className="titlebar__spacer" />
 
       <div className="titlebar__actions" data-testid="titlebar-actions">
+        <BusyPill />
         <AvatarStack />
         {collab.roomId ? (
           <span

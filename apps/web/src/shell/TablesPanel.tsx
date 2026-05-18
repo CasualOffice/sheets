@@ -5,6 +5,7 @@ import { useUI } from '../use-ui';
 import { ensurePluginByName } from '../univer/lazy-plugins';
 import { Icon } from './Icon';
 import { TABLE_THEMES, formatAsTable, type TableThemeId } from './tab-actions';
+import { useBusy } from '../busy-context';
 
 type TableRange = {
   startRow: number;
@@ -80,6 +81,7 @@ const shouldRefresh = (id?: string) =>
 
 export function TablesPanel() {
   const api = useUniverAPI();
+  const busy = useBusy();
   const ui = useUI();
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
@@ -178,7 +180,10 @@ export function TablesPanel() {
               className="btn-primary tables-panel__empty-cta"
               data-testid="tables-panel-empty-cta"
               disabled={!api}
-              onClick={() => api && void formatAsTable(api, 'table-default-0')}
+              onClick={() => {
+                if (!api) return;
+                void busy.runBusy('Creating table…', () => formatAsTable(api, 'table-default-0'));
+              }}
             >
               Format selection as Table
             </button>

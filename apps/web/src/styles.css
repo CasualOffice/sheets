@@ -551,6 +551,38 @@ button {
   border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
+/* Working-on-it pill — fires while a known-slow action is mid-flight
+   (Format as Table on big sheets, Sort, Fill). Click-through so the
+   user can still hit other UI. */
+.busy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: var(--weight-medium, 500);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.busy-pill__spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-top-color: var(--color-accent);
+  animation: busy-pill-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes busy-pill-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Ribbon */
 .ribbon {
   display: flex;
