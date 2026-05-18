@@ -283,5 +283,26 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
     sheetOrder,
     sheets,
     ...(resources ? { resources } : {}),
+    custom: {
+      // Map xlsx Core/App properties back into our `custom.properties`
+      // slot so the Properties dialog shows what the file actually
+      // carried. The exporter mirrors the same names in reverse.
+      properties: {
+        ...(wb.title ? { title: wb.title } : {}),
+        ...(wb.subject ? { subject: wb.subject } : {}),
+        ...(wb.description ? { description: wb.description } : {}),
+        ...(wb.keywords ? { tags: wb.keywords } : {}),
+        ...(wb.category ? { category: wb.category } : {}),
+        ...(wb.company ? { company: wb.company } : {}),
+        ...(wb.manager ? { manager: wb.manager } : {}),
+        ...(wb.creator ? { author: wb.creator } : {}),
+        ...(wb.created instanceof Date && !isNaN(wb.created.getTime())
+          ? { createdAt: wb.created.toISOString() }
+          : {}),
+        ...(wb.modified instanceof Date && !isNaN(wb.modified.getTime())
+          ? { modifiedAt: wb.modified.toISOString() }
+          : {}),
+      },
+    },
   };
 }

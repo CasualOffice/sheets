@@ -33,6 +33,42 @@ export async function workbookDataToXlsxImpl(
   const wb = new ExcelJS.Workbook();
   wb.title = data.name || 'Untitled';
 
+  // Map our `custom.properties` slot (set by File → Properties) into
+  // ExcelJS workbook properties so the file's Core + App properties
+  // (docProps/core.xml + docProps/app.xml) carry them. Without this
+  // mapping the Properties dialog values would silently drop on every
+  // save round-trip; we'd also leave `created` / `modified` blank,
+  // which makes the file look untouched to Windows Explorer / Finder.
+  const customProps = (data.custom?.properties ?? {}) as {
+    title?: string;
+    subject?: string;
+    author?: string;
+    tags?: string;
+    category?: string;
+    description?: string;
+    company?: string;
+    manager?: string;
+    createdAt?: string;
+    modifiedAt?: string;
+  };
+  if (customProps.title) wb.title = customProps.title;
+  if (customProps.subject) wb.subject = customProps.subject;
+  if (customProps.description) wb.description = customProps.description;
+  // Excel's "Tags" / "Keywords" field is a single comma-separated string.
+  if (customProps.tags) wb.keywords = customProps.tags;
+  if (customProps.category) wb.category = customProps.category;
+  if (customProps.company) wb.company = customProps.company;
+  if (customProps.manager) wb.manager = customProps.manager;
+  if (customProps.author) {
+    wb.creator = customProps.author;
+    wb.lastModifiedBy = customProps.author;
+  }
+  // Created — fall back to now if absent so an unset file at least has
+  // a non-1900 timestamp. Modified always bumps to the moment of save.
+  const createdIso = customProps.createdAt ?? new Date().toISOString();
+  wb.created = new Date(createdIso);
+  wb.modified = new Date();
+
   const resolveStyle = (s: ICellSnapshot['s']): IStyleData | undefined => {
     if (!s) return undefined;
     if (typeof s === 'string') return (data.styles?.[s] ?? undefined) as IStyleData | undefined;

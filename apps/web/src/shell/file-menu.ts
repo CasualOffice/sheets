@@ -12,6 +12,12 @@ export type WorkbookProperties = {
   tags?: string;
   category?: string;
   description?: string;
+  /** Company / manager — surface as separate fields in xlsx App
+   *  Properties (`docProps/app.xml`), used by Office's right-click
+   *  details pane. Kept editable so a self-hosted deploy can preset
+   *  per-org branding. */
+  company?: string;
+  manager?: string;
   /** ISO timestamps. */
   createdAt?: string;
   modifiedAt?: string;
