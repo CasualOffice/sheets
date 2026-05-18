@@ -6,7 +6,7 @@ import { useUniverAPI } from '../use-univer';
  * Reacts to: SheetCreated, SheetDeleted, SheetNameChanged, ActiveSheetChanged.
  */
 
-export type SheetSummary = { id: string; name: string };
+export type SheetSummary = { id: string; name: string; hidden: boolean };
 
 export type SheetsState = {
   ready: boolean;
@@ -26,7 +26,16 @@ export function useSheets(): SheetsState {
     const compute = (): SheetsState => {
       const wb = api.getActiveWorkbook();
       if (!wb) return EMPTY;
-      const sheets = wb.getSheets().map((s) => ({ id: s.getSheetId(), name: s.getSheetName() }));
+      const sheets = wb.getSheets().map((s) => ({
+        id: s.getSheetId(),
+        name: s.getSheetName(),
+        // `isSheetHidden` is on the sheets facade — hidden xlsx sheets
+        // round-trip through here. The tab strip uses this to skip
+        // them from the visible row and offer a separate "Unhide…"
+        // menu, matching Excel behavior.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        hidden: (s as any).isSheetHidden?.() === true,
+      }));
       const active = wb.getActiveSheet();
       return {
         ready: true,
@@ -52,6 +61,15 @@ export function useSheets(): SheetsState {
       // unitAdded$ BEFORE setCurrentUnitForType — calling compute()
       // synchronously here would still see the old active workbook.
       api.onUniverSheetCreated(() => queueMicrotask(refresh)),
+      // Visibility (hide/show) doesn't have a dedicated facade event —
+      // the underlying mutation `sheet.mutation.set-worksheet-hidden`
+      // fires through CommandExecuted. Subscribe so the tab strip
+      // immediately removes/restores tabs when a sheet is hidden or
+      // unhidden from the context menu.
+      api.addEvent(api.Event.CommandExecuted, (e) => {
+        const id = (e as { id?: string }).id;
+        if (id === 'sheet.mutation.set-worksheet-hidden') refresh();
+      }),
     ];
     return () => {
       for (const d of disposables) d.dispose();

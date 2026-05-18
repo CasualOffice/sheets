@@ -37,6 +37,35 @@ export function addSheet(api: FUniver) {
   api.getActiveWorkbook()?.insertSheet();
 }
 
+/** Hide the given sheet. Excel keeps the sheet in the workbook (and
+ *  its formulas still resolve) — just not visible in the tab strip.
+ *  No-ops if it's the only visible sheet; Excel disallows hiding the
+ *  last one. */
+export function hideSheet(api: FUniver, sheetId: string): boolean {
+  const wb = api.getActiveWorkbook();
+  if (!wb) return false;
+  const sheets = wb.getSheets();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visibleCount = sheets.filter((s) => (s as any).isSheetHidden?.() !== true).length;
+  if (visibleCount <= 1) return false;
+  const target = sheets.find((s) => s.getSheetId() === sheetId);
+  if (!target) return false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (target as any).hideSheet?.();
+  return true;
+}
+
+/** Show a previously-hidden sheet. */
+export function showSheet(api: FUniver, sheetId: string): boolean {
+  const wb = api.getActiveWorkbook();
+  if (!wb) return false;
+  const target = wb.getSheets().find((s) => s.getSheetId() === sheetId);
+  if (!target) return false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (target as any).showSheet?.();
+  return true;
+}
+
 /**
  * Duplicate a sheet (Excel "Move or Copy → Create a copy"). Univer ships the
  * heavy lifting — we just dispatch the command with the source subUnitId.

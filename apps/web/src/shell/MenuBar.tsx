@@ -166,7 +166,9 @@ export function MenuBar() {
     } catch (err) {
       // Surface failures in the overlay rather than window.alert so the
       // user can read + copy the actual error message instead of losing
-      // it to an OS dialog.
+      // it to an OS dialog. `onRetry` reopens the file picker so the
+      // user can pick the same (or a different) file without leaving
+      // the error card.
       const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       console.error('[open] failed', err);
       loading.set({
@@ -174,6 +176,7 @@ export function MenuBar() {
         sizeBytes: openedFile?.size,
         phase: 'reading',
         error: msg,
+        onRetry: () => void handleOpen(),
       });
     }
   };

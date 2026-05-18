@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
 import { useActiveCellState, type HAlign, type VAlign } from '../hooks/useActiveCellState';
+import { Icon } from './Icon';
 import {
   NUMBER_FORMATS,
   copy,
@@ -96,15 +98,76 @@ function detectFormatKey(pattern: string): NumberFormatKey {
   return 'general';
 }
 
+/**
+ * Track whether the toolbar's horizontal scroller has more content to
+ * either side. Drives the left/right overflow chevrons so users on a
+ * narrow window can see that more buttons exist (instead of guessing
+ * from a hidden scrollbar).
+ */
+function useScrollOverflow(ref: React.RefObject<HTMLElement>) {
+  const [state, setState] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      // 2 px slack so subpixel rounding doesn't leave the right chevron
+      // visible at the actual scroll-end.
+      const left = el.scrollLeft > 0;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+      setState((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [ref]);
+  return state;
+}
+
 export function Toolbar() {
   const api = useUniverAPI();
   const ui = useUI();
   const state = useActiveCellState();
   const ready = Boolean(api) && state.ready;
 
+  const innerRef = useRef<HTMLDivElement>(null);
+  const overflow = useScrollOverflow(innerRef);
+  const scrollBy = (dx: number) =>
+    innerRef.current?.scrollBy({ left: dx, behavior: 'smooth' });
+
   return (
     <nav className="toolbar" data-testid="toolbar" aria-label="Toolbar">
-      <div className="toolbar__inner">
+      {overflow.left && (
+        <button
+          type="button"
+          className="toolbar__overflow toolbar__overflow--left"
+          data-testid="toolbar-overflow-left"
+          aria-label="Scroll toolbar left"
+          tabIndex={-1}
+          onClick={() => scrollBy(-240)}
+        >
+          <Icon name="chevron_left" size="sm" />
+        </button>
+      )}
+      {overflow.right && (
+        <button
+          type="button"
+          className="toolbar__overflow toolbar__overflow--right"
+          data-testid="toolbar-overflow-right"
+          aria-label="Scroll toolbar right — more buttons available"
+          tabIndex={-1}
+          onClick={() => scrollBy(240)}
+        >
+          <Icon name="chevron_right" size="sm" />
+        </button>
+      )}
+      <div className="toolbar__inner" ref={innerRef}>
         <RibbonGroup label="History">
           <ToolbarButton id="undo" label="Undo (Ctrl+Z)" icon="undo" disabled={!ready} onClick={() => api && undo(api)} />
           <ToolbarButton id="redo" label="Redo (Ctrl+Y)" icon="redo" disabled={!ready} onClick={() => api && redo(api)} />

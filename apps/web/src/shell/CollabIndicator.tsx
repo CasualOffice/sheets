@@ -5,7 +5,10 @@ const LABELS: Record<string, string> = {
   off: 'Single-user mode',
   connecting: 'Connecting to room…',
   live: 'Live — co-editing on',
-  offline: 'Disconnected — trying to reconnect',
+  // Wording matters: "Offline" reads as a permanent state and worries
+  // users; the bridge actually reconnects automatically and edits queue
+  // locally in the meantime. "Reconnecting…" sets the right expectation.
+  offline: 'Reconnecting — your edits will sync when the connection is back',
 };
 
 /**
@@ -31,7 +34,13 @@ export function CollabIndicator() {
       >
         <span className="collab-indicator__dot" aria-hidden="true" />
         <span className="collab-indicator__text">
-          {status === 'live' ? 'Live' : status === 'connecting' ? '…' : status === 'offline' ? 'Offline' : 'Solo'}
+          {status === 'live'
+            ? 'Live'
+            : status === 'connecting'
+              ? '…'
+              : status === 'offline'
+                ? 'Reconnecting…'
+                : 'Solo'}
         </span>
       </span>
     </Tooltip>

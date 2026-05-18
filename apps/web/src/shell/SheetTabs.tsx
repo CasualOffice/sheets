@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUniverAPI } from '../use-univer';
-import { useSheets } from '../hooks/useSheets';
+import { useSheets, type SheetSummary } from '../hooks/useSheets';
 import { useActiveCellState } from '../hooks/useActiveCellState';
 import {
   addSheet,
   deleteSheetById,
   duplicateSheet,
+  hideSheet,
   moveSheetTo,
   renameSheet,
+  showSheet,
   switchToSheet,
 } from './sheet-actions';
 import { redo, undo } from './home-tab-actions';
@@ -75,7 +77,11 @@ export function SheetTabs() {
     setDraftName('');
   };
 
-  const canDelete = sheets.length > 1;
+  const visibleSheets = sheets.filter((s) => !s.hidden);
+  const hiddenSheets = sheets.filter((s) => s.hidden);
+  const canDelete = visibleSheets.length > 1;
+  const canHide = visibleSheets.length > 1;
+  const [hiddenMenuOpen, setHiddenMenuOpen] = useState(false);
 
   return (
     <div className="sheet-tabs" data-testid="sheet-tabs" role="tablist">
@@ -92,8 +98,26 @@ export function SheetTabs() {
         </button>
       </Tooltip>
 
+      {hiddenSheets.length > 0 && (
+        <Tooltip
+          label={`${hiddenSheets.length} hidden sheet${hiddenSheets.length === 1 ? '' : 's'} — click to unhide`}
+          side="top"
+        >
+          <button
+            type="button"
+            className="sheet-tabs__hidden btn btn--icon"
+            data-testid="sheet-tabs-hidden"
+            aria-label={`Show hidden sheets (${hiddenSheets.length})`}
+            onClick={() => setHiddenMenuOpen((v) => !v)}
+          >
+            <Icon name="visibility_off" size="sm" />
+            <span className="sheet-tabs__hidden-badge">{hiddenSheets.length}</span>
+          </button>
+        </Tooltip>
+      )}
+
       <div className="sheet-tabs__list" data-testid="sheet-tabs-list">
-        {sheets.map((s, i) => (
+        {visibleSheets.map((s, i) => (
           <SheetTabItem
             key={s.id}
             sheet={s}
@@ -120,7 +144,13 @@ export function SheetTabs() {
             }
             onDrop={() => {
               if (api && draggingId && draggingId !== s.id) {
-                moveSheetTo(api, draggingId, i);
+                // Translate the visible-row index to a global sheet
+                // index — moveSheet operates on the full sheet order,
+                // which includes hidden sheets. Without this, dropping
+                // onto a visible tab in a workbook with hidden sheets
+                // would land at the wrong global position.
+                const globalIdx = sheets.findIndex((x) => x.id === s.id);
+                if (globalIdx >= 0) moveSheetTo(api, draggingId, globalIdx);
               }
               setDraggingId(null);
               setDragOverIndex(null);
@@ -230,15 +260,86 @@ export function SheetTabs() {
           x={tabMenu.x}
           y={tabMenu.y}
           canDelete={canDelete}
+          canHide={canHide}
           onClose={() => setTabMenu(null)}
           onRename={() => {
             const target = sheets.find((s) => s.id === tabMenu.sheetId);
             if (target) startRename(target.id, target.name);
           }}
           onDuplicate={() => api && duplicateSheet(api, tabMenu.sheetId)}
+          onHide={() => api && hideSheet(api, tabMenu.sheetId)}
           onDelete={() => api && deleteSheetById(api, tabMenu.sheetId)}
         />
       )}
+
+      {hiddenMenuOpen && hiddenSheets.length > 0 && (
+        <HiddenSheetsMenu
+          sheets={hiddenSheets}
+          onClose={() => setHiddenMenuOpen(false)}
+          onShow={(id) => {
+            if (api) showSheet(api, id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function HiddenSheetsMenu({
+  sheets,
+  onClose,
+  onShow,
+}: {
+  sheets: SheetSummary[];
+  onClose: () => void;
+  onShow: (id: string) => void;
+}) {
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: PointerEvent) => {
+      // Don't close when the click is on the button that opened us —
+      // that button toggles the same state and would re-open.
+      const target = e.target as Node;
+      if (popRef.current?.contains(target)) return;
+      const opener = document.querySelector('[data-testid="sheet-tabs-hidden"]');
+      if (opener?.contains(target)) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popRef}
+      className="menu sheet-tabs__hidden-menu"
+      role="menu"
+      data-testid="hidden-sheets-menu"
+    >
+      <div className="menu__label">Hidden sheets</div>
+      {sheets.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          role="menuitem"
+          className="menu__item"
+          data-testid={`hidden-sheets-menu-show-${s.id}`}
+          onClick={() => {
+            onShow(s.id);
+            onClose();
+          }}
+        >
+          <Icon name="visibility" size="sm" className="menu__item-icon" />
+          <span>{s.name}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -247,17 +348,21 @@ function TabContextMenu({
   x,
   y,
   canDelete,
+  canHide,
   onClose,
   onRename,
   onDuplicate,
+  onHide,
   onDelete,
 }: {
   x: number;
   y: number;
   canDelete: boolean;
+  canHide: boolean;
   onClose: () => void;
   onRename: () => void;
   onDuplicate: () => void;
+  onHide: () => void;
   onDelete: () => void;
 }) {
   const popRef = useRef<HTMLDivElement>(null);
@@ -315,6 +420,20 @@ function TabContextMenu({
       >
         <Icon name="content_copy" size="sm" className="menu__item-icon" />
         <span>Duplicate</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="menu__item"
+        data-testid="sheet-tab-menu-hide"
+        disabled={!canHide}
+        onClick={() => {
+          onHide();
+          onClose();
+        }}
+      >
+        <Icon name="visibility_off" size="sm" className="menu__item-icon" />
+        <span>Hide sheet</span>
       </button>
       <div className="menu__divider" />
       <button

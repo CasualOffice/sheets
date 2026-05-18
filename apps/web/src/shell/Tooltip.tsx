@@ -21,7 +21,11 @@ type Props = {
   /** Side relative to the trigger. Defaults to `bottom` (toolbar buttons sit
    * near the top of the chrome, so the tip naturally falls into the grid). */
   side?: 'top' | 'bottom';
-  /** ms before the tooltip appears. Matches Excel / Sheets feel. */
+  /** ms before the tooltip appears. Defaults to 150 ms — Excel's
+   *  toolbar tooltips feel near-instant, and 300 ms read as sluggish
+   *  on icon-only buttons where the user is already hunting for the
+   *  label. Override per-instance if a slower delay is desired (e.g.
+   *  on a frequently-hovered element). */
   delay?: number;
 };
 
@@ -37,7 +41,7 @@ type Props = {
  *   - Bundle is already heavy with Univer; every kB matters.
  *   - Portals + getBoundingClientRect are stable browser primitives.
  */
-export function Tooltip({ label, children, side = 'bottom', delay = 300 }: Props) {
+export function Tooltip({ label, children, side = 'bottom', delay = 150 }: Props) {
   const child = Children.only(children);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const timerRef = useRef<number | null>(null);

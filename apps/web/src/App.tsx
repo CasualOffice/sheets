@@ -100,6 +100,7 @@ export function App() {
               sizeBytes: next.sizeBytes,
               startedAt: Date.now(),
               error: next.error,
+              onRetry: next.onRetry,
             };
           }
           return { ...prev, ...next, startedAt: prev.startedAt };

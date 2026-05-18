@@ -26,7 +26,13 @@
 
   --color-text: #201f1e;
   --color-text-secondary: #605e5c;
-  --color-text-disabled: #a19f9d;
+  /* Disabled body text. Past value #a19f9d sat at 3.06:1 contrast on
+     white — disabled controls are exempt from WCAG 4.5:1 but several
+     of our icons (especially the formula bar ✓/× actions) became hard
+     to *see at all* when paired with opacity reductions. Darkened to
+     #8a8886 (3.55:1) so the disabled state still reads as "off" but
+     icon glyphs remain legible without opacity tricks. */
+  --color-text-disabled: #8a8886;
   --color-text-on-accent: #ffffff;
 
   --color-hover: rgba(0, 0, 0, 0.05);
@@ -238,6 +244,7 @@ button {
    and white formula bar below provides the layer separation. Subtle inset
    shadow on top gives the strip a slight recessed feel. */
 .toolbar {
+  position: relative; /* anchors the overflow chevron buttons */
   display: flex;
   align-items: center;
   height: var(--toolbar-h);
@@ -245,10 +252,53 @@ button {
   padding: 0;
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
   z-index: 2;
+  /* As a CSS Grid row of `.app`, default `min-width: auto` keeps this
+     element at the min-content size of its descendants — which on a
+     dense toolbar exceeds the viewport and breaks the scroll-clip
+     contract we rely on for the overflow chevrons. `min-width: 0`
+     lets the grid cell shrink so the inner scroller can engage. */
+  min-width: 0;
+}
+
+/* Overflow chevrons that appear at either edge when more toolbar
+   buttons exist off-screen. Float over the underlying inner scroller
+   with a soft fade so the cropped icon below them still hints at
+   continued content. */
+.toolbar__overflow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  z-index: 3;
+}
+.toolbar__overflow--left {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    var(--color-surface-alt) 60%,
+    rgba(244, 243, 242, 0)
+  );
+}
+.toolbar__overflow--right {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    var(--color-surface-alt) 60%,
+    rgba(244, 243, 242, 0)
+  );
+}
+.toolbar__overflow:hover {
+  color: var(--color-text);
 }
 
 .toolbar__inner {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   height: 100%;
   padding: 0 var(--space-5);
@@ -256,7 +306,14 @@ button {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  max-width: 100%;
+  /* As a flex item inside .toolbar, take whatever width is left after
+     the (absolutely-positioned) chevrons. `min-width: 0` is essential
+     — without it, a flex item's default `min-width: auto` keeps the
+     element at its content's intrinsic width and scrolling never
+     engages. The previous `inline-flex` + `max-width: 100%` was a
+     no-op in practice for the same reason. */
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .toolbar__inner::-webkit-scrollbar { display: none; }
@@ -814,7 +871,11 @@ button {
 }
 
 .formula-bar__action:disabled {
-  opacity: 0.4;
+  /* Use colour dimming instead of opacity so the icon glyph stays
+     legible against the bar background. opacity: 0.4 made the ✓/×
+     icons feel "missing" rather than "disabled". */
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
 }
 
 .formula-bar__fx {
@@ -1204,8 +1265,51 @@ button {
   opacity: 0.4;
 }
 
+/* Drop target during sheet-tab drag-reorder. The previous 2 px inset
+   line on the left edge was almost invisible (the tab strip's own
+   borders washed it out). Combine a thick left rail + a faint accent
+   tint so the user can clearly see where the dragged tab will land. */
 .sheet-tab--drop-target {
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+/* "Hidden sheets" button on the sheet-tabs strip, only shown when at
+   least one sheet is hidden. Mirrors Excel's right-click → Unhide
+   affordance but inline so keyboard users don't need to discover it
+   via a context menu. */
+.sheet-tabs__hidden {
+  position: relative;
+  margin-left: 2px;
+}
+.sheet-tabs__hidden-badge {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+}
+.sheet-tabs__hidden-menu {
+  position: absolute;
+  bottom: calc(var(--sheet-tabs-h) + 4px);
+  left: 36px;
+  min-width: 180px;
+  z-index: 30;
+}
+.menu__label {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
 }
 
 /* Hover-revealed × on each tab */
@@ -1617,6 +1721,17 @@ button {
 .loading-overlay__size {
   color: var(--color-text-soft, var(--color-text));
   font-weight: var(--weight-regular, 400);
+}
+
+/* "Step 2 of 3" pip-style indicator above the phase text. Reassures
+   the user that progress is forward when ExcelJS gives no other
+   signal during a multi-second parse. */
+.loading-overlay__step {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin: 0 0 2px;
 }
 
 .loading-overlay__phase {

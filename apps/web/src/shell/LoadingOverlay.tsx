@@ -20,6 +20,18 @@ const PHASE_TEXT: Record<LoadingPhase, string> = {
   mounting: 'Loading into the editor…',
 };
 
+/** Step number out of 3 for each phase — drives the "Step 2 of 3"
+ *  indicator. Multi-second waits feel less like a hang when the user
+ *  can see *which* step is happening and that progress is forward.
+ *  We don't fake a progress bar (ExcelJS has no progress events) —
+ *  just the discrete step count, which is honest. */
+const PHASE_STEP: Record<LoadingPhase, number> = {
+  reading: 1,
+  parsing: 2,
+  mounting: 3,
+};
+const TOTAL_STEPS = 3;
+
 export function LoadingOverlay() {
   const { state, set } = useLoading();
   const [elapsed, setElapsed] = useState(0);
@@ -41,6 +53,7 @@ export function LoadingOverlay() {
   // blocking so the user explicitly dismisses; otherwise a fast-fail
   // would flash and vanish before they can read the message.
   if (state.error) {
+    const retry = state.onRetry;
     return (
       <div
         className="loading-overlay"
@@ -59,15 +72,29 @@ export function LoadingOverlay() {
           <pre className="loading-overlay__error-text" data-testid="loading-overlay-error">
             {state.error}
           </pre>
-          <button
-            type="button"
-            className="btn-primary"
-            data-testid="loading-overlay-dismiss"
-            onClick={() => set(null)}
-            style={{ marginTop: 12 }}
-          >
-            Dismiss
-          </button>
+          <div className="loading-overlay__actions" style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              data-testid="loading-overlay-dismiss"
+              onClick={() => set(null)}
+            >
+              Dismiss
+            </button>
+            {retry && (
+              <button
+                type="button"
+                className="btn-primary"
+                data-testid="loading-overlay-retry"
+                onClick={() => {
+                  set(null);
+                  retry();
+                }}
+              >
+                Try again
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -90,6 +117,13 @@ export function LoadingOverlay() {
         <div className="loading-overlay__title" data-testid="loading-overlay-title">
           Opening <strong>{state.fileName}</strong>
           {sizeText && <span className="loading-overlay__size"> · {sizeText}</span>}
+        </div>
+        <div
+          className="loading-overlay__step"
+          data-testid="loading-overlay-step"
+          aria-label={`Step ${PHASE_STEP[state.phase]} of ${TOTAL_STEPS}`}
+        >
+          Step {PHASE_STEP[state.phase]} of {TOTAL_STEPS}
         </div>
         <div className="loading-overlay__phase" data-testid="loading-overlay-phase">
           {PHASE_TEXT[state.phase]}
