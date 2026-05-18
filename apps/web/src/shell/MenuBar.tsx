@@ -47,12 +47,18 @@ import {
   insertColumnLeft,
   insertColumnRight,
   insertComment,
+  insertCurrentTime,
   insertHyperlink,
   insertImage,
   insertNewSheet,
   insertRowAbove,
   insertRowBelow,
   insertTable,
+  insertTodayDate,
+  jumpToFirstCell,
+  jumpToLastCell,
+  switchToNextSheet,
+  switchToPreviousSheet,
   openConditionalFormatting,
   openCustomSort,
   openDataValidation,
@@ -120,28 +126,100 @@ export function MenuBar() {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
+      const inTextInput = (() => {
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA';
+      })();
       if (mod && !e.altKey) {
+        // ── File / global ───────────────────────────────────────────
         if (k === 'p' && !e.shiftKey) {
           e.preventDefault();
           if (api) setShowPageSetup(true);
         } else if (k === 's' && !e.shiftKey) {
           e.preventDefault();
           void handleSave();
+        } else if (k === 'n' && !e.shiftKey) {
+          // Ctrl+N — new workbook. Browser default would open a new
+          // window which is almost never what an Excel user wants.
+          e.preventDefault();
+          handleNew();
+        } else if (k === 'o' && !e.shiftKey) {
+          // Ctrl+O — open. Browser default is a no-op for users with
+          // no app handler; we replace it with the file picker.
+          e.preventDefault();
+          void handleOpen();
         } else if (k === 'f' && !e.shiftKey) {
           // Skip when focus is in a plain text input — browsers expect
           // Ctrl+F to do in-page find there. The find dialog is for the
           // sheet, not the formula bar / name box.
-          const tag = (e.target as HTMLElement | null)?.tagName;
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (inTextInput) return;
           e.preventDefault();
           if (api) void openFindReplace(api);
+        } else if (k === 'h' && !e.shiftKey) {
+          // Ctrl+H — Find & Replace (Excel opens directly on Replace
+          // tab; Univer's find-replace plugin doesn't expose a tab
+          // switch param, so we open the dialog and let the user
+          // click Replace — still better than no binding).
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) void openFindReplace(api);
+        } else if (k === 'k' && !e.shiftKey) {
+          // Ctrl+K — insert hyperlink.
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) insertHyperlink(api);
         }
+        // ── Sheet navigation ───────────────────────────────────────
+        // Use e.key for PageUp/PageDown since they're not letters
+        // and don't normalize via toLowerCase the same way.
+        else if (e.key === 'PageUp' && !e.shiftKey) {
+          e.preventDefault();
+          if (api) switchToPreviousSheet(api);
+        } else if (e.key === 'PageDown' && !e.shiftKey) {
+          e.preventDefault();
+          if (api) switchToNextSheet(api);
+        }
+        // ── Jump ───────────────────────────────────────────────────
+        else if (e.key === 'Home' && !e.shiftKey) {
+          // Ctrl+Home — jump to A1.
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) jumpToFirstCell(api);
+        } else if (e.key === 'End' && !e.shiftKey) {
+          // Ctrl+End — jump to the bottom-right of the used range.
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) jumpToLastCell(api);
+        }
+        // ── Date / time ───────────────────────────────────────────
+        else if (e.key === ';' && !e.shiftKey) {
+          // Ctrl+; — today's date.
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) insertTodayDate(api);
+        } else if ((e.key === ':' || (e.shiftKey && e.key === ';')) && e.shiftKey) {
+          // Ctrl+Shift+: — current time. The key event reports `:`
+          // on some keyboards and `;` + shiftKey on others, so we
+          // accept both.
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) insertCurrentTime(api);
+        }
+      }
+      // ── Function keys (no modifier required) ─────────────────────
+      if (e.key === 'F11' && e.shiftKey) {
+        // Shift+F11 — insert new sheet. Browser may eat F11 alone
+        // (full-screen toggle), so the Shift variant is the safe pick.
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) insertNewSheet(api);
       }
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-    // handleSave reads workbook.meta from context; api in deps re-binds
-    // the handler when the workbook is swapped.
+    // handleSave / handleNew / handleOpen read workbook.meta + api
+    // from context; api in deps re-binds the handler when the
+    // workbook is swapped.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, workbook.meta]);
 

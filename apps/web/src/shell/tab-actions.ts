@@ -64,6 +64,100 @@ export function insertNewSheet(api: FUniver) {
   wb.insertSheet();
 }
 
+/** Switch to the previous visible sheet — Ctrl+PageUp in Excel. Skips
+ *  hidden sheets (matches Excel's behavior). No-op if already on the
+ *  first visible sheet. */
+export function switchToPreviousSheet(api: FUniver) {
+  switchSheetByDelta(api, -1);
+}
+
+/** Switch to the next visible sheet — Ctrl+PageDown in Excel. */
+export function switchToNextSheet(api: FUniver) {
+  switchSheetByDelta(api, +1);
+}
+
+function switchSheetByDelta(api: FUniver, delta: -1 | 1): void {
+  const wb = api.getActiveWorkbook();
+  const active = wb?.getActiveSheet();
+  if (!wb || !active) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visible = wb.getSheets().filter((s: any) => !s.isSheetHidden?.());
+  if (visible.length <= 1) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activeId = (active as any).getSheetId?.();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const idx = visible.findIndex((s: any) => s.getSheetId?.() === activeId);
+  if (idx < 0) return;
+  const nextIdx = idx + delta;
+  if (nextIdx < 0 || nextIdx >= visible.length) return;
+  wb.setActiveSheet(visible[nextIdx]);
+}
+
+/** Ctrl+Home — jump to A1 on the active sheet. */
+export function jumpToFirstCell(api: FUniver) {
+  const ws = api.getActiveWorkbook()?.getActiveSheet();
+  if (!ws) return;
+  ws.getRange(0, 0).activate();
+}
+
+/** Ctrl+End — jump to the last used cell on the active sheet. Excel's
+ *  "last cell" is the bottom-right of the used range, NOT the literal
+ *  last allocated cell (which would be far out at the workbook growth
+ *  cap). Falls back to A1 if the sheet has no data. */
+export function jumpToLastCell(api: FUniver) {
+  const ws = api.getActiveWorkbook()?.getActiveSheet();
+  if (!ws) return;
+  let maxRow = 0;
+  let maxCol = 0;
+  let found = false;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const snap = (api as any).getActiveWorkbook?.()?.save?.();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sheetId = (ws as any).getSheetId?.();
+    const sheet = snap?.sheets?.[sheetId];
+    const cellData = sheet?.cellData ?? {};
+    for (const r of Object.keys(cellData)) {
+      const rNum = Number(r);
+      if (rNum > maxRow) maxRow = rNum;
+      for (const c of Object.keys(cellData[r])) {
+        const cNum = Number(c);
+        if (cNum > maxCol) maxCol = cNum;
+        found = true;
+      }
+    }
+  } catch {
+    /* fall through to A1 */
+  }
+  if (!found) {
+    ws.getRange(0, 0).activate();
+    return;
+  }
+  ws.getRange(maxRow, maxCol).activate();
+}
+
+/** Ctrl+; — insert today's date (yyyy-mm-dd) into the active cell. */
+export function insertTodayDate(api: FUniver) {
+  const ws = api.getActiveWorkbook()?.getActiveSheet();
+  const range = ws?.getActiveRange();
+  if (!range) return;
+  const today = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const v = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  range.setValue({ v });
+}
+
+/** Ctrl+Shift+: — insert current time (hh:mm:ss) into the active cell. */
+export function insertCurrentTime(api: FUniver) {
+  const ws = api.getActiveWorkbook()?.getActiveSheet();
+  const range = ws?.getActiveRange();
+  if (!range) return;
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const v = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  range.setValue({ v });
+}
+
 export function hideSelectedRows(api: FUniver) {
   api.executeCommand('sheet.command.set-rows-hidden');
 }

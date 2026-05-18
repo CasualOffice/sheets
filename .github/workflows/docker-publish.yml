@@ -65,3 +65,16 @@ jobs:
             schnsrw/casual-sheets:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Sync Docker Hub overview
+        # Pushes docs/DOCKERHUB.md as the image's "Repository overview"
+        # (the README rendered on the Hub page). Idempotent — re-runs
+        # on every publish so the description stays in lockstep with
+        # whatever the latest release ships.
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: schnsrw/casual-sheets
+          short-description: 'Excel-flavored web spreadsheet with real-time co-editing. Single image (web + Hocuspocus + Fastify). Apache-2.0.'
+          readme-filepath: ./docs/DOCKERHUB.md
