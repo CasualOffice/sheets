@@ -43,4 +43,22 @@ test.describe('Tooltip', () => {
     // hover (a Windows native bubble + ours) — guard against it.
     await expect(page.getByTestId('ribbon-btn-bold')).not.toHaveAttribute('title', /./);
   });
+
+  test('Toolbar button tooltip renders shortcut as a styled pill', async ({ page }) => {
+    // Bold's button label is "Bold (Ctrl+B)" — RibbonControls splits
+    // the parenthesized shortcut out and passes it as the `shortcut`
+    // prop so the tooltip renders it as a distinct pill rather than
+    // inline text. Validates the split helper + the tooltip layout.
+    await page.getByTestId('ribbon-btn-bold').hover();
+    const shortcut = page.getByTestId('tooltip-shortcut').filter({ hasText: 'Ctrl+B' });
+    await expect(shortcut).toBeVisible({ timeout: 2_000 });
+  });
+
+  test('Buttons without a shortcut do not render an empty pill', async ({ page }) => {
+    // Hovering "Format painter" — no parenthesized shortcut in its
+    // label — should not produce a tooltip-shortcut element.
+    await page.getByTestId('ribbon-btn-format-painter').hover();
+    await expect(page.getByTestId('tooltip').first()).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByTestId('tooltip-shortcut')).toHaveCount(0);
+  });
 });

@@ -14,6 +14,10 @@ import { createPortal } from 'react-dom';
 type Props = {
   /** Text shown when the user hovers the wrapped element. */
   label: string;
+  /** Optional keyboard shortcut, rendered as a dim pill alongside the
+   *  label. Excel-style: "Bold   Ctrl+B". When set, the tooltip lays
+   *  out as two rows so the shortcut stays scannable. */
+  shortcut?: string;
   /** Single trigger element. Its `onMouseEnter` / `onMouseLeave` / `onFocus` /
    * `onBlur` props are merged with the tooltip's own handlers — existing
    * handlers on the trigger still fire. */
@@ -41,7 +45,7 @@ type Props = {
  *   - Bundle is already heavy with Univer; every kB matters.
  *   - Portals + getBoundingClientRect are stable browser primitives.
  */
-export function Tooltip({ label, children, side = 'bottom', delay = 150 }: Props) {
+export function Tooltip({ label, shortcut, children, side = 'bottom', delay = 150 }: Props) {
   const child = Children.only(children);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -125,10 +129,15 @@ export function Tooltip({ label, children, side = 'bottom', delay = 150 }: Props
           <span
             role="tooltip"
             data-testid="tooltip"
-            className={`tooltip tooltip--${side}`}
+            className={`tooltip tooltip--${side}${shortcut ? ' tooltip--with-shortcut' : ''}`}
             style={{ top: coords.top, left: coords.left }}
           >
-            {label}
+            <span className="tooltip__label">{label}</span>
+            {shortcut && (
+              <span className="tooltip__shortcut" data-testid="tooltip-shortcut">
+                {shortcut}
+              </span>
+            )}
           </span>,
           document.body,
         )}

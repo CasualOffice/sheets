@@ -3,6 +3,7 @@ packages:
   - "packages/*"
 patchedDependencies:
   '@univerjs/sheets-table-ui@0.22.1': patches/@univerjs__sheets-table-ui@0.22.1.patch
+  '@univerjs/sheets-ui@0.22.1': patches/@univerjs__sheets-ui@0.22.1.patch
 
 # vendor/univer is a read-only clone of dream-num/univer for source-level study.
 # Do NOT include it in the workspace.

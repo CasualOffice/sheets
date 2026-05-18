@@ -38,6 +38,22 @@ type ToolbarButtonProps = {
   onClick?: () => void;
 };
 
+/**
+ * Split a label like `"Bold (Ctrl+B)"` into `{ label: "Bold", shortcut:
+ * "Ctrl+B" }`. Lets toolbar callsites keep using the existing
+ * "Name (Shortcut)" string convention while we render the shortcut as
+ * a styled pill in the tooltip instead of inline text. Returns the
+ * original label and no shortcut when nothing matches.
+ */
+function splitShortcut(label: string): { label: string; shortcut?: string } {
+  // Match a trailing `(...)` containing a Ctrl/Cmd/Alt/Shift/F-key/Enter/Tab
+  // sequence — avoids hijacking parens used for prose like "Margins
+  // (normal)".
+  const m = label.match(/^(.*?)\s*\(((?:Ctrl|Cmd|Alt|Shift|F\d{1,2}|Enter|Tab|Esc)[^)]*)\)\s*$/);
+  if (!m) return { label };
+  return { label: m[1], shortcut: m[2] };
+}
+
 export function ToolbarButton({
   id,
   label,
@@ -46,8 +62,9 @@ export function ToolbarButton({
   disabled,
   onClick,
 }: ToolbarButtonProps) {
+  const split = splitShortcut(label);
   return (
-    <Tooltip label={label}>
+    <Tooltip label={split.label} shortcut={split.shortcut}>
       <button
         type="button"
         className="btn btn--icon"

@@ -19,6 +19,7 @@ import {
   setUniverForLazyLoad,
 } from './univer/lazy-plugins';
 import { installDevHelpers } from './univer/dev-helpers';
+import { registerPasteMergeHook } from './univer/paste-merge-hook';
 import { timeIt, timeItAsync } from './perf';
 import { WorkbookContext } from './workbook-context';
 
@@ -59,6 +60,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
     registerPlugins(univer, hostRef.current);
 
     let teardownDevHelpers: (() => void) | null = null;
+    let teardownPasteMergeHook: (() => void) | null = null;
     let raf = 0;
     let cancelled = false;
     void (async () => {
@@ -76,6 +78,12 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
       const api = FUniver.newAPI(univer);
       apiRef.current = api;
       setApi(api);
+
+      // Excel-paste merge preservation: registers a clipboard hook
+      // that emits AddWorksheetMergeMutation for any colspan/rowspan
+      // cells in the pasted HTML. Without this, pasting a merged
+      // range from Excel lands as N separate cells.
+      teardownPasteMergeHook = registerPasteMergeHook(api);
 
       raf = requestAnimationFrame(() => setReady(true));
       teardownDevHelpers = installDevHelpers(api);
@@ -101,6 +109,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
       setApi(null);
       queueMicrotask(() => toDispose.dispose());
       teardownDevHelpers?.();
+      teardownPasteMergeHook?.();
     };
     // Mount Univer exactly once. Snapshot changes are handled by the swap
     // effect below — recreating Univer per snapshot would race React's render.

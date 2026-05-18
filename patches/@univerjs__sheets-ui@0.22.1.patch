@@ -1,0 +1,41 @@
+diff --git a/lib/cjs/index.js b/lib/cjs/index.js
+index 3018878bbe100e9669f2ae1fada340727e213ee9..ffd1d2a9d5bb81c719d6b59b9d8afb183241a608 100644
+--- a/lib/cjs/index.js
++++ b/lib/cjs/index.js
+@@ -4444,11 +4444,13 @@ let SheetClipboardService = class SheetClipboardService extends _univerjs_core.D
+ 		const filteredHooks = enabledHooks.filter((h) => !h.specialPasteInfo && h.id !== PREDEFINED_HOOK_NAME_PASTE.DEFAULT_PASTE || pasteType === h.id);
+ 		filteredHooks.forEach((h) => {
+ 			var _h$onPasteRows, _h$onPasteColumns, _h$onPasteCells;
++			// PATCH(casual-sheets): see lib/es/index.js — pass rowProperties +
++			// payload so clipboard hooks can read row heights on a regular paste.
+ 			const rowReturn = (_h$onPasteRows = h.onPasteRows) === null || _h$onPasteRows === void 0 ? void 0 : _h$onPasteRows.call(h, {
+ 				range: pastedRange,
+ 				unitId,
+ 				subUnitId
+-			});
++			}, rowProperties || [], { pasteType });
+ 			if (rowReturn) {
+ 				redoMutationsInfo.push(...rowReturn.redos);
+ 				undoMutationsInfo.push(...rowReturn.undos);
+diff --git a/lib/es/index.js b/lib/es/index.js
+index 8c9e6600971d658e95109d58a8e11258c81a19da..e1697df97e8b633b4d11580299a4dfee340a851d 100644
+--- a/lib/es/index.js
++++ b/lib/es/index.js
+@@ -4415,11 +4415,16 @@ let SheetClipboardService = class SheetClipboardService extends Disposable {
+ 		const filteredHooks = enabledHooks.filter((h) => !h.specialPasteInfo && h.id !== PREDEFINED_HOOK_NAME_PASTE.DEFAULT_PASTE || pasteType === h.id);
+ 		filteredHooks.forEach((h) => {
+ 			var _h$onPasteRows, _h$onPasteColumns, _h$onPasteCells;
++			// PATCH(casual-sheets): pass rowProperties (Univer's parser fills
++			// them from `<tr height="…">` / inline styles) and the payload so
++			// clipboard hooks can read row heights on a regular paste, the
++			// same way onPasteColumns already gets colProperties. Without
++			// this, row heights from Excel HTML are silently dropped.
+ 			const rowReturn = (_h$onPasteRows = h.onPasteRows) === null || _h$onPasteRows === void 0 ? void 0 : _h$onPasteRows.call(h, {
+ 				range: pastedRange,
+ 				unitId,
+ 				subUnitId
+-			});
++			}, rowProperties || [], { pasteType });
+ 			if (rowReturn) {
+ 				redoMutationsInfo.push(...rowReturn.redos);
+ 				undoMutationsInfo.push(...rowReturn.undos);

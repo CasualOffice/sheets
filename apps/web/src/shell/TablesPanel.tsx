@@ -4,7 +4,7 @@ import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
 import { ensurePluginByName } from '../univer/lazy-plugins';
 import { Icon } from './Icon';
-import { TABLE_THEMES, type TableThemeId } from './tab-actions';
+import { TABLE_THEMES, formatAsTable, type TableThemeId } from './tab-actions';
 
 type TableRange = {
   startRow: number;
@@ -166,9 +166,22 @@ export function TablesPanel() {
       </header>
       <div className="tables-panel__body">
         {empty ? (
-          <div className="tables-panel__empty">
-            No tables on this sheet yet. Use <strong>Insert → Table</strong> or
-            the <strong>Format as Table</strong> toolbar dropdown to create one.
+          <div className="tables-panel__empty" data-testid="tables-panel-empty">
+            <Icon name="table_rows" size="lg" className="tables-panel__empty-icon" />
+            <div className="tables-panel__empty-title">No tables on this sheet</div>
+            <div className="tables-panel__empty-body">
+              Select the cells you want to format, then click below — or use{' '}
+              <strong>Insert → Table</strong> from the menu.
+            </div>
+            <button
+              type="button"
+              className="btn-primary tables-panel__empty-cta"
+              data-testid="tables-panel-empty-cta"
+              disabled={!api}
+              onClick={() => api && void formatAsTable(api, 'table-default-0')}
+            >
+              Format selection as Table
+            </button>
           </div>
         ) : (
           <ul className="tables-panel__list">
