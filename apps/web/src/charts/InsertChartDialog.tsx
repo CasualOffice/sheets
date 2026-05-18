@@ -8,6 +8,14 @@ type Props = {
   /** A1 reference to seed the source-range input. Pulled from the active
    *  selection by the caller so the dialog opens already filled in. */
   defaultSourceA1: string;
+  /** Pre-selected chart type. Defaults to `'bar'` (Excel's Insert > Chart
+   *  default). Set to the chart's current type when used for "Change
+   *  chart type". */
+  initialType?: ChartType;
+  /** Dialog title — defaults to "Insert chart". */
+  title?: string;
+  /** Primary action label — defaults to "Insert". */
+  confirmLabel?: string;
   onCancel: () => void;
   onConfirm: (args: {
     source: { startRow: number; endRow: number; startColumn: number; endColumn: number };
@@ -36,8 +44,16 @@ const TYPES: TypeChoice[] = [
  * Below 2 rows × 2 cols the chart has no header + data axes, so the
  * dialog refuses with an inline hint instead of producing an empty chart.
  */
-export function InsertChartDialog({ api, defaultSourceA1, onCancel, onConfirm }: Props) {
-  const [type, setType] = useState<ChartType>('bar');
+export function InsertChartDialog({
+  api,
+  defaultSourceA1,
+  initialType = 'bar',
+  title = 'Insert chart',
+  confirmLabel = 'Insert',
+  onCancel,
+  onConfirm,
+}: Props) {
+  const [type, setType] = useState<ChartType>(initialType);
   const [sourceA1, setSourceA1] = useState(defaultSourceA1);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +104,7 @@ export function InsertChartDialog({ api, defaultSourceA1, onCancel, onConfirm }:
 
   return (
     <Dialog
-      title="Insert chart"
+      title={title}
       onClose={onCancel}
       data-testid="insert-chart-dialog"
       footer={
@@ -107,7 +123,7 @@ export function InsertChartDialog({ api, defaultSourceA1, onCancel, onConfirm }:
             data-testid="insert-chart-confirm"
             onClick={confirm}
           >
-            Insert
+            {confirmLabel}
           </button>
         </>
       }
