@@ -748,3 +748,21 @@ export function toggleFilter(api: FUniver) {
   const rangeWithCreateFilter = range as unknown as { createFilter?: () => unknown };
   rangeWithCreateFilter.createFilter?.();
 }
+
+/* ── Formulas tab — force recalc ────────────────────────────────────────── */
+
+/**
+ * Excel's F9 — re-run the whole dependency graph even for cells whose
+ * inputs didn't change. Useful after editing a volatile UDF or when a
+ * referenced external source has refreshed and the engine missed it.
+ *
+ * The mutation id is the one engine-formula listens on internally
+ * (`vendor/univer/packages/engine-formula/src/commands/mutations/
+ * set-formula-calculation.mutation.ts:83`); passing `forceCalculation`
+ * skips the dependency short-circuit.
+ */
+export function forceRecalculate(api: FUniver) {
+  api.executeCommand('formula.mutation.set-formula-calculation-start', {
+    forceCalculation: true,
+  });
+}

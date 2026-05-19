@@ -48,10 +48,12 @@ import {
   type NumberFormatKey,
 } from './home-tab-actions';
 import {
+  applyAutoFunction,
   autoFitColumns,
   autoFitRows,
   deleteSelectedColumn,
   deleteSelectedRow,
+  forceRecalculate,
   freezeAtSelection,
   freezeFirstColumn,
   freezeFirstRow,
@@ -281,6 +283,73 @@ export function MenuBar() {
         e.preventDefault();
         setCellsOp('delete');
       }
+      // ── Number format: Ctrl+Shift+1..6 ───────────────────────────
+      // Use e.code (Digit1..Digit6) instead of e.key — Shift+1 yields
+      // `!` on US, different symbols elsewhere. Digit codes are stable
+      // across layouts. The six bindings map to Excel's defaults:
+      //   1 Number  2 Time  3 Date  4 Currency  5 Percent  6 Scientific
+      if (mod && e.shiftKey && !e.altKey && /^Digit[1-6]$/.test(e.code)) {
+        if (inTextInput) return;
+        e.preventDefault();
+        const which = e.code.slice(-1) as '1' | '2' | '3' | '4' | '5' | '6';
+        const fmt: NumberFormatKey =
+          which === '1' ? 'number'
+            : which === '2' ? 'time'
+            : which === '3' ? 'date'
+            : which === '4' ? 'currency'
+            : which === '5' ? 'percent'
+            : 'scientific';
+        if (api) setNumberFormatByKey(api, fmt);
+      }
+      // ── Hide / Unhide rows + columns: Ctrl+9, Ctrl+0 ─────────────
+      // Same Digit-code trick to dodge layout differences. Shift adds
+      // the "unhide" variant. Ctrl+0 in browsers resets zoom — capture
+      // is important so we beat the default.
+      if (mod && !e.altKey && e.code === 'Digit9') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) (e.shiftKey ? unhideSelectedRows : hideSelectedRows)(api);
+      } else if (mod && !e.altKey && e.code === 'Digit0') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) (e.shiftKey ? unhideSelectedColumns : hideSelectedColumns)(api);
+      }
+      // ── Insert Table: Ctrl+L ─────────────────────────────────────
+      // Browser default focuses the URL bar — preventDefault overrides.
+      if (mod && !e.altKey && !e.shiftKey && k === 'l') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) void insertTable(api);
+      }
+      // ── AutoSum: Alt+= ──────────────────────────────────────────
+      // Inserts `=SUM(<selection>)` one cell past the selection
+      // (multi-cell) or `=SUM()` in the active cell (single-cell).
+      // No Ctrl/Cmd modifier — purely Alt.
+      if (!mod && e.altKey && !e.shiftKey && (e.key === '=' || e.code === 'Equal')) {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) applyAutoFunction(api, 'SUM');
+      }
+      // ── Insert Chart: Alt+F1 ────────────────────────────────────
+      // Opens the chart dialog pre-filled with the active selection
+      // (same path as Insert > Chart from the menu).
+      if (!mod && e.altKey && !e.shiftKey && e.key === 'F1') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) {
+          const sel = getActiveSelectionRange(api);
+          setInsertChartDefault(sel ? rangeToA1(sel) : 'A1');
+          setShowInsertChart(true);
+        }
+      }
+      // ── Force recalc: F9 ────────────────────────────────────────
+      // Excel's "recalculate now" — re-runs the engine even for cells
+      // whose dependencies haven't changed.
+      if (!mod && !e.altKey && !e.shiftKey && e.key === 'F9') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) forceRecalculate(api);
+      }
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
@@ -454,13 +523,13 @@ export function MenuBar() {
         { kind: 'item', id: 'delete-row', label: 'Delete row', icon: 'delete_sweep', run: deleteSelectedRow },
         { kind: 'item', id: 'delete-col', label: 'Delete column', icon: 'folder_delete', run: deleteSelectedColumn },
         { kind: 'separator', id: 'sep-2' },
-        { kind: 'item', id: 'hide-row', label: 'Hide row', icon: 'visibility_off', run: hideSelectedRows },
-        { kind: 'item', id: 'unhide-row', label: 'Unhide row', icon: 'visibility', run: unhideSelectedRows },
-        { kind: 'item', id: 'hide-col', label: 'Hide column', icon: 'visibility_off', run: hideSelectedColumns },
-        { kind: 'item', id: 'unhide-col', label: 'Unhide column', icon: 'visibility', run: unhideSelectedColumns },
+        { kind: 'item', id: 'hide-row', label: 'Hide row', icon: 'visibility_off', shortcut: 'Ctrl+9', run: hideSelectedRows },
+        { kind: 'item', id: 'unhide-row', label: 'Unhide row', icon: 'visibility', shortcut: 'Ctrl+Shift+9', run: unhideSelectedRows },
+        { kind: 'item', id: 'hide-col', label: 'Hide column', icon: 'visibility_off', shortcut: 'Ctrl+0', run: hideSelectedColumns },
+        { kind: 'item', id: 'unhide-col', label: 'Unhide column', icon: 'visibility', shortcut: 'Ctrl+Shift+0', run: unhideSelectedColumns },
         { kind: 'separator', id: 'sep-3' },
-        { kind: 'item', id: 'new-sheet', label: 'New sheet', icon: 'add_box', run: insertNewSheet },
-        { kind: 'item', id: 'insert-table', label: 'Table', icon: 'table_rows', run: insertTable },
+        { kind: 'item', id: 'new-sheet', label: 'New sheet', icon: 'add_box', shortcut: 'Shift+F11', run: insertNewSheet },
+        { kind: 'item', id: 'insert-table', label: 'Table', icon: 'table_rows', shortcut: 'Ctrl+L', run: insertTable },
         {
           kind: 'item',
           id: 'insert-chart',
@@ -502,15 +571,28 @@ export function MenuBar() {
     format: {
       label: 'Format',
       items: [
+        // Excel's Ctrl+Shift+1..6 bindings map to a subset of these
+        // keys — expose the shortcut hint on the items it lines up with.
         ...(
           ['general', 'number', 'integer', 'currency', 'accounting', 'percent', 'date', 'time', 'scientific', 'text'] as NumberFormatKey[]
-        ).map<MenuItem>((k) => ({
-          kind: 'item',
-          id: `num-${k}`,
-          label: k[0]!.toUpperCase() + k.slice(1),
-          icon: 'looks_one',
-          onClick: () => api && setNumberFormatByKey(api, k),
-        })),
+        ).map<MenuItem>((k) => {
+          const shortcut: Record<string, string> = {
+            number: 'Ctrl+Shift+1',
+            time: 'Ctrl+Shift+2',
+            date: 'Ctrl+Shift+3',
+            currency: 'Ctrl+Shift+4',
+            percent: 'Ctrl+Shift+5',
+            scientific: 'Ctrl+Shift+6',
+          };
+          return {
+            kind: 'item',
+            id: `num-${k}`,
+            label: k[0]!.toUpperCase() + k.slice(1),
+            icon: 'looks_one',
+            shortcut: shortcut[k],
+            onClick: () => api && setNumberFormatByKey(api, k),
+          };
+        }),
         { kind: 'separator', id: 'sep-1' },
         { kind: 'item', id: 'decimal-up', label: 'Increase decimals', icon: 'add', run: increaseDecimal },
         { kind: 'item', id: 'decimal-down', label: 'Decrease decimals', icon: 'remove', run: decreaseDecimal },
