@@ -181,6 +181,12 @@ button {
    ───────────────────────────────────────────────────────────────────────── */
 .app {
   display: grid;
+  /* Named-area layout. Auto-placement was shifting grid-row into the
+     wrong track when the toolbar (or formula bar) is display:none —
+     items fell into the toolbar's row instead of the 1fr below it,
+     and the grid host collapsed to a few-pixel sliver at narrow
+     viewports. Explicit areas pin each chrome row to its slot
+     regardless of which siblings are present. */
   grid-template-rows:
     var(--titlebar-h)
     var(--menubar-h)
@@ -188,6 +194,13 @@ button {
     var(--formula-bar-h)
     minmax(0, 1fr)
     var(--sheet-tabs-h);
+  grid-template-areas:
+    'titlebar'
+    'menubar'
+    'toolbar'
+    'formulabar'
+    'gridrow'
+    'sheettabs';
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
@@ -201,7 +214,20 @@ button {
     var(--toolbar-h)
     minmax(0, 1fr)
     var(--sheet-tabs-h);
+  grid-template-areas:
+    'titlebar'
+    'menubar'
+    'toolbar'
+    'gridrow'
+    'sheettabs';
 }
+
+.app > .title-bar  { grid-area: titlebar; }
+.app > .menubar    { grid-area: menubar; }
+.app > .toolbar    { grid-area: toolbar; }
+.app > .formula-bar { grid-area: formulabar; }
+.app > .grid-row   { grid-area: gridrow; }
+.app > .sheet-tabs { grid-area: sheettabs; }
 
 /* ── Menu bar (Google-Sheets style top dropdowns) ───────────────────────── */
 .menubar {
@@ -3385,7 +3411,16 @@ button {
 @media (max-width: 480px) {
   /* Very narrow: hide the entire toolbar — menus carry the same commands.
      The grid + formula bar are the working surface; everything else is
-     scrollable chrome the user can swipe to when they need it. */
+     scrollable chrome the user can swipe to when they need it.
+
+     CRITICAL: collapse the toolbar's grid track too. `display: none` on
+     the item leaves the declared track size intact, which broke the
+     1fr row sizing on the .app grid — the grid host was collapsing to
+     a few-pixel sliver because of how grid auto-placement walks the
+     remaining items into the wrong tracks. Set `--toolbar-h: 0` so the
+     toolbar's row literally disappears and the 1fr below fills the
+     remaining viewport. */
+  :root { --toolbar-h: 0px; }
   .toolbar { display: none; }
 }
 
