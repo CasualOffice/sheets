@@ -11,7 +11,70 @@
  * `range.getCellRect()` so the chart moves with the rows/columns
  * when they shift.
  */
-export type ChartType = 'bar' | 'line' | 'pie' | 'scatter';
+/**
+ * Chart subtypes, grouped by family. Matches the most-used subset of
+ * Excel's "Insert Chart" catalog:
+ *
+ *   - Column (vertical bars): clustered / stacked / 100 %-stacked.
+ *   - Bar (horizontal bars): clustered / stacked / 100 %-stacked.
+ *   - Line: line / stacked line.
+ *   - Area: area / stacked area.
+ *   - Pie: pie / doughnut.
+ *   - Scatter.
+ *
+ * The legacy `'bar'` literal that P0/P1 used for "vertical column
+ * chart" is migrated to `'column'` on read (see `resources.ts`).
+ */
+export type ChartType =
+  | 'column'
+  | 'column-stacked'
+  | 'column-stacked-100'
+  | 'bar'
+  | 'bar-stacked'
+  | 'bar-stacked-100'
+  | 'line'
+  | 'line-stacked'
+  | 'area'
+  | 'area-stacked'
+  | 'pie'
+  | 'doughnut'
+  | 'scatter';
+
+/** Top-level family — what shows in the left column of the Insert dialog. */
+export type ChartFamily = 'column' | 'bar' | 'line' | 'area' | 'pie' | 'scatter';
+
+export const CHART_FAMILY_OF: Record<ChartType, ChartFamily> = {
+  column: 'column',
+  'column-stacked': 'column',
+  'column-stacked-100': 'column',
+  bar: 'bar',
+  'bar-stacked': 'bar',
+  'bar-stacked-100': 'bar',
+  line: 'line',
+  'line-stacked': 'line',
+  area: 'area',
+  'area-stacked': 'area',
+  pie: 'pie',
+  doughnut: 'pie',
+  scatter: 'scatter',
+};
+
+/** Human-readable label shown in the panel + dialog. */
+export const CHART_TYPE_LABEL: Record<ChartType, string> = {
+  column: 'Clustered Column',
+  'column-stacked': 'Stacked Column',
+  'column-stacked-100': '100% Stacked Column',
+  bar: 'Clustered Bar',
+  'bar-stacked': 'Stacked Bar',
+  'bar-stacked-100': '100% Stacked Bar',
+  line: 'Line',
+  'line-stacked': 'Stacked Line',
+  area: 'Area',
+  'area-stacked': 'Stacked Area',
+  pie: 'Pie',
+  doughnut: 'Doughnut',
+  scatter: 'Scatter',
+};
 
 export type ChartModel = {
   id: string;

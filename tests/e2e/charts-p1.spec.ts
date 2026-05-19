@@ -66,14 +66,16 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
     await page.getByTestId('menu-item-insert-chart').click();
     await expect(page.getByTestId('insert-chart-dialog')).toBeVisible();
     await expect(page.getByTestId('insert-chart-range')).toHaveValue('A1:C3');
-    // Bar (Column) is the default selection.
-    await expect(page.getByTestId('insert-chart-type-bar')).toHaveClass(/insert-chart__type--active/);
+    // Column family is the Excel default; Clustered Column is its first subtype.
+    await expect(page.getByTestId('insert-chart-family-column')).toHaveClass(/insert-chart__family--active/);
+    await expect(page.getByTestId('insert-chart-type-column')).toHaveClass(/insert-chart__subtype--active/);
   });
 
   test('confirming the dialog inserts a chart and the panel lists it as "Chart 1"', async ({ page }) => {
     await page.getByTestId('menubar-insert').click();
     await page.getByTestId('menu-item-insert-chart').click();
-    // Pick Line instead of the default Column.
+    // Switch family to Line, then pick the Line subtype.
+    await page.getByTestId('insert-chart-family-line').click();
     await page.getByTestId('insert-chart-type-line').click();
     await page.getByTestId('insert-chart-confirm').click();
 
@@ -85,7 +87,7 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
     const panel = page.getByTestId('charts-panel');
     await expect(panel).toBeVisible();
     await expect(panel.getByText('Chart 1')).toBeVisible();
-    await expect(panel.getByText('Line')).toBeVisible();
+    await expect(panel.getByText('Line', { exact: true })).toBeVisible();
     await expect(panel.getByText('A1:C3')).toBeVisible();
   });
 
@@ -105,6 +107,7 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
     await exposeRoundTrip(page);
     await page.getByTestId('menubar-insert').click();
     await page.getByTestId('menu-item-insert-chart').click();
+    await page.getByTestId('insert-chart-family-pie').click();
     await page.getByTestId('insert-chart-type-pie').click();
     await page.getByTestId('insert-chart-confirm').click();
     await expect(page.getByTestId('chart-overlay')).toBeVisible({ timeout: 5_000 });

@@ -168,6 +168,7 @@ test.describe('Charts P2 — Excel-style chart interactions', () => {
     await overlay.click({ button: 'right' });
     await page.getByTestId('chart-context-change-type').click();
     await expect(page.getByTestId('insert-chart-dialog')).toBeVisible();
+    await page.getByTestId('insert-chart-family-line').click();
     await page.getByTestId('insert-chart-type-line').click();
     await page.getByTestId('insert-chart-confirm').click();
 

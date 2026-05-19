@@ -2261,9 +2261,13 @@ button {
   border-radius: var(--radius-sm);
 }
 
-/* Insert Chart dialog — Excel's "Insert Chart" minimal slice: chart-type
-   picker + source-range A1 input. Uses the same visual chrome as the
-   Page Setup dialog above so dialogs in this app feel coherent. */
+/* Insert Chart dialog — Excel's "Insert Chart" two-panel layout:
+     - Left column: chart family list (Column / Bar / Line / Area /
+       Pie / Scatter) with icon + name.
+     - Right top: subtype thumbnails for the selected family (SVG
+       previews + label).
+     - Right bottom: source-range input.
+   Visual chrome stays in line with Page Setup so dialogs feel coherent. */
 .insert-chart { display: grid; gap: 18px; }
 .insert-chart__group { border: 0; padding: 0; margin: 0; }
 .insert-chart__legend {
@@ -2275,42 +2279,86 @@ button {
   margin-bottom: 8px;
   padding: 0;
 }
-.insert-chart__types {
+.insert-chart__catalog {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: 150px 1fr;
+  gap: 14px;
+  min-height: 220px;
 }
-.insert-chart__type {
+.insert-chart__families {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.insert-chart__family {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  text-align: left;
+  color: var(--color-text);
+}
+.insert-chart__family .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+}
+.insert-chart__family:hover {
+  background: var(--color-hover);
+}
+.insert-chart__family--active {
+  background: var(--color-accent-soft, var(--color-hover));
+  color: var(--color-accent);
+}
+.insert-chart__family--active .material-symbols-outlined {
+  color: var(--color-accent);
+}
+.insert-chart__subtypes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  align-content: start;
+  overflow-y: auto;
+  padding: 2px;
+}
+.insert-chart__subtype {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 10px 6px;
+  gap: 6px;
+  padding: 10px 6px 8px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: var(--weight-medium, 500);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  text-align: center;
+  color: var(--color-text);
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.06s ease;
 }
-.insert-chart__type .material-symbols-outlined {
-  font-size: 28px;
-  color: var(--color-text-secondary);
-}
-.insert-chart__type:hover {
+.insert-chart__subtype:hover {
   background: var(--color-hover);
+  transform: translateY(-1px);
 }
-.insert-chart__type--active {
+.insert-chart__subtype--active {
   border-color: var(--color-accent);
   color: var(--color-accent);
   background: var(--color-accent-soft, transparent);
 }
-.insert-chart__type--active .material-symbols-outlined {
-  color: var(--color-accent);
-}
-.insert-chart__type input[type='radio'] {
+.insert-chart__subtype input[type='radio'] {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -2319,6 +2367,18 @@ button {
   overflow: hidden;
   clip: rect(0 0 0 0);
   border: 0;
+}
+.insert-chart__thumb {
+  color: var(--color-text-secondary);
+}
+.insert-chart__subtype--active .insert-chart__thumb {
+  color: var(--color-accent);
+}
+.insert-chart__subtype-label {
+  line-height: 1.2;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
 }
 .insert-chart__range {
   width: 100%;
