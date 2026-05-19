@@ -52,16 +52,19 @@ if (isDesktop) {
 
   if (isTopLevel && tauriCore?.invoke) {
     const inv = tauriCore.invoke;
-    // Raw binary IPC — Tauri 2 deserializes Uint8Array args as Vec<u8>
-    // directly; sidesteps the JSON-number-array serialization that turns
-    // a 50 MB save into 30+ seconds.
-    const bytesOf = (b: ArrayBuffer | Uint8Array): Uint8Array =>
-      b instanceof Uint8Array ? b : new Uint8Array(b);
+    // load_document returns tauri::ipc::Response on Rust side; binary
+    // IPC means JS gets an ArrayBuffer directly. No JSON cost, no
+    // truncation. save/saveAs still go through the JSON array path
+    // until the Tauri 2 binary-input route is verified.
     const asArrayBuffer = (raw: unknown): ArrayBuffer => {
       if (raw instanceof ArrayBuffer) return raw;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((raw as any) instanceof Uint8Array) return (raw as Uint8Array).buffer as ArrayBuffer;
-      return new Uint8Array(raw as number[]).buffer;
+      if (raw instanceof Uint8Array) {
+        const u8 = raw;
+        return u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength
+          ? (u8.buffer as ArrayBuffer)
+          : (u8.slice().buffer as ArrayBuffer);
+      }
+      return new Uint8Array(raw as number[]).buffer as ArrayBuffer;
     };
     async function updateWindowTitleFromPath(newPath: string) {
       try {
@@ -86,7 +89,10 @@ if (isDesktop) {
       },
       async save(bytes: ArrayBuffer): Promise<string | null> {
         if (filePath) {
-          await inv('save_document', { path: filePath, bytes: bytesOf(bytes) });
+          await inv('save_document', {
+            path: filePath,
+            bytes: Array.from(new Uint8Array(bytes)),
+          });
           return filePath;
         }
         return bridge!.saveAs('Untitled.xlsx', bytes);
@@ -94,7 +100,7 @@ if (isDesktop) {
       async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
         const written = (await inv('save_document_as', {
           suggestedName,
-          bytes: bytesOf(bytes),
+          bytes: Array.from(new Uint8Array(bytes)),
         })) as string | null;
         if (written) {
           filePath = written;
