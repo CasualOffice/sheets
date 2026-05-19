@@ -2549,6 +2549,41 @@ button {
   line-height: 1.5;
 }
 
+/* Insert / Delete Cells dialog — Excel's Ctrl++ / Ctrl+- modal: a
+   stacked radio group with four directions. Reuses the same compact
+   field chrome as the other dialogs. */
+.cells-op {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cells-op__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.cells-op__option:hover {
+  background: var(--color-hover);
+}
+.cells-op__option--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.cells-op__option input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+
 .page-setup__note {
   margin: 0;
   padding: 10px 12px;

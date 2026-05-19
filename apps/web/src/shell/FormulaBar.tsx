@@ -73,6 +73,17 @@ export function FormulaBar() {
    *  elsewhere (canvas, sheet tab). Without this fallback the picker
    *  inserts every ref at position 0 once the input has blurred. */
   const lastCaretRef = useRef<number>(0);
+  /** Bounds of the last reference the picker spliced in. While
+   *  non-null, the NEXT picker fire REPLACES this region instead of
+   *  inserting after it — that's the Excel behaviour where dragging
+   *  a range updates the formula in-place rather than concatenating
+   *  every cursor stop. Cleared when the user types in the formula
+   *  bar (any character finalises the current ref). */
+  const lastPickRangeRef = useRef<{ start: number; end: number } | null>(null);
+  /** True for the one onChange that follows a picker-driven setDraft —
+   *  prevents the input's onChange from clearing `lastPickRangeRef`
+   *  for the picker's own write. */
+  const pickerWroteRef = useRef(false);
 
   useEffect(() => {
     if (!editing) return;
@@ -104,6 +115,7 @@ export function FormulaBar() {
       originSheetIdRef.current = null;
       originRowRef.current = null;
       originColRef.current = null;
+      lastPickRangeRef.current = null;
       return;
     }
     if (originSheetIdRef.current !== null || !api) return;
@@ -133,7 +145,13 @@ export function FormulaBar() {
   // commit/cancel restore won't trigger this).
   useEffect(() => {
     if (!api || !isFormulaEdit) return;
-    const disp = api.addEvent(api.Event.SelectionChanged, () => {
+    // Subscribe to BOTH SelectionChanged (Univer's programmatic /
+    // internal selection updates) and SelectionMoveEnd (the event
+    // that fires reliably on user drag-release on the canvas).
+    // SelectionChanged alone leaves real user clicks silent — a
+    // demo user reported the cross-sheet picker doing nothing
+    // before we wired SelectionMoveEnd here too.
+    const onPick = () => {
       if (restoringOriginRef.current) return;
       const wb = api.getActiveWorkbook();
       const sheet = wb?.getActiveSheet();
@@ -153,24 +171,49 @@ export function FormulaBar() {
       }
       const caret = lastCaretRef.current;
       const currentDraft = draft ?? '';
-      if (!canInsertRefAtCaret(currentDraft, caret)) return;
+      const insertCaret = lastPickRangeRef.current?.start ?? caret;
+      if (!canInsertRefAtCaret(currentDraft, insertCaret)) return;
       const localA1 = range.getA1Notation();
       const refStr =
         sheetId === originSheetIdRef.current
           ? localA1
           : `${quoteSheetName(sheet.getSheetName())}!${localA1}`;
-      const next = insertRefAtCaret(currentDraft, caret, refStr);
-      flushSync(() => setDraft(next.value));
-      lastCaretRef.current = next.caret;
-      // Refocus the input so the user can keep typing operators / commit
-      // with Enter. requestAnimationFrame so the focus call lands after
-      // React's state flush settles.
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        inputRef.current?.setSelectionRange(next.caret, next.caret);
+
+      // If we already inserted a ref this picker cycle, REPLACE that
+      // region instead of appending — matches Excel's drag-to-update-
+      // ref behaviour.
+      let nextValue: string;
+      let nextCaret: number;
+      if (lastPickRangeRef.current) {
+        const { start, end } = lastPickRangeRef.current;
+        nextValue = currentDraft.slice(0, start) + refStr + currentDraft.slice(end);
+        nextCaret = start + refStr.length;
+      } else {
+        const spliced = insertRefAtCaret(currentDraft, insertCaret, refStr);
+        nextValue = spliced.value;
+        nextCaret = spliced.caret;
+      }
+      lastPickRangeRef.current = { start: nextCaret - refStr.length, end: nextCaret };
+      pickerWroteRef.current = true;
+      lastCaretRef.current = nextCaret;
+      // Defer the state flush to a microtask — calling flushSync from
+      // inside the Univer event listener races React's render phase
+      // and triggers the "flushSync called from a lifecycle method"
+      // warning. queueMicrotask runs after the current render settles.
+      queueMicrotask(() => {
+        setDraft(nextValue);
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+          inputRef.current?.setSelectionRange(nextCaret, nextCaret);
+        });
       });
-    });
-    return () => disp.dispose();
+    };
+    const d1 = api.addEvent(api.Event.SelectionChanged, onPick);
+    const d2 = api.addEvent(api.Event.SelectionMoveEnd, onPick);
+    return () => {
+      d1.dispose();
+      d2.dispose();
+    };
   }, [api, isFormulaEdit, draft]);
 
   const value = editing ? (draft ?? '') : displayValue;
@@ -209,6 +252,14 @@ export function FormulaBar() {
 
   const onChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (!editing) draftCellRef.current = a1;
+    // Any user-driven character finalises the in-progress picker ref —
+    // typing `,` after `=SUM(A1:A3` means the next pick starts a new
+    // ref instead of replacing the old one. Skip when this onChange
+    // is the echo of our own picker write.
+    if (!pickerWroteRef.current) {
+      lastPickRangeRef.current = null;
+    }
+    pickerWroteRef.current = false;
     setDraft(e.target.value);
   };
 

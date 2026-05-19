@@ -64,6 +64,107 @@ export function insertNewSheet(api: FUniver) {
   wb.insertSheet();
 }
 
+/** Excel's Ctrl+Space — extend the current selection to span every row
+ *  of every column it touches. No-op if there's no active range. */
+export function selectEntireColumns(api: FUniver) {
+  const range = activeRange(api);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sheet = activeSheet(api) as any;
+  if (!range || !sheet) return;
+  const startColumn = range.getColumn();
+  const endColumn = startColumn + range.getWidth() - 1;
+  const maxRow = Number(sheet.getMaxRows?.() ?? 1024) - 1;
+  sheet
+    .getRange({ startRow: 0, endRow: maxRow, startColumn, endColumn })
+    .activate();
+}
+
+/** Excel's Shift+Space — extend the current selection to span every
+ *  column of every row it touches. */
+export function selectEntireRows(api: FUniver) {
+  const range = activeRange(api);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sheet = activeSheet(api) as any;
+  if (!range || !sheet) return;
+  const startRow = range.getRow();
+  const endRow = startRow + range.getHeight() - 1;
+  const maxCol = Number(sheet.getMaxColumns?.() ?? 128) - 1;
+  sheet
+    .getRange({ startRow, endRow, startColumn: 0, endColumn: maxCol })
+    .activate();
+}
+
+/** Excel's F2 — enter edit mode on the active cell. Dispatches the
+ *  Univer command that the canvas listens for. */
+export function enterCellEditMode(api: FUniver) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  void (api as any).executeCommand?.('sheet.operation.start-edit', {});
+}
+
+/** Insert/Delete cells with one of the four Excel directions. The
+ *  shift-cells variants leave neighbouring rows/cols untouched and
+ *  push only the target range — Excel's Ctrl+Shift+= submenu. */
+export type CellsOpDirection = 'shift-right' | 'shift-down' | 'entire-row' | 'entire-column';
+
+export async function insertCellsAt(api: FUniver, dir: CellsOpDirection): Promise<void> {
+  const range = activeRange(api);
+  const wb = api.getActiveWorkbook();
+  if (!range || !wb) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sheet = activeSheet(api) as any;
+  if (dir === 'entire-row') {
+    insertRowAbove(api);
+    return;
+  }
+  if (dir === 'entire-column') {
+    insertColumnLeft(api);
+    return;
+  }
+  const cmd =
+    dir === 'shift-down'
+      ? 'sheet.command.insert-range-move-down'
+      : 'sheet.command.insert-range-move-right';
+  await api.executeCommand(cmd, {
+    unitId: wb.getId(),
+    subUnitId: sheet?.getSheetId?.(),
+    range: rangeBox(range),
+  });
+}
+
+export async function deleteCellsAt(api: FUniver, dir: CellsOpDirection): Promise<void> {
+  const range = activeRange(api);
+  const wb = api.getActiveWorkbook();
+  if (!range || !wb) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sheet = activeSheet(api) as any;
+  if (dir === 'entire-row') {
+    deleteSelectedRow(api);
+    return;
+  }
+  if (dir === 'entire-column') {
+    deleteSelectedColumn(api);
+    return;
+  }
+  const cmd =
+    dir === 'shift-down'
+      ? 'sheet.command.delete-range-move-up'
+      : 'sheet.command.delete-range-move-left';
+  await api.executeCommand(cmd, {
+    unitId: wb.getId(),
+    subUnitId: sheet?.getSheetId?.(),
+    range: rangeBox(range),
+  });
+}
+
+function rangeBox(range: FRange) {
+  return {
+    startRow: range.getRow(),
+    startColumn: range.getColumn(),
+    endRow: range.getRow() + range.getHeight() - 1,
+    endColumn: range.getColumn() + range.getWidth() - 1,
+  };
+}
+
 /** Switch to the previous visible sheet — Ctrl+PageUp in Excel. Skips
  *  hidden sheets (matches Excel's behavior). No-op if already on the
  *  first visible sheet. */

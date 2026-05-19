@@ -17,6 +17,7 @@ import {
 } from './file-actions';
 import { loadPrintOptions, printActiveSheet, savePrintOptions } from './print';
 import { PageSetupDialog } from './PageSetupDialog';
+import { InsertCellsDialog } from './InsertCellsDialog';
 import { openBugReport } from './report-bug';
 import { useCollab } from '../collab/collab-context';
 import { useLoading } from '../loading-context';
@@ -52,8 +53,14 @@ import {
   freezeFirstRow,
   hideSelectedColumns,
   hideSelectedRows,
+  insertCellsAt,
+  deleteCellsAt,
   insertColumnLeft,
   insertColumnRight,
+  enterCellEditMode,
+  selectEntireColumns,
+  selectEntireRows,
+  type CellsOpDirection,
   insertComment,
   insertCurrentTime,
   insertHyperlink,
@@ -123,6 +130,9 @@ export function MenuBar() {
   const [showPageSetup, setShowPageSetup] = useState(false);
   const [showInsertChart, setShowInsertChart] = useState(false);
   const [insertChartDefault, setInsertChartDefault] = useState('A1');
+  // Ctrl++ / Ctrl+- → Excel's Insert / Delete chooser modals. `null`
+  // when closed; `'insert'` / `'delete'` when open.
+  const [cellsOp, setCellsOp] = useState<'insert' | 'delete' | null>(null);
 
   const onClose = () => setOpen(null);
 
@@ -224,6 +234,45 @@ export function MenuBar() {
         if (inTextInput) return;
         e.preventDefault();
         if (api) insertNewSheet(api);
+      }
+      if (e.key === 'F2' && !mod && !e.shiftKey && !e.altKey) {
+        // F2 — drop the active cell into edit mode without clearing
+        // its contents. The canonical Excel "edit in place" shortcut.
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) enterCellEditMode(api);
+      }
+      // ── Selection: Ctrl+Space, Shift+Space ───────────────────────
+      // Both are bare-modifier shortcuts (Ctrl xor Shift, never both).
+      // Skip while a text input has focus — Ctrl+Space is also the
+      // common autocomplete trigger.
+      if (mod && !e.shiftKey && !e.altKey && e.code === 'Space') {
+        // Ctrl+Space — select the entire column(s) of the current
+        // selection. Excel's most-used "select column" gesture.
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) selectEntireColumns(api);
+      } else if (!mod && e.shiftKey && !e.altKey && e.code === 'Space') {
+        // Shift+Space — select the entire row(s).
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) selectEntireRows(api);
+      }
+      // ── Insert / Delete cells: Ctrl++ and Ctrl+- ─────────────────
+      // The `+` key reports differently across layouts:
+      //   - US/UK: e.key === '=' with e.shiftKey === true → Ctrl++
+      //   - Numpad +: e.key === '+', e.shiftKey === false
+      // Accept both. Same for `-` (key '-' or numpad '-').
+      const isPlus = e.code === 'NumpadAdd' || (e.key === '=' && e.shiftKey) || e.key === '+';
+      const isMinus = e.code === 'NumpadSubtract' || e.key === '-';
+      if (mod && !e.altKey && isPlus) {
+        if (inTextInput) return;
+        e.preventDefault();
+        setCellsOp('insert');
+      } else if (mod && !e.altKey && !e.shiftKey && isMinus) {
+        if (inTextInput) return;
+        e.preventDefault();
+        setCellsOp('delete');
       }
     };
     window.addEventListener('keydown', onKey, { capture: true });
@@ -549,6 +598,19 @@ export function MenuBar() {
             savePrintOptions(options);
             setShowPageSetup(false);
             if (api) printActiveSheet(api, options);
+          }}
+        />
+      )}
+
+      {cellsOp && (
+        <InsertCellsDialog
+          mode={cellsOp}
+          onCancel={() => setCellsOp(null)}
+          onConfirm={(dir: CellsOpDirection) => {
+            const op = cellsOp;
+            setCellsOp(null);
+            if (!api) return;
+            void (op === 'insert' ? insertCellsAt(api, dir) : deleteCellsAt(api, dir));
           }}
         />
       )}
