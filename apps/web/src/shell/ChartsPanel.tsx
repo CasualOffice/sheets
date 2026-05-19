@@ -10,7 +10,7 @@ import {
 } from '../charts/insert-chart';
 import { nextChartName } from '../charts/naming';
 import { InsertChartDialog } from '../charts/InsertChartDialog';
-import type { ChartModel, ChartType } from '../charts/types';
+import { CHART_FAMILY_OF, CHART_TYPE_LABEL, type ChartFamily, type ChartModel } from '../charts/types';
 
 /**
  * Right-side Charts panel. Equivalent of Excel's Selection Pane scoped
@@ -21,16 +21,11 @@ import type { ChartModel, ChartType } from '../charts/types';
  * Only charts on the active sheet are shown — same scoping Excel uses
  * for its Selection Pane (it switches with the active sheet tab).
  */
-const TYPE_LABELS: Record<ChartType, string> = {
-  bar: 'Column',
-  line: 'Line',
-  pie: 'Pie',
-  scatter: 'Scatter',
-};
-
-const TYPE_ICONS: Record<ChartType, string> = {
-  bar: 'bar_chart',
+const FAMILY_ICONS: Record<ChartFamily, string> = {
+  column: 'bar_chart',
+  bar: 'align_horizontal_left',
   line: 'show_chart',
+  area: 'area_chart',
   pie: 'pie_chart',
   scatter: 'scatter_plot',
 };
@@ -124,7 +119,7 @@ export function ChartsPanel() {
                       className="material-symbols-outlined charts-panel__type-icon"
                       aria-hidden="true"
                     >
-                      {TYPE_ICONS[c.type]}
+                      {FAMILY_ICONS[CHART_FAMILY_OF[c.type]]}
                     </span>
                     {isRenaming ? (
                       <input
@@ -150,7 +145,7 @@ export function ChartsPanel() {
                     )}
                   </div>
                   <div className="charts-panel__meta">
-                    <span className="charts-panel__type-label">{TYPE_LABELS[c.type]}</span>
+                    <span className="charts-panel__type-label">{CHART_TYPE_LABEL[c.type]}</span>
                     <span className="charts-panel__range" title="Source range">
                       {rangeToA1(c.source)}
                     </span>

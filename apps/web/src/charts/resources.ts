@@ -13,19 +13,54 @@ import {
  * and through collab via Univer's snapshot-load path.
  */
 
-const VALID_TYPES: ChartType[] = ['bar', 'line', 'pie', 'scatter'];
+const VALID_TYPES: ChartType[] = [
+  'column',
+  'column-stacked',
+  'column-stacked-100',
+  'bar',
+  'bar-stacked',
+  'bar-stacked-100',
+  'line',
+  'line-stacked',
+  'area',
+  'area-stacked',
+  'pie',
+  'doughnut',
+  'scatter',
+];
+
+/**
+ * The pre-P3 store used `'bar'` for what we now (correctly) call
+ * `'column'` — vertical bars. Migrate on read so existing workbooks
+ * keep rendering after the rename.
+ */
+function migrateType(raw: unknown): ChartType | null {
+  if (typeof raw !== 'string') return null;
+  // Existing 'bar' string is ambiguous between old "vertical column"
+  // and new "horizontal bar". P0/P1/P2 saved 'bar' meaning column;
+  // we have no horizontal-bar charts in the wild yet, so 'bar' from
+  // before P3 means column.
+  if (raw === 'bar') return 'column';
+  return VALID_TYPES.includes(raw as ChartType) ? (raw as ChartType) : null;
+}
 
 function isValidChart(c: unknown): c is ChartModel {
   if (!c || typeof c !== 'object') return false;
   const r = c as Record<string, unknown>;
   if (typeof r.id !== 'string' || typeof r.sheetId !== 'string') return false;
-  if (!VALID_TYPES.includes(r.type as ChartType)) return false;
+  const migrated = migrateType(r.type);
+  if (!migrated) return false;
+  r.type = migrated; // mutate so the rest of the app sees the new value
   const src = r.source as Record<string, unknown> | undefined;
   const pos = r.pos as Record<string, unknown> | undefined;
   if (!src || !pos) return false;
   for (const k of ['startRow', 'endRow', 'startColumn', 'endColumn'] as const) {
     if (typeof src[k] !== 'number' || typeof pos[k] !== 'number') return false;
   }
+  // `format` is optional and freely shaped — defer validation to
+  // `mergeFormat`, which fills missing fields with defaults. Anything
+  // we don't recognise is ignored at render time.
+  if (r.format != null && typeof r.format !== 'object') return false;
   return true;
 }
 

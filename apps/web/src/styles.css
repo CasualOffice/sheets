@@ -1201,6 +1201,102 @@ button {
   color: var(--color-danger, #c4321a);
 }
 
+/* Chart overlay — the ECharts container floats over the grid, anchored
+   to cells. Selection adds a subtle accent frame and 8 resize handles
+   (4 corners + 4 mid-edges) so the chart can be moved and resized like
+   any Excel chart object. */
+.chart-overlay {
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+  user-select: none;
+  /* Layer is pointer-events: none so empty space passes clicks to the
+     grid below; the chart itself opts back in so it can be clicked,
+     dragged, and right-clicked. */
+  pointer-events: auto;
+}
+.chart-overlay--selected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 2px 6px rgba(0, 0, 0, 0.08);
+  z-index: 1;
+}
+.chart-overlay--dragging {
+  opacity: 0.95;
+  cursor: grabbing;
+}
+.chart-overlay__handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-accent);
+  border-radius: 2px;
+  box-sizing: border-box;
+  z-index: 2;
+}
+.chart-overlay__handle--n  { top: -6px; left: 50%; transform: translateX(-50%); }
+.chart-overlay__handle--s  { bottom: -6px; left: 50%; transform: translateX(-50%); }
+.chart-overlay__handle--w  { top: 50%; left: -6px; transform: translateY(-50%); }
+.chart-overlay__handle--e  { top: 50%; right: -6px; transform: translateY(-50%); }
+.chart-overlay__handle--nw { top: -6px; left: -6px; }
+.chart-overlay__handle--ne { top: -6px; right: -6px; }
+.chart-overlay__handle--sw { bottom: -6px; left: -6px; }
+.chart-overlay__handle--se { bottom: -6px; right: -6px; }
+
+/* Chart context menu — right-click on a chart. Same chrome as the
+   in-app menu bar dropdowns; positioned via fixed coords from the
+   right-click event. */
+.chart-context-menu {
+  min-width: 200px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  z-index: 1000;
+}
+.chart-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--color-text);
+}
+.chart-context-menu__item:hover {
+  background: var(--color-hover);
+}
+.chart-context-menu__item--danger {
+  color: var(--color-danger, #c4321a);
+}
+.chart-context-menu__item--danger:hover {
+  background: var(--color-danger-soft, #fde7e7);
+}
+.chart-context-menu__sep {
+  height: 1px;
+  background: var(--color-divider);
+  margin: 4px 0;
+}
+.chart-context-menu--renaming {
+  padding: 6px;
+}
+.chart-context-menu__rename-input {
+  width: 100%;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  background: var(--color-surface);
+}
+
 /* Charts panel — Selection-Pane equivalent for charts on the active sheet.
    Same chrome as the Tables panel for visual coherence; only the row
    layout differs (chart name + icon + meta + delete, no theme swatches). */
@@ -2165,9 +2261,13 @@ button {
   border-radius: var(--radius-sm);
 }
 
-/* Insert Chart dialog — Excel's "Insert Chart" minimal slice: chart-type
-   picker + source-range A1 input. Uses the same visual chrome as the
-   Page Setup dialog above so dialogs in this app feel coherent. */
+/* Insert Chart dialog — Excel's "Insert Chart" two-panel layout:
+     - Left column: chart family list (Column / Bar / Line / Area /
+       Pie / Scatter) with icon + name.
+     - Right top: subtype thumbnails for the selected family (SVG
+       previews + label).
+     - Right bottom: source-range input.
+   Visual chrome stays in line with Page Setup so dialogs feel coherent. */
 .insert-chart { display: grid; gap: 18px; }
 .insert-chart__group { border: 0; padding: 0; margin: 0; }
 .insert-chart__legend {
@@ -2179,42 +2279,86 @@ button {
   margin-bottom: 8px;
   padding: 0;
 }
-.insert-chart__types {
+.insert-chart__catalog {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: 150px 1fr;
+  gap: 14px;
+  min-height: 220px;
 }
-.insert-chart__type {
+.insert-chart__families {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.insert-chart__family {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  text-align: left;
+  color: var(--color-text);
+}
+.insert-chart__family .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+}
+.insert-chart__family:hover {
+  background: var(--color-hover);
+}
+.insert-chart__family--active {
+  background: var(--color-accent-soft, var(--color-hover));
+  color: var(--color-accent);
+}
+.insert-chart__family--active .material-symbols-outlined {
+  color: var(--color-accent);
+}
+.insert-chart__subtypes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  align-content: start;
+  overflow-y: auto;
+  padding: 2px;
+}
+.insert-chart__subtype {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 10px 6px;
+  gap: 6px;
+  padding: 10px 6px 8px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: var(--weight-medium, 500);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  text-align: center;
+  color: var(--color-text);
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.06s ease;
 }
-.insert-chart__type .material-symbols-outlined {
-  font-size: 28px;
-  color: var(--color-text-secondary);
-}
-.insert-chart__type:hover {
+.insert-chart__subtype:hover {
   background: var(--color-hover);
+  transform: translateY(-1px);
 }
-.insert-chart__type--active {
+.insert-chart__subtype--active {
   border-color: var(--color-accent);
   color: var(--color-accent);
   background: var(--color-accent-soft, transparent);
 }
-.insert-chart__type--active .material-symbols-outlined {
-  color: var(--color-accent);
-}
-.insert-chart__type input[type='radio'] {
+.insert-chart__subtype input[type='radio'] {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -2223,6 +2367,159 @@ button {
   overflow: hidden;
   clip: rect(0 0 0 0);
   border: 0;
+}
+.insert-chart__thumb {
+  color: var(--color-text-secondary);
+}
+.insert-chart__subtype--active .insert-chart__thumb {
+  color: var(--color-accent);
+}
+.insert-chart__subtype-label {
+  line-height: 1.2;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+/* Format Chart dialog — Excel's "Format Chart Area" pane, compressed
+   into a single tabbed-style dialog. Reuses the same compact field
+   chrome as the Insert dialog for visual coherence. */
+.format-chart { display: grid; gap: 18px; }
+.format-chart__group { border: 0; padding: 0; margin: 0; }
+.format-chart__legend {
+  font-size: 12px;
+  font-weight: var(--weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-soft, var(--color-text));
+  margin-bottom: 8px;
+  padding: 0;
+}
+.format-chart__row { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.format-chart__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.format-chart__checkbox input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+.format-chart__input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+.format-chart__input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.format-chart__input:disabled {
+  background: var(--color-surface-alt);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.format-chart__segment {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.format-chart__seg-opt {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  background: var(--color-surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.format-chart__seg-opt:hover { background: var(--color-hover); }
+.format-chart__seg-opt--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.format-chart__seg-opt input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+.format-chart__axis-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.format-chart__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.format-chart__field-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.format-chart__palettes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.format-chart__palette {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.format-chart__palette:hover { background: var(--color-hover); }
+.format-chart__palette--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.format-chart__palette input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+.format-chart__palette-swatches {
+  display: flex;
+  gap: 2px;
+}
+.format-chart__palette-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.format-chart__palette-label {
+  font-size: 12px;
+  font-weight: var(--weight-medium, 500);
 }
 .insert-chart__range {
   width: 100%;
