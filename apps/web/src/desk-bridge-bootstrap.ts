@@ -52,6 +52,28 @@ if (isDesktop) {
 
   if (isTopLevel && tauriCore?.invoke) {
     const inv = tauriCore.invoke;
+    // Raw binary IPC — Tauri 2 deserializes Uint8Array args as Vec<u8>
+    // directly; sidesteps the JSON-number-array serialization that turns
+    // a 50 MB save into 30+ seconds.
+    const bytesOf = (b: ArrayBuffer | Uint8Array): Uint8Array =>
+      b instanceof Uint8Array ? b : new Uint8Array(b);
+    const asArrayBuffer = (raw: unknown): ArrayBuffer => {
+      if (raw instanceof ArrayBuffer) return raw;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((raw as any) instanceof Uint8Array) return (raw as Uint8Array).buffer as ArrayBuffer;
+      return new Uint8Array(raw as number[]).buffer;
+    };
+    async function updateWindowTitleFromPath(newPath: string) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = (window as any).__TAURI__?.window;
+        if (!w?.getCurrentWindow) return;
+        const name = newPath.split(/[\\/]/).pop() || newPath;
+        await w.getCurrentWindow().setTitle(`Spreadsheet — ${name}`);
+      } catch {
+        /* best-effort */
+      }
+    }
     bridge = {
       isDesktop: true,
       get filePath() { return filePath; },
@@ -60,15 +82,11 @@ if (isDesktop) {
       async loadDocument(p?: string): Promise<ArrayBuffer> {
         const path = p ?? filePath;
         if (!path) throw new Error('no file path bound to this window');
-        const bytes = (await inv('load_document', { path })) as number[];
-        return new Uint8Array(bytes).buffer;
+        return asArrayBuffer(await inv('load_document', { path }));
       },
       async save(bytes: ArrayBuffer): Promise<string | null> {
         if (filePath) {
-          await inv('save_document', {
-            path: filePath,
-            bytes: Array.from(new Uint8Array(bytes)),
-          });
+          await inv('save_document', { path: filePath, bytes: bytesOf(bytes) });
           return filePath;
         }
         return bridge!.saveAs('Untitled.xlsx', bytes);
@@ -76,9 +94,12 @@ if (isDesktop) {
       async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
         const written = (await inv('save_document_as', {
           suggestedName,
-          bytes: Array.from(new Uint8Array(bytes)),
+          bytes: bytesOf(bytes),
         })) as string | null;
-        if (written) filePath = written;
+        if (written) {
+          filePath = written;
+          await updateWindowTitleFromPath(written);
+        }
         return written;
       },
     };
