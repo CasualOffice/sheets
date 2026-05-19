@@ -7,6 +7,8 @@ import { useLoading } from '../loading-context';
 import { xlsxToWorkbookData } from '../xlsx';
 import { startBridge, type BridgeHandle } from './bridge';
 import { CollabContext, type CollabRole, type CollabStatus } from './collab-context';
+import { useCharts } from '../charts/charts-context';
+import type { ChartModel } from '../charts/types';
 import { PresenceContext } from './presence-context';
 import {
   colorForName,
@@ -39,8 +41,11 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   const api = useUniverAPI();
   const workbook = useWorkbook();
   const loading = useLoading();
+  const charts = useCharts();
   const handleRef = useRef<BridgeHandle | null>(null);
   const docRef = useRef<Y.Doc | null>(null);
+  // Cleanup for the charts ↔ Yjs bridge wired up when a doc connects.
+  const chartsSyncDisposeRef = useRef<(() => void) | null>(null);
 
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
   const [needsSelfHost, setNeedsSelfHost] = useState(false);
@@ -260,10 +265,20 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     docRef.current = doc;
     handleRef.current = handle;
     setProvider(next);
+
+    // Charts ride a dedicated Y.Map keyed by chart id. The bridge's
+    // op-log only carries Univer mutations (cell writes, structural
+    // edits); our chart state lives in React, so we sync it
+    // out-of-band. Single map + observe means inserts/updates/removes
+    // converge in one round-trip just like cell edits.
+    chartsSyncDisposeRef.current = wireChartsSync(doc, charts, joinRole);
+
     console.info('[collab] joined room', id, 'as', joinRole);
-  }, [api]);
+  }, [api, charts]);
 
   const teardown = (): void => {
+    chartsSyncDisposeRef.current?.();
+    chartsSyncDisposeRef.current = null;
     handleRef.current?.dispose();
     setProvider((p) => {
       p?.destroy();
@@ -517,4 +532,90 @@ function wsUrl(): string {
   if (envOverride) return envOverride;
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/yjs`;
+}
+
+/**
+ * Wire the ChartsContext to a Yjs map so chart edits flow between
+ * peers in real time. One Y.Map keyed by chart id:
+ *
+ *   - Local insert / update / remove (via `__subscribeLocal`) → diff
+ *     against the current map and apply add/set/delete in a single
+ *     transaction. We diff rather than nuke-and-rewrite so concurrent
+ *     edits on different charts don't clobber each other.
+ *   - Remote map changes (via `observe`) → snapshot the map into a
+ *     ChartModel[] and call `__replaceAll({ fromCollab: true })` so
+ *     ChartsContext applies the remote state WITHOUT echoing it back
+ *     through `__subscribeLocal` (avoiding ping-pong).
+ *
+ * View-role clients only consume remote updates — local edits never
+ * write to the map, matching the read-only contract the rest of the
+ * collab path uses.
+ */
+function wireChartsSync(
+  doc: Y.Doc,
+  charts: ReturnType<typeof useCharts>,
+  role: CollabRole,
+): () => void {
+  const map = doc.getMap<ChartModel>('casual-charts');
+
+  // Hydrate from the map immediately. If a peer compacted a snapshot
+  // before us, the map may already hold the room's charts.
+  if (map.size > 0) {
+    charts.__replaceAll(Array.from(map.values()), { fromCollab: true });
+  } else if (role === 'write' && charts.charts.length > 0) {
+    // We're joining with local charts (e.g. the room owner uploaded a
+    // workbook that already contained charts via xlsx) — seed the map.
+    doc.transact(() => {
+      for (const c of charts.charts) map.set(c.id, c);
+    });
+  }
+
+  let applyingRemote = false;
+
+  const onLocal = (next: ChartModel[]) => {
+    if (role === 'view') return;
+    if (applyingRemote) return;
+    doc.transact(() => {
+      const nextIds = new Set(next.map((c) => c.id));
+      // Drop charts that are no longer local.
+      for (const id of map.keys()) {
+        if (!nextIds.has(id)) map.delete(id);
+      }
+      // Add / overwrite charts that are. Yjs only encodes a delta when
+      // the value actually changed (it serialises new bytes either way,
+      // but downstream subscribers diff before re-applying).
+      for (const c of next) {
+        const cur = map.get(c.id);
+        if (!cur || !shallowEqualChart(cur, c)) map.set(c.id, c);
+      }
+    });
+  };
+  const unsubLocal = charts.__subscribeLocal(onLocal);
+
+  const onRemote = (event: Y.YMapEvent<ChartModel>, tx: Y.Transaction) => {
+    // Ignore our own writes — Y dispatches them too. The tx's origin
+    // is the doc itself for `doc.transact(...)`; we mark applyingRemote
+    // around `__replaceAll` to suppress the echo below.
+    void event;
+    void tx;
+    applyingRemote = true;
+    try {
+      charts.__replaceAll(Array.from(map.values()), { fromCollab: true });
+    } finally {
+      applyingRemote = false;
+    }
+  };
+  map.observe(onRemote);
+
+  return () => {
+    unsubLocal();
+    map.unobserve(onRemote);
+  };
+}
+
+function shallowEqualChart(a: ChartModel, b: ChartModel): boolean {
+  // Cheap structural compare to avoid an extra Yjs encode when the
+  // chart object reference changed but the values are identical
+  // (React's `setCharts` always returns a new array on every set).
+  return JSON.stringify(a) === JSON.stringify(b);
 }
