@@ -1201,6 +1201,102 @@ button {
   color: var(--color-danger, #c4321a);
 }
 
+/* Chart overlay — the ECharts container floats over the grid, anchored
+   to cells. Selection adds a subtle accent frame and 8 resize handles
+   (4 corners + 4 mid-edges) so the chart can be moved and resized like
+   any Excel chart object. */
+.chart-overlay {
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+  user-select: none;
+  /* Layer is pointer-events: none so empty space passes clicks to the
+     grid below; the chart itself opts back in so it can be clicked,
+     dragged, and right-clicked. */
+  pointer-events: auto;
+}
+.chart-overlay--selected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 2px 6px rgba(0, 0, 0, 0.08);
+  z-index: 1;
+}
+.chart-overlay--dragging {
+  opacity: 0.95;
+  cursor: grabbing;
+}
+.chart-overlay__handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-accent);
+  border-radius: 2px;
+  box-sizing: border-box;
+  z-index: 2;
+}
+.chart-overlay__handle--n  { top: -6px; left: 50%; transform: translateX(-50%); }
+.chart-overlay__handle--s  { bottom: -6px; left: 50%; transform: translateX(-50%); }
+.chart-overlay__handle--w  { top: 50%; left: -6px; transform: translateY(-50%); }
+.chart-overlay__handle--e  { top: 50%; right: -6px; transform: translateY(-50%); }
+.chart-overlay__handle--nw { top: -6px; left: -6px; }
+.chart-overlay__handle--ne { top: -6px; right: -6px; }
+.chart-overlay__handle--sw { bottom: -6px; left: -6px; }
+.chart-overlay__handle--se { bottom: -6px; right: -6px; }
+
+/* Chart context menu — right-click on a chart. Same chrome as the
+   in-app menu bar dropdowns; positioned via fixed coords from the
+   right-click event. */
+.chart-context-menu {
+  min-width: 200px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  z-index: 1000;
+}
+.chart-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--color-text);
+}
+.chart-context-menu__item:hover {
+  background: var(--color-hover);
+}
+.chart-context-menu__item--danger {
+  color: var(--color-danger, #c4321a);
+}
+.chart-context-menu__item--danger:hover {
+  background: var(--color-danger-soft, #fde7e7);
+}
+.chart-context-menu__sep {
+  height: 1px;
+  background: var(--color-divider);
+  margin: 4px 0;
+}
+.chart-context-menu--renaming {
+  padding: 6px;
+}
+.chart-context-menu__rename-input {
+  width: 100%;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  background: var(--color-surface);
+}
+
 /* Charts panel — Selection-Pane equivalent for charts on the active sheet.
    Same chrome as the Tables panel for visual coherence; only the row
    layout differs (chart name + icon + meta + delete, no theme swatches). */

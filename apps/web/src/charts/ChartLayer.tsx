@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUniverAPI } from '../use-univer';
 import { useCharts } from './charts-context';
 import { ChartOverlay } from './ChartOverlay';
+import { ChartContextMenu } from './ChartContextMenu';
 
 /**
  * Renders every chart in the store. Same anchoring strategy as
@@ -26,10 +27,14 @@ type RenderedChart = {
   rect: { left: number; top: number; width: number; height: number };
 };
 
+type CtxMenuState = { id: string; x: number; y: number } | null;
+
 export function ChartLayer() {
   const api = useUniverAPI();
-  const { charts } = useCharts();
+  const { charts, selectedId, select, remove } = useCharts();
   const [rendered, setRendered] = useState<RenderedChart[]>([]);
+  const [ctxMenu, setCtxMenu] = useState<CtxMenuState>(null);
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
   // rAF callback closes over `rendered` from when the effect ran. The effect
   // re-runs only on [api, charts] changes, so a sheet-switch (which leaves
   // both inputs untouched) would compare new computed rects against the
@@ -76,6 +81,9 @@ export function ChartLayer() {
       const canvasRect = canvas.getBoundingClientRect();
       const dx = canvasRect.left - hostRect.left;
       const dy = canvasRect.top - hostRect.top;
+      if (dx !== canvasOffset.x || dy !== canvasOffset.y) {
+        setCanvasOffset({ x: dx, y: dy });
+      }
 
       const wb = api.getActiveWorkbook();
       if (!wb) {
@@ -161,31 +169,102 @@ export function ChartLayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, charts]);
 
-  if (rendered.length === 0) return null;
+  // Delete key removes the selected chart. Excel uses Delete/Backspace
+  // both — match that. We ignore the press if the focus is in a text
+  // input (formula bar, cell editor, dialog inputs) so the user can
+  // still delete characters there. Also Esc clears selection.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!selectedId) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      const inText = tag === 'INPUT' || tag === 'TEXTAREA' || (t?.isContentEditable ?? false);
+      if (e.key === 'Escape') {
+        select(null);
+        return;
+      }
+      if (!inText && (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault();
+        remove(selectedId);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedId, remove, select]);
+
+  // Listen for the right-click event ChartOverlay dispatches. We can't
+  // mount the context menu inside ChartOverlay because the menu needs
+  // to escape the overlay's clipping + sit at viewport coords.
+  useEffect(() => {
+    const onCtx = (e: Event) => {
+      const ce = e as CustomEvent<{ id: string; x: number; y: number }>;
+      setCtxMenu(ce.detail);
+    };
+    document.addEventListener('casual-chart-contextmenu', onCtx);
+    return () => document.removeEventListener('casual-chart-contextmenu', onCtx);
+  }, []);
+
+  // Click anywhere outside any chart deselects. Capture-phase so the
+  // grid canvas doesn't consume the event first. Skip if the click
+  // originated inside a chart overlay or the context menu.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.closest('.chart-overlay')) return;
+      if (t.closest('.chart-context-menu')) return;
+      if (selectedId) select(null);
+    };
+    document.addEventListener('mousedown', onClick, true);
+    return () => document.removeEventListener('mousedown', onClick, true);
+  }, [selectedId, select]);
+
   const host =
     hostRef.current ?? (document.querySelector('[data-testid="univer-host"]') as HTMLElement | null);
+  if (rendered.length === 0 && !ctxMenu) return null;
   if (!host) return null;
 
   return createPortal(
     <div
       className="chart-layer"
       data-testid="chart-layer"
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}
+      // z-index matches presence-layer so chart overlays sit above
+      // Univer's main grid canvas (which has its own stacking context).
+      // pointerEvents: none keeps clicks on empty space passing through
+      // to the canvas; .chart-overlay re-enables pointer events.
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: 60,
+      }}
     >
       {rendered.map((r) => {
         const model = charts.find((c) => c.id === r.id);
         if (!model) return null;
+        // ChartOverlay positions itself absolutely (left/top/w/h from
+        // `r.rect`). Render it directly — the previous wrapper used
+        // `inset: 0` which covered the ENTIRE host with pointer-events
+        // and intercepted clicks meant for empty grid cells.
         return (
-          <div
+          <ChartOverlay
             key={r.id}
-            // Re-enable pointer events on the chart itself so tooltips
-            // work; layer stays click-through above the canvas.
-            style={{ pointerEvents: 'auto', position: 'absolute', inset: 0 }}
-          >
-            <ChartOverlay model={model} rect={r.rect} />
-          </div>
+            model={model}
+            rect={r.rect}
+            canvasOffset={canvasOffset}
+            scroll={scrollRef.current}
+          />
         );
       })}
+      {ctxMenu && (
+        <ChartContextMenu
+          chartId={ctxMenu.id}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>,
     host,
   );

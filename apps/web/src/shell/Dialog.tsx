@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 
 type Props = {
@@ -84,7 +85,12 @@ export function Dialog({ title, onClose, footer, children, ...rest }: Props) {
     };
   }, [onClose]);
 
-  return (
+  // Always portal modals to document.body. Without this, dialogs
+  // opened from inside a sibling that uses `overflow:hidden` (like
+  // ChartLayer for the chart context menu) get clipped to that
+  // parent's bounds and any chart-canvas underneath intercepts the
+  // clicks meant for the dialog buttons.
+  return createPortal(
     <div
       className="dialog-backdrop"
       data-testid="dialog-backdrop"
@@ -117,6 +123,7 @@ export function Dialog({ title, onClose, footer, children, ...rest }: Props) {
         <div className="dialog__body">{children}</div>
         {footer && <div className="dialog__footer">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
