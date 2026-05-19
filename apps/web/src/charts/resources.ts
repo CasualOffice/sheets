@@ -57,6 +57,10 @@ function isValidChart(c: unknown): c is ChartModel {
   for (const k of ['startRow', 'endRow', 'startColumn', 'endColumn'] as const) {
     if (typeof src[k] !== 'number' || typeof pos[k] !== 'number') return false;
   }
+  // `format` is optional and freely shaped — defer validation to
+  // `mergeFormat`, which fills missing fields with defaults. Anything
+  // we don't recognise is ignored at render time.
+  if (r.format != null && typeof r.format !== 'object') return false;
   return true;
 }
 

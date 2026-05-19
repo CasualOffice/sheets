@@ -3,6 +3,7 @@ import { useUniverAPI } from '../use-univer';
 import { Icon } from '../shell/Icon';
 import { useCharts } from './charts-context';
 import { InsertChartDialog } from './InsertChartDialog';
+import { FormatChartDialog } from './FormatChartDialog';
 
 /**
  * Right-click context menu for a selected chart. Mirrors Excel's
@@ -31,11 +32,13 @@ export function ChartContextMenu({ chartId, x, y, onClose }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [showChangeType, setShowChangeType] = useState(false);
+  const [showFormat, setShowFormat] = useState(false);
+  const dialogOpen = showChangeType || showFormat;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showChangeType) return; // dialog handles its own Escape
+        if (dialogOpen) return; // dialog handles its own Escape
         onClose();
       }
     };
@@ -52,7 +55,19 @@ export function ChartContextMenu({ chartId, x, y, onClose }: Props) {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onDown, true);
     };
-  }, [onClose, showChangeType]);
+  }, [onClose, dialogOpen]);
+
+  // The Format dialog side-channels the title change because title
+  // text lives on `ChartModel`, not `ChartFormat`. Catch it and apply.
+  useEffect(() => {
+    const onTitle = (e: Event) => {
+      const ce = e as CustomEvent<{ id: string; title?: string }>;
+      if (ce.detail.id !== chartId) return;
+      update(chartId, { title: ce.detail.title });
+    };
+    document.addEventListener('casual-chart-title-changed', onTitle);
+    return () => document.removeEventListener('casual-chart-title-changed', onTitle);
+  }, [chartId, update]);
 
   if (!chart) return null;
 
@@ -116,6 +131,15 @@ export function ChartContextMenu({ chartId, x, y, onClose }: Props) {
         <button
           type="button"
           className="chart-context-menu__item"
+          data-testid="chart-context-format"
+          onClick={() => setShowFormat(true)}
+        >
+          <Icon name="tune" />
+          <span>Format chart…</span>
+        </button>
+        <button
+          type="button"
+          className="chart-context-menu__item"
           data-testid="chart-context-rename"
           onClick={() => setRenaming(chart.title ?? 'Chart')}
         >
@@ -151,6 +175,21 @@ export function ChartContextMenu({ chartId, x, y, onClose }: Props) {
           onConfirm={({ source, type }) => {
             update(chartId, { source, type });
             setShowChangeType(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {showFormat && (
+        <FormatChartDialog
+          model={chart}
+          onCancel={() => {
+            setShowFormat(false);
+            onClose();
+          }}
+          onConfirm={(next) => {
+            update(chartId, { format: next });
+            setShowFormat(false);
             onClose();
           }}
         />
