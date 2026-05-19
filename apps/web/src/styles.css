@@ -2380,6 +2380,147 @@ button {
   display: flex;
   align-items: center;
 }
+
+/* Format Chart dialog — Excel's "Format Chart Area" pane, compressed
+   into a single tabbed-style dialog. Reuses the same compact field
+   chrome as the Insert dialog for visual coherence. */
+.format-chart { display: grid; gap: 18px; }
+.format-chart__group { border: 0; padding: 0; margin: 0; }
+.format-chart__legend {
+  font-size: 12px;
+  font-weight: var(--weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-soft, var(--color-text));
+  margin-bottom: 8px;
+  padding: 0;
+}
+.format-chart__row { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.format-chart__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.format-chart__checkbox input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+.format-chart__input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+.format-chart__input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.format-chart__input:disabled {
+  background: var(--color-surface-alt);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.format-chart__segment {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.format-chart__seg-opt {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  background: var(--color-surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.format-chart__seg-opt:hover { background: var(--color-hover); }
+.format-chart__seg-opt--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.format-chart__seg-opt input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+.format-chart__axis-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.format-chart__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.format-chart__field-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.format-chart__palettes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.format-chart__palette {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.format-chart__palette:hover { background: var(--color-hover); }
+.format-chart__palette--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.format-chart__palette input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+.format-chart__palette-swatches {
+  display: flex;
+  gap: 2px;
+}
+.format-chart__palette-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.format-chart__palette-label {
+  font-size: 12px;
+  font-weight: var(--weight-medium, 500);
+}
 .insert-chart__range {
   width: 100%;
   height: 32px;

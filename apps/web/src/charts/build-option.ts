@@ -1,5 +1,11 @@
 import type { FUniver } from '@univerjs/core/facade';
-import type { ChartModel, ChartType } from './types';
+import {
+  PALETTES,
+  mergeFormat,
+  type ChartModel,
+  type ChartType,
+  type ResolvedChartFormat,
+} from './types';
 import type { EChartsOption } from './echarts-init';
 
 /**
@@ -16,6 +22,10 @@ import type { EChartsOption } from './echarts-init';
  * of NaN. If the source range collapses to one row / one column we
  * fall back to a "No data" placeholder so the overlay still paints
  * rather than crashing.
+ *
+ * Formatting (title visibility, legend position, axis titles,
+ * gridlines, data labels, colour palette) is applied from
+ * `mergeFormat(model)` — defaults match Excel's first-render.
  */
 export function buildEChartsOption(api: FUniver, model: ChartModel): EChartsOption | null {
   const wb = api.getActiveWorkbook();
@@ -52,7 +62,8 @@ export function buildEChartsOption(api: FUniver, model: ChartModel): EChartsOpti
     return data;
   });
 
-  return buildOptionForType(model.type, headers, categories, seriesData, model.title);
+  const format = mergeFormat(model);
+  return buildOptionForType(model.type, headers, categories, seriesData, model.title, format);
 }
 
 function buildOptionForType(
@@ -60,26 +71,35 @@ function buildOptionForType(
   headers: string[],
   categories: string[],
   rawSeries: Array<Array<number | null>>,
-  title?: string,
+  title: string | undefined,
+  format: ResolvedChartFormat,
 ): EChartsOption {
+  const titleNode =
+    title && format.showTitle ? { text: title, left: 'center' as const } : undefined;
+  const colors = PALETTES[format.palette];
+  const legendNode = legendOption(format);
+  const showAxes = format.legend !== 'none';
+  void showAxes;
+
   if (type === 'pie' || type === 'doughnut') {
-    // Excel's pie/doughnut uses the first value column only — match that
-    // and label slices with the category column.
     const pieData = categories.map((label, i) => ({
       name: label,
       value: rawSeries[0]?.[i] ?? 0,
     }));
     return {
-      title: title ? { text: title, left: 'center' } : undefined,
+      color: colors,
+      title: titleNode,
       tooltip: { trigger: 'item' },
-      legend: { bottom: 0, type: 'scroll' },
+      legend: legendNode,
       series: [
         {
           type: 'pie',
           radius: type === 'doughnut' ? ['40%', '70%'] : '60%',
-          center: ['50%', title ? '52%' : '48%'],
+          center: ['50%', titleNode ? '52%' : '48%'],
           data: pieData,
-          label: { formatter: '{b}' },
+          label: format.dataLabels
+            ? { formatter: '{b}: {c}' }
+            : { formatter: '{b}' },
         },
       ],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,33 +107,48 @@ function buildOptionForType(
   }
 
   if (type === 'scatter') {
-    // Scatter expects [x, y] tuples. We pair the first value column
-    // with each subsequent one — first column becomes the X axis,
-    // remaining columns become Y series. Matches Excel's "Scatter
-    // with only markers" picking column-0 as X.
     const xs = rawSeries[0] ?? [];
     const series = rawSeries.slice(1).map((ys, i) => ({
       name: headers[i + 1] ?? headers[0],
       type: 'scatter' as const,
       data: xs.map((x, idx) => [x, ys[idx]]).filter(([a, b]) => a != null && b != null),
+      label: dataLabelConfig(format),
     }));
     return {
-      title: title ? { text: title, left: 'center' } : undefined,
+      color: colors,
+      title: titleNode,
       tooltip: { trigger: 'item' },
-      legend: { bottom: 0, type: 'scroll' },
-      grid: { left: 40, right: 16, top: title ? 40 : 16, bottom: 40 },
-      xAxis: { type: 'value', name: headers[0] ?? '' },
-      yAxis: { type: 'value' },
-      series: series.length > 0 ? series : [{
-        name: headers[0] ?? 'Series',
-        type: 'scatter',
-        data: xs.map((x, idx) => [idx, x]).filter(([, b]) => b != null),
-      }],
+      legend: legendNode,
+      grid: chartGrid(format, titleNode != null),
+      xAxis: {
+        type: 'value',
+        name: format.xAxisTitle ?? headers[0] ?? '',
+        nameLocation: 'middle',
+        nameGap: 24,
+        splitLine: { show: format.gridlines },
+      },
+      yAxis: {
+        type: 'value',
+        name: format.yAxisTitle ?? '',
+        nameLocation: 'middle',
+        nameGap: 36,
+        splitLine: { show: format.gridlines },
+      },
+      series:
+        series.length > 0
+          ? series
+          : [
+              {
+                name: headers[0] ?? 'Series',
+                type: 'scatter' as const,
+                data: xs.map((x, idx) => [idx, x]).filter(([, b]) => b != null),
+                label: dataLabelConfig(format),
+              },
+            ],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   }
 
-  // Bar / column / line / area share a category-axis + value-axis layout.
   const isHorizontalBar = type === 'bar' || type === 'bar-stacked' || type === 'bar-stacked-100';
   const is100 = type === 'column-stacked-100' || type === 'bar-stacked-100';
   const isStacked =
@@ -127,8 +162,6 @@ function buildOptionForType(
   const isArea = type === 'area' || type === 'area-stacked';
   const echartsType: 'bar' | 'line' = isLine || isArea ? 'line' : 'bar';
 
-  // 100% stacked needs per-category sums for normalisation. Compute
-  // them up front so we don't redo the work per series.
   const sumPerCat = is100
     ? categories.map((_, i) => {
         let s = 0;
@@ -152,27 +185,105 @@ function buildOptionForType(
       ...(isStacked ? { stack: 'all' as const } : {}),
       ...(isArea ? { areaStyle: {} } : {}),
       ...(isLine ? { smooth: false, symbol: 'circle' as const, symbolSize: 4 } : {}),
+      label: dataLabelConfig(format, isHorizontalBar, isLine || isArea),
     };
   });
 
-  const categoryAxis = { type: 'category' as const, data: categories };
-  const valueAxis: Record<string, unknown> = { type: 'value' as const };
+  const categoryAxis = {
+    type: 'category' as const,
+    data: categories,
+    name: isHorizontalBar ? (format.yAxisTitle ?? '') : (format.xAxisTitle ?? ''),
+    nameLocation: 'middle' as const,
+    nameGap: 24,
+  };
+  const valueAxis: Record<string, unknown> = {
+    type: 'value' as const,
+    name: isHorizontalBar ? (format.xAxisTitle ?? '') : (format.yAxisTitle ?? ''),
+    nameLocation: 'middle',
+    nameGap: 36,
+    splitLine: { show: format.gridlines },
+  };
   if (is100) {
     valueAxis.max = 100;
     valueAxis.axisLabel = { formatter: '{value}%' };
   }
 
   return {
-    title: title ? { text: title, left: 'center' } : undefined,
+    color: colors,
+    title: titleNode,
     tooltip: {
       trigger: 'axis',
       ...(is100 ? { valueFormatter: (v: unknown) => `${Math.round(Number(v))}%` } : {}),
     },
-    legend: { bottom: 0, type: 'scroll' },
-    grid: { left: 40, right: 16, top: title ? 40 : 16, bottom: 40 },
+    legend: legendNode,
+    grid: chartGrid(format, titleNode != null),
     xAxis: isHorizontalBar ? valueAxis : categoryAxis,
     yAxis: isHorizontalBar ? categoryAxis : valueAxis,
     series,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
+}
+
+function legendOption(format: ResolvedChartFormat): Record<string, unknown> | undefined {
+  if (format.legend === 'none') return undefined;
+  const pos: Record<string, unknown> = { type: 'scroll' };
+  switch (format.legend) {
+    case 'top':
+      pos.top = 0;
+      break;
+    case 'bottom':
+      pos.bottom = 0;
+      break;
+    case 'left':
+      pos.left = 0;
+      pos.orient = 'vertical';
+      break;
+    case 'right':
+      pos.right = 0;
+      pos.orient = 'vertical';
+      break;
+  }
+  return pos;
+}
+
+function chartGrid(
+  format: ResolvedChartFormat,
+  hasTitle: boolean,
+): Record<string, unknown> {
+  // Make room for legend / title / axis-name labels by padding the
+  // plot area. Without this the value axis name gets clipped by the
+  // legend at the bottom.
+  const grid: Record<string, unknown> = {
+    left: 56,
+    right: 24,
+    top: hasTitle ? 40 : 16,
+    bottom: 56,
+    containLabel: true,
+  };
+  switch (format.legend) {
+    case 'top':
+      grid.top = hasTitle ? 60 : 32;
+      break;
+    case 'left':
+      grid.left = 96;
+      break;
+    case 'right':
+      grid.right = 96;
+      break;
+    case 'none':
+      grid.bottom = 32;
+      break;
+  }
+  return grid;
+}
+
+function dataLabelConfig(
+  format: ResolvedChartFormat,
+  isHorizontalBar?: boolean,
+  isLineOrArea?: boolean,
+): Record<string, unknown> {
+  if (!format.dataLabels) return { show: false };
+  if (isLineOrArea) return { show: true, position: 'top' };
+  if (isHorizontalBar) return { show: true, position: 'right' };
+  return { show: true, position: 'top' };
 }
