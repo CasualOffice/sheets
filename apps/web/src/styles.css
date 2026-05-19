@@ -888,6 +888,25 @@ button {
   box-shadow: inset 0 0 0 2px var(--color-accent, #1a73e8);
 }
 
+/* "3R × 2C" badge between the Name Box and the formula actions when
+   the selection spans more than one cell. Excel shows this transiently
+   during drag; we keep it visible while the multi-cell selection is
+   active so the info doesn't blink away. */
+.formula-bar__sel-dims {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: var(--weight-medium, 500);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
 .formula-bar__actions {
   display: inline-flex;
   align-items: center;

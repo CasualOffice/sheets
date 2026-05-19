@@ -127,13 +127,19 @@ test.describe('Status bar live stats', () => {
 
     await expect(page.getByTestId('stat-count')).toHaveText('Count: 3');
     await expect(page.getByTestId('stat-sum')).toHaveText('Sum: 60');
-    await expect(page.getByTestId('stat-avg')).toHaveText('Avg: 20');
+    // Excel-style label is "Average:" (status bar). The polish pass
+    // also added Min/Max — assert those here so a future regression
+    // catches them.
+    await expect(page.getByTestId('stat-avg')).toHaveText('Average: 20');
+    await expect(page.getByTestId('stat-min')).toHaveText('Min: 10');
+    await expect(page.getByTestId('stat-max')).toHaveText('Max: 30');
   });
 
-  test('hides stats for a single-cell selection', async ({ page }) => {
+  test('hides stats for a single empty cell selection', async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
-    await selectRange(page, 'A1');
+    // Far-away cell with no data — Excel shows nothing.
+    await selectRange(page, 'F10');
     await expect(page.getByTestId('sheet-tabs-stats')).toHaveCount(0);
   });
 });

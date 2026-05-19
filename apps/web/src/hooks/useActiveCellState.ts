@@ -46,10 +46,28 @@ export type ActiveCellState = {
   isMerged: boolean;
   /** True when the current selection spans more than one cell. */
   isMultiCell: boolean;
+  /** Rows × columns of the primary selection. Shown next to the Name
+   *  Box when `isMultiCell`. Excel shows "3R x 2C" transiently during
+   *  drag; we surface it permanently so the info doesn't blink away. */
+  selRows: number;
+  selCols: number;
   /** True while the Format Painter is armed (one-shot or infinite). */
   isFormatPainterActive: boolean;
-  /** Selection-level numeric aggregates (excludes single-cell selection). */
-  stats: { count: number; sum: number; avg: number | null } | null;
+  /** Selection-level numeric aggregates. Covers every selected range
+   *  (Ctrl+click adds to the list), matching Excel's status bar
+   *  semantics. Null when the selection is a single empty cell. */
+  stats: {
+    count: number;
+    sum: number;
+    avg: number | null;
+    min: number | null;
+    max: number | null;
+    /** Total cell count across all selected ranges — Excel's "Count"
+     *  (non-empty cells) vs "Numerical Count" (count). We expose the
+     *  numerical count via `count` and the cell count via `cellCount`
+     *  so the status bar can show both. */
+    cellCount: number;
+  } | null;
 };
 
 const EMPTY: ActiveCellState = {
@@ -71,6 +89,8 @@ const EMPTY: ActiveCellState = {
   numberFormat: '',
   isMerged: false,
   isMultiCell: false,
+  selRows: 0,
+  selCols: 0,
   isFormatPainterActive: false,
   stats: null,
 };
@@ -148,35 +168,61 @@ export function useActiveCellState(): ActiveCellState {
         // service may not exist; leave as false
       }
 
-      // Selection stats (multi-cell only). Cap the materialization at
-      // 100k cells — beyond that, `getValues()` allocates a 2D array
-      // of millions of entries which freezes the UI for seconds when
-      // a user hits Cmd+A or clicks the select-all corner on a big
-      // workbook. The status-bar stat isn't worth a 2 s freeze; we
-      // surface it as null and the UI hides the row.
+      // Selection stats — aggregate across EVERY selected range
+      // (Ctrl+click adds disjoint regions; Excel's status bar treats
+      // them as one bag). Cap the materialization at 100k cells —
+      // beyond that, `getValues()` allocates a 2D array of millions
+      // of entries which freezes the UI for seconds when a user hits
+      // Cmd+A or clicks the select-all corner on a big workbook. The
+      // status-bar stat isn't worth a 2 s freeze; we surface it as
+      // null and the UI hides the row.
       const SELECTION_STATS_CAP = 100_000;
       let stats: ActiveCellState['stats'] = null;
-      const cellsX = selW;
-      const cellsY = selH;
-      const totalCells = cellsX * cellsY;
-      if (totalCells > 1 && totalCells <= SELECTION_STATS_CAP) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sel = (sheet as any).getSelection?.();
+      const ranges: { getValues: () => unknown[][]; getWidth: () => number; getHeight: () => number }[] =
+        sel?.getActiveRangeList?.() ?? [selection];
+      let totalCells = 0;
+      for (const r of ranges) totalCells += r.getWidth() * r.getHeight();
+      if (totalCells > 0 && totalCells <= SELECTION_STATS_CAP) {
+        let cellCount = 0;
         let count = 0;
         let sum = 0;
-        const values = selection.getValues();
-        for (const r of values) {
-          for (const v of r) {
-            const inner =
-              typeof v === 'object' && v !== null && 'v' in (v as Record<string, unknown>)
-                ? (v as { v: unknown }).v
-                : v;
-            const n = typeof inner === 'number' ? inner : Number(inner);
-            if (!Number.isNaN(n) && inner !== null && inner !== '' && inner !== undefined) {
-              count += 1;
-              sum += n;
+        let min = Number.POSITIVE_INFINITY;
+        let max = Number.NEGATIVE_INFINITY;
+        for (const r of ranges) {
+          const values = r.getValues();
+          for (const row of values) {
+            for (const v of row) {
+              const inner =
+                typeof v === 'object' && v !== null && 'v' in (v as Record<string, unknown>)
+                  ? (v as { v: unknown }).v
+                  : v;
+              if (inner === null || inner === undefined || inner === '') continue;
+              cellCount += 1;
+              const n = typeof inner === 'number' ? inner : Number(inner);
+              if (Number.isFinite(n)) {
+                count += 1;
+                sum += n;
+                if (n < min) min = n;
+                if (n > max) max = n;
+              }
             }
           }
         }
-        stats = { count, sum, avg: count > 0 ? sum / count : null };
+        // For a single-cell selection containing a non-numeric value
+        // (or a single number) Excel still shows Count=1; we only
+        // suppress stats when nothing was selected at all.
+        if (cellCount > 0) {
+          stats = {
+            count,
+            sum,
+            avg: count > 0 ? sum / count : null,
+            min: count > 0 ? min : null,
+            max: count > 0 ? max : null,
+            cellCount,
+          };
+        }
       }
 
       return {
@@ -200,6 +246,8 @@ export function useActiveCellState(): ActiveCellState {
         numberFormat: style?.n?.pattern ?? '',
         isMerged,
         isMultiCell,
+        selRows: selH,
+        selCols: selW,
         isFormatPainterActive,
         stats,
       };

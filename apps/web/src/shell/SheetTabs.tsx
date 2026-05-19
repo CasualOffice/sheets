@@ -163,13 +163,26 @@ export function SheetTabs() {
         ))}
       </div>
 
-      {stats && stats.count > 0 && (
+      {stats && stats.cellCount > 0 && (
         <div className="sheet-tabs__stats" data-testid="sheet-tabs-stats">
-          <span data-testid="stat-count">Count: {stats.count}</span>
-          <span data-testid="stat-sum">Sum: {NUM.format(stats.sum)}</span>
+          {/* Excel order: Average, Count, Numerical Count, Min, Max, Sum.
+              We show Avg / Min / Max only when at least one numeric value
+              participated; Count / Numerical Count / Sum always render
+              when any cell is selected. */}
           {stats.avg !== null && (
-            <span data-testid="stat-avg">Avg: {NUM.format(stats.avg)}</span>
+            <span data-testid="stat-avg">Average: {NUM.format(stats.avg)}</span>
           )}
+          <span data-testid="stat-count">Count: {stats.cellCount}</span>
+          {stats.count !== stats.cellCount && (
+            <span data-testid="stat-num-count">Numerical Count: {stats.count}</span>
+          )}
+          {stats.min !== null && (
+            <span data-testid="stat-min">Min: {NUM.format(stats.min)}</span>
+          )}
+          {stats.max !== null && (
+            <span data-testid="stat-max">Max: {NUM.format(stats.max)}</span>
+          )}
+          <span data-testid="stat-sum">Sum: {NUM.format(stats.sum)}</span>
         </div>
       )}
 

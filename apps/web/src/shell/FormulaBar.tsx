@@ -42,7 +42,7 @@ type Suggestion =
  */
 export function FormulaBar() {
   const api = useUniverAPI();
-  const { ready, a1, displayValue } = useActiveCellState();
+  const { ready, a1, displayValue, isMultiCell, selRows, selCols } = useActiveCellState();
 
   const [draft, setDraft] = useState<string | null>(null);
   const editing = draft !== null;
@@ -351,6 +351,15 @@ export function FormulaBar() {
   return (
     <div className="formula-bar" data-testid="formula-bar">
       <NameBox a1={a1} />
+      {isMultiCell && (
+        <span
+          className="formula-bar__sel-dims"
+          data-testid="sel-dimensions"
+          title="Selection dimensions"
+        >
+          {selRows}R × {selCols}C
+        </span>
+      )}
 
 
       <div className="formula-bar__actions" role="group" aria-label="Formula bar actions">
