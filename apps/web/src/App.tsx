@@ -1,5 +1,7 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { IWorkbookData } from '@univerjs/core';
+import { xlsxToWorkbookData } from './xlsx';
+import { odsToWorkbookData, csvToWorkbookData, tsvToWorkbookData } from './ods';
 import { TitleBar } from './shell/TitleBar';
 import { MenuBar } from './shell/MenuBar';
 import { Toolbar } from './shell/Toolbar';
@@ -61,6 +63,16 @@ export function App() {
         sourceFormat: format !== undefined ? format : prev.sourceFormat,
         revision: prev.revision + 1,
       }));
+      // Inside Casual Office (desktop, single-user, no memory pressure),
+      // skip the auto-clear. React 18 concurrent rendering can defer
+      // UniverSheet's swap effect past the 2-macrotask setTimeout chain,
+      // leaving the swap to find an empty ref — visible as a permanently
+      // blank canvas with "swap aborted: snapshotRef is empty" in console.
+      // The web build keeps the original aggressive GC behavior.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (typeof window !== 'undefined' && (window as any).__deskApp__?.isDesktop) {
+        return;
+      }
       // Free the ref after consumers have processed the revision bump.
       // We wait two macrotasks: the first lets React flush its render +
       // useEffect pass (UniverSheet's swap, OutlineProvider's rehydrate);
@@ -74,6 +86,49 @@ export function App() {
     },
     [],
   );
+
+  // When loaded inside the Casual Office Tauri shell, the desk-bridge
+  // bootstrap defines window.__deskApp__ with the file path the user
+  // opened. Read it through the bridge and replace the empty workbook.
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.__deskApp__ : undefined;
+    if (!bridge?.isDesktop || !bridge.filePath) return;
+    let cancelled = false;
+    (async () => {
+      const path = bridge.filePath!;
+      const fileName = path.split(/[\\/]/).pop() || 'Workbook.xlsx';
+      const lower = fileName.toLowerCase();
+      let format: WorkbookFormat = 'xlsx';
+      if (lower.endsWith('.ods')) format = 'ods';
+      else if (lower.endsWith('.csv')) format = 'csv';
+      else if (lower.endsWith('.tsv') || lower.endsWith('.tab')) format = 'tsv';
+      try {
+        setLoading({ fileName, phase: 'reading' });
+        const buffer = await bridge.loadDocument();
+        if (cancelled) return;
+        setLoading({ fileName, phase: 'parsing' });
+        let data: IWorkbookData;
+        if (format === 'ods') data = await odsToWorkbookData(buffer);
+        else if (format === 'csv') data = await csvToWorkbookData(buffer);
+        else if (format === 'tsv') data = await tsvToWorkbookData(buffer);
+        else data = await xlsxToWorkbookData(buffer);
+        if (cancelled) return;
+        data.name = fileName.replace(/\.(xlsx|xlsm|ods|csv|tsv|tab)$/i, '');
+        setLoading({ fileName, phase: 'mounting' });
+        replaceWorkbook(data, format);
+        setLoading(null);
+      } catch (err) {
+        console.error('deskApp load failed', err);
+        if (!cancelled) {
+          setLoading({ fileName, phase: 'reading', error: String(err) });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // App owns only the meta update — TitleBar mirrors into Univer via
   // setName since App itself is outside the UniverProvider.

@@ -1,3 +1,8 @@
+// Bootstrap the deskApp host bridge first so window.__deskApp__ is wired
+// before any other module reads it. No-op when not running inside the
+// Casual Office Tauri shell.
+import './desk-bridge-bootstrap';
+
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
