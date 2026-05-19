@@ -3,6 +3,7 @@ import type { IStyleData, IWorkbookData } from '@univerjs/core';
 import { univerStyleToExcel } from './style-mapping';
 import { writeOutlineIntoSnapshot } from '../outline/resources';
 import { writeChartsIntoSnapshot } from '../charts/resources';
+import { writePivotsIntoSnapshot } from '../pivots/resources';
 import { RESOURCES_SHEET } from './constants';
 import type { ExportExtras } from './export';
 
@@ -193,6 +194,10 @@ export async function workbookDataToXlsxImpl(
 
   if (extras.charts && extras.charts.length > 0) {
     writeChartsIntoSnapshot(data, extras.charts);
+  }
+
+  if (extras.pivots && extras.pivots.length > 0) {
+    writePivotsIntoSnapshot(data, extras.pivots);
   }
 
   if (Array.isArray(data.resources) && data.resources.length > 0) {

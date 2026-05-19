@@ -7,6 +7,7 @@ import { timeIt } from '../perf';
 import type { ExportExtras } from '../xlsx/export';
 import type { OutlineState } from '../outline/types';
 import type { ChartModel } from '../charts/types';
+import type { PivotModel } from '../pivots/types';
 import {
   csvToWorkbookData,
   odsToWorkbookData,
@@ -130,6 +131,8 @@ export type SaveOptions = {
   outline?: OutlineState;
   /** Chart models to fold into the xlsx — see ExportExtras.charts. */
   charts?: ChartModel[];
+  /** Pivot models to fold into the xlsx — see ExportExtras.pivots. */
+  pivots?: PivotModel[];
 };
 
 export async function saveAsXlsx(
@@ -147,6 +150,7 @@ export async function saveAsXlsx(
     ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
+    ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
   };
   const blob = await workbookDataToXlsx(snapshot, extras);
   const finalName = ensureExt(filename, 'xlsx');
@@ -171,6 +175,7 @@ export async function exportCurrentWorkbookAsXlsxBlob(
     ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
+    ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
   };
   return workbookDataToXlsx(snapshot, extras);
 }

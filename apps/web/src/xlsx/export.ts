@@ -1,6 +1,7 @@
 import type { IWorkbookData } from '@univerjs/core';
 import type { OutlineState } from '../outline/types';
 import type { ChartModel } from '../charts/types';
+import type { PivotModel } from '../pivots/types';
 import { timeItAsync } from '../perf';
 import { serializeXlsxInWorker } from './serialize-in-worker';
 
@@ -31,6 +32,12 @@ export type ExportExtras = {
    *  chart encoding is deferred to Charts P5 — for v0.1.1 charts survive
    *  *our* round-trip but appear blank when opened in Excel. */
   charts?: ChartModel[];
+  /** Pivot models stashed under `__casual_sheets_pivots__`. The computed
+   *  pivot output lives in regular cell values (so it round-trips through
+   *  any xlsx reader); this carries the *definition* so a future refresh
+   *  / change-source action can re-run apply without the user
+   *  reconfiguring. */
+  pivots?: PivotModel[];
 };
 
 /**

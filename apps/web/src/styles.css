@@ -2280,6 +2280,70 @@ button {
   border-radius: var(--radius-sm);
 }
 
+/* Insert PivotTable dialog — Excel-style "Create PivotTable + Fields"
+   compressed to a single screen. */
+.insert-pivot { display: grid; gap: 18px; }
+.insert-pivot__group { border: 0; padding: 0; margin: 0; }
+.insert-pivot__legend {
+  font-size: 12px;
+  font-weight: var(--weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-soft, var(--color-text));
+  margin-bottom: 8px;
+  padding: 0;
+}
+.insert-pivot__range {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+.insert-pivot__range:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.insert-pivot__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.insert-pivot__error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-danger, #c4321a);
+}
+.insert-pivot__fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.insert-pivot__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.insert-pivot__field-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.insert-pivot__select {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
 /* Insert Chart dialog — Excel's "Insert Chart" two-panel layout:
      - Left column: chart family list (Column / Bar / Line / Area /
        Pie / Scatter) with icon + name.
