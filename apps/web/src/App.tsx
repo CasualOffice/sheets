@@ -120,12 +120,39 @@ export function App() {
     () => ({
       formulaBarVisible,
       toggleFormulaBar: () => setFormulaBarVisible((v) => !v),
+      // Side panels are mutually exclusive — opening one auto-closes
+      // the others. Three of them open at once would squeeze the grid
+      // into a strip and competing context (which one am I editing?).
       tablesPanelVisible,
-      toggleTablesPanel: () => setTablesPanelVisible((v) => !v),
+      toggleTablesPanel: () =>
+        setTablesPanelVisible((v) => {
+          const next = !v;
+          if (next) {
+            setOutlinePanelVisible(false);
+            setChartsPanelVisible(false);
+          }
+          return next;
+        }),
       outlinePanelVisible,
-      toggleOutlinePanel: () => setOutlinePanelVisible((v) => !v),
+      toggleOutlinePanel: () =>
+        setOutlinePanelVisible((v) => {
+          const next = !v;
+          if (next) {
+            setTablesPanelVisible(false);
+            setChartsPanelVisible(false);
+          }
+          return next;
+        }),
       chartsPanelVisible,
-      toggleChartsPanel: () => setChartsPanelVisible((v) => !v),
+      toggleChartsPanel: () =>
+        setChartsPanelVisible((v) => {
+          const next = !v;
+          if (next) {
+            setTablesPanelVisible(false);
+            setOutlinePanelVisible(false);
+          }
+          return next;
+        }),
       openShareRoom: () => setShareRoomOpen(true),
     }),
     [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible],

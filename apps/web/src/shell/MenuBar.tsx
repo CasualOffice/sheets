@@ -137,6 +137,31 @@ export function MenuBar() {
   const [showInsertPivot, setShowInsertPivot] = useState(false);
   const [insertPivotDefault, setInsertPivotDefault] = useState('A1');
   const pivots = usePivots();
+
+  // Toolbar's Insert > Chart / Pivot buttons live in a sibling component;
+  // they can't reach this dialog state directly, so we dispatch DOM
+  // CustomEvents from the toolbar and open the dialogs here. Same pattern
+  // keeps both surfaces in sync without lifting state.
+  useEffect(() => {
+    const openChart = () => {
+      if (!api) return;
+      const sel = getActiveSelectionRange(api);
+      setInsertChartDefault(sel ? rangeToA1(sel) : 'A1');
+      setShowInsertChart(true);
+    };
+    const openPivot = () => {
+      if (!api) return;
+      const sel = getActiveSelectionRange(api);
+      setInsertPivotDefault(sel ? rangeToA1(sel) : 'A1:C10');
+      setShowInsertPivot(true);
+    };
+    document.addEventListener('casual-open-insert-chart', openChart);
+    document.addEventListener('casual-open-insert-pivot', openPivot);
+    return () => {
+      document.removeEventListener('casual-open-insert-chart', openChart);
+      document.removeEventListener('casual-open-insert-pivot', openPivot);
+    };
+  }, [api]);
   // Ctrl++ / Ctrl+- → Excel's Insert / Delete chooser modals. `null`
   // when closed; `'insert'` / `'delete'` when open.
   const [cellsOp, setCellsOp] = useState<'insert' | 'delete' | null>(null);
@@ -362,27 +387,34 @@ export function MenuBar() {
   const handleExportCsv = async () => api && saveAsCsv(api, workbook.meta.name || 'workbook');
   const handleExportTsv = async () => api && saveAsTsv(api, workbook.meta.name || 'workbook');
 
+  // Menu structure designed against Office 2024's ribbon + File menu.
+  // Every item with a global keyboard binding shows its shortcut on the
+  // right of the row; items without one are left bare. Sub-menus are
+  // avoided where the items fit in the parent (the previous
+  // File → Export submenu pushed common saves behind a hover step).
   const menus: Record<MenuId, { label: string; items: MenuItem[] }> = {
     file: {
       label: 'File',
       items: [
         { kind: 'item', id: 'new', label: 'New', icon: 'add', shortcut: 'Ctrl+N', onClick: handleNew },
-        { kind: 'item', id: 'open', label: 'Open', icon: 'folder_open', shortcut: 'Ctrl+O', onClick: handleOpen },
+        { kind: 'item', id: 'open', label: 'Open…', icon: 'folder_open', shortcut: 'Ctrl+O', onClick: handleOpen },
+        { kind: 'separator', id: 'sep-save' },
         { kind: 'item', id: 'save', label: 'Save', icon: 'save', shortcut: 'Ctrl+S', onClick: handleSave },
+        // Save As → submenu for the format picker (xlsx default → ods → csv → tsv).
         {
           kind: 'submenu',
-          id: 'export',
-          label: 'Export',
+          id: 'save-as',
+          label: 'Save as',
           icon: 'ios_share',
           items: [
-            { kind: 'item', id: 'export-xlsx', label: '.xlsx', icon: 'description', onClick: handleExportXlsx },
-            { kind: 'item', id: 'export-ods', label: '.ods', icon: 'description', onClick: handleExportOds },
-            { kind: 'item', id: 'export-csv', label: '.csv', icon: 'description', onClick: handleExportCsv },
-            { kind: 'item', id: 'export-tsv', label: '.tsv', icon: 'description', onClick: handleExportTsv },
+            { kind: 'item', id: 'save-as-xlsx', label: '.xlsx (Excel)',           icon: 'description', onClick: handleExportXlsx },
+            { kind: 'item', id: 'save-as-ods',  label: '.ods (OpenDocument)',     icon: 'description', onClick: handleExportOds },
+            { kind: 'item', id: 'save-as-csv',  label: '.csv (comma-separated)',  icon: 'description', onClick: handleExportCsv },
+            { kind: 'item', id: 'save-as-tsv',  label: '.tsv (tab-separated)',    icon: 'description', onClick: handleExportTsv },
           ],
         },
-        { kind: 'separator', id: 'sep-1' },
-        { kind: 'item', id: 'print', label: 'Print', icon: 'print', shortcut: 'Ctrl+P', onClick: () => setShowPageSetup(true) },
+        { kind: 'separator', id: 'sep-print' },
+        { kind: 'item', id: 'print', label: 'Print…', icon: 'print', shortcut: 'Ctrl+P', onClick: () => setShowPageSetup(true) },
         { kind: 'separator', id: 'sep-coedit' },
         ...(collab.roomId
           ? ([
@@ -399,8 +431,6 @@ export function MenuBar() {
                 label: 'Leave room',
                 icon: 'logout',
                 onClick: () => {
-                  // Drop the /r/<id> path; SPA reload starts a fresh single-user
-                  // workbook. State in the room continues for other peers.
                   window.location.href = window.location.origin + '/';
                 },
               },
@@ -414,8 +444,9 @@ export function MenuBar() {
                 onClick: () => ui.openShareRoom(),
               },
             ] as MenuItem[])),
-        { kind: 'separator', id: 'sep-2' },
-        { kind: 'item', id: 'properties', label: 'Properties', icon: 'info', onClick: () => setShowProperties(true) },
+        { kind: 'separator', id: 'sep-props' },
+        { kind: 'item', id: 'properties', label: 'Properties…', icon: 'info', onClick: () => setShowProperties(true) },
+        { kind: 'item', id: 'about', label: 'About casual sheets', icon: 'help_outline', onClick: () => setShowAbout(true) },
       ],
     },
     edit: {
@@ -423,52 +454,56 @@ export function MenuBar() {
       items: [
         { kind: 'item', id: 'undo', label: 'Undo', icon: 'undo', shortcut: 'Ctrl+Z', run: undo },
         { kind: 'item', id: 'redo', label: 'Redo', icon: 'redo', shortcut: 'Ctrl+Y', run: redo },
-        { kind: 'separator', id: 'sep-1' },
+        { kind: 'separator', id: 'sep-clip' },
         { kind: 'item', id: 'cut', label: 'Cut', icon: 'content_cut', shortcut: 'Ctrl+X', run: actCut },
         { kind: 'item', id: 'copy', label: 'Copy', icon: 'content_copy', shortcut: 'Ctrl+C', run: actCopy },
         { kind: 'item', id: 'paste', label: 'Paste', icon: 'content_paste', shortcut: 'Ctrl+V', run: actPaste },
-        { kind: 'separator', id: 'sep-2' },
-        { kind: 'item', id: 'find-replace', label: 'Find & Replace', icon: 'search', shortcut: 'Ctrl+F', run: openFindReplace },
+        { kind: 'separator', id: 'sep-find' },
+        { kind: 'item', id: 'find-replace', label: 'Find & Replace…', icon: 'search', shortcut: 'Ctrl+F', run: openFindReplace },
+        { kind: 'separator', id: 'sep-cells' },
+        // The Insert / Delete dialogs were keyboard-only via Polish #1;
+        // surface them in the menu so they're discoverable.
+        { kind: 'item', id: 'edit-insert-cells', label: 'Insert cells…', icon: 'add_box', shortcut: 'Ctrl++', onClick: () => setCellsOp('insert') },
+        { kind: 'item', id: 'edit-delete-cells', label: 'Delete cells…', icon: 'indeterminate_check_box', shortcut: 'Ctrl+-', onClick: () => setCellsOp('delete') },
+        { kind: 'separator', id: 'sep-sel' },
+        { kind: 'item', id: 'edit-select-col', label: 'Select column', icon: 'view_column', shortcut: 'Ctrl+Space', onClick: () => api && selectEntireColumns(api) },
+        { kind: 'item', id: 'edit-select-row', label: 'Select row', icon: 'view_stream', shortcut: 'Shift+Space', onClick: () => api && selectEntireRows(api) },
+        { kind: 'item', id: 'edit-edit-cell', label: 'Edit cell', icon: 'edit', shortcut: 'F2', onClick: () => api && enterCellEditMode(api) },
       ],
     },
     view: {
       label: 'View',
       items: [
+        { kind: 'item', id: 'toggle-formula-bar', label: ui.formulaBarVisible ? 'Hide formula bar' : 'Show formula bar', icon: 'functions', onClick: ui.toggleFormulaBar },
+        { kind: 'item', id: 'toggle-gridlines', label: 'Gridlines', icon: 'grid_on', onClick: () => api && toggleGridlines(api, true) },
+        { kind: 'separator', id: 'sep-freeze' },
         { kind: 'item', id: 'freeze-row', label: 'Freeze top row', icon: 'border_horizontal', run: freezeFirstRow },
         { kind: 'item', id: 'freeze-col', label: 'Freeze first column', icon: 'border_vertical', run: freezeFirstColumn },
         { kind: 'item', id: 'freeze-selection', label: 'Freeze panes (at selection)', icon: 'grid_4x4', run: freezeAtSelection },
         { kind: 'item', id: 'unfreeze', label: 'Unfreeze', icon: 'grid_off', run: unfreezePanes },
-        { kind: 'separator', id: 'sep-1' },
-        { kind: 'item', id: 'toggle-gridlines', label: 'Gridlines', icon: 'grid_on', onClick: () => api && toggleGridlines(api, true) },
-        { kind: 'item', id: 'toggle-formula-bar', label: ui.formulaBarVisible ? 'Hide formula bar' : 'Show formula bar', icon: 'functions', onClick: ui.toggleFormulaBar },
+        { kind: 'separator', id: 'sep-nav' },
+        { kind: 'item', id: 'jump-home', label: 'Jump to A1', icon: 'home', shortcut: 'Ctrl+Home', onClick: () => api && jumpToFirstCell(api) },
+        { kind: 'item', id: 'jump-end', label: 'Jump to last cell', icon: 'last_page', shortcut: 'Ctrl+End', onClick: () => api && jumpToLastCell(api) },
+        { kind: 'item', id: 'prev-sheet', label: 'Previous sheet', icon: 'navigate_before', shortcut: 'Ctrl+PageUp', onClick: () => api && switchToPreviousSheet(api) },
+        { kind: 'item', id: 'next-sheet', label: 'Next sheet', icon: 'navigate_next', shortcut: 'Ctrl+PageDown', onClick: () => api && switchToNextSheet(api) },
+        { kind: 'separator', id: 'sep-panels' },
+        { kind: 'item', id: 'tables-panel',  label: ui.tablesPanelVisible  ? 'Hide Tables panel'  : 'Tables panel',  icon: 'table_rows', onClick: ui.toggleTablesPanel },
+        { kind: 'item', id: 'outline-panel', label: ui.outlinePanelVisible ? 'Hide Outline panel' : 'Outline panel', icon: 'list',       onClick: ui.toggleOutlinePanel },
+        { kind: 'item', id: 'charts-panel',  label: ui.chartsPanelVisible  ? 'Hide Charts panel'  : 'Charts panel',  icon: 'bar_chart',  onClick: ui.toggleChartsPanel },
+        { kind: 'item', id: 'comments-panel', label: 'Comments panel', icon: 'forum', run: toggleCommentPanel },
       ],
     },
     insert: {
       label: 'Insert',
       items: [
-        { kind: 'item', id: 'insert-row-above', label: 'Row above', icon: 'vertical_align_top', run: insertRowAbove },
-        { kind: 'item', id: 'insert-row-below', label: 'Row below', icon: 'vertical_align_bottom', run: insertRowBelow },
-        { kind: 'item', id: 'insert-col-left', label: 'Column left', icon: 'keyboard_tab_rtl', run: insertColumnLeft },
-        { kind: 'item', id: 'insert-col-right', label: 'Column right', icon: 'keyboard_tab', run: insertColumnRight },
-        { kind: 'separator', id: 'sep-1' },
-        { kind: 'item', id: 'delete-row', label: 'Delete row', icon: 'delete_sweep', run: deleteSelectedRow },
-        { kind: 'item', id: 'delete-col', label: 'Delete column', icon: 'folder_delete', run: deleteSelectedColumn },
-        { kind: 'separator', id: 'sep-2' },
-        { kind: 'item', id: 'hide-row', label: 'Hide row', icon: 'visibility_off', run: hideSelectedRows },
-        { kind: 'item', id: 'unhide-row', label: 'Unhide row', icon: 'visibility', run: unhideSelectedRows },
-        { kind: 'item', id: 'hide-col', label: 'Hide column', icon: 'visibility_off', run: hideSelectedColumns },
-        { kind: 'item', id: 'unhide-col', label: 'Unhide column', icon: 'visibility', run: unhideSelectedColumns },
-        { kind: 'separator', id: 'sep-3' },
-        { kind: 'item', id: 'new-sheet', label: 'New sheet', icon: 'add_box', run: insertNewSheet },
+        // High-leverage objects first — what an Excel user reaches for.
+        { kind: 'item', id: 'new-sheet', label: 'New sheet', icon: 'add_box', shortcut: 'Shift+F11', run: insertNewSheet },
         { kind: 'item', id: 'insert-table', label: 'Table', icon: 'table_rows', run: insertTable },
         {
           kind: 'item',
           id: 'insert-chart',
-          label: 'Chart',
+          label: 'Chart…',
           icon: 'bar_chart',
-          // Excel-style: open a dialog (chart type + source range)
-          // pre-filled from the active selection. Insert anchors the
-          // chart 2 rows below the source, snapped to the cell grid.
           onClick: () => {
             if (!api) return;
             const sel = getActiveSelectionRange(api);
@@ -479,7 +514,7 @@ export function MenuBar() {
         {
           kind: 'item',
           id: 'insert-pivot',
-          label: 'PivotTable',
+          label: 'PivotTable…',
           icon: 'pivot_table_chart',
           // Open a configuration dialog (source range + target cell +
           // row field + value field + aggregation), compute the pivot,
@@ -491,51 +526,91 @@ export function MenuBar() {
             setShowInsertPivot(true);
           },
         },
-        { kind: 'item', id: 'insert-image', label: 'Image', icon: 'image', run: insertImage },
-        { kind: 'item', id: 'insert-link', label: 'Hyperlink', icon: 'link', shortcut: 'Ctrl+K', run: insertHyperlink },
-        { kind: 'item', id: 'insert-comment', label: 'Comment', icon: 'comment', run: insertComment },
-        { kind: 'separator', id: 'sep-4' },
+        { kind: 'separator', id: 'sep-objects' },
+        { kind: 'item', id: 'insert-image', label: 'Image…', icon: 'image', run: insertImage },
+        { kind: 'item', id: 'insert-link', label: 'Hyperlink…', icon: 'link', shortcut: 'Ctrl+K', run: insertHyperlink },
+        { kind: 'item', id: 'insert-comment', label: 'Comment', icon: 'comment', shortcut: 'Shift+F2', run: insertComment },
+        { kind: 'separator', id: 'sep-rowcol' },
+        {
+          kind: 'submenu',
+          id: 'insert-rowcol',
+          label: 'Rows & columns',
+          icon: 'grid_on',
+          items: [
+            { kind: 'item', id: 'insert-row-above', label: 'Row above',     icon: 'vertical_align_top',    run: insertRowAbove },
+            { kind: 'item', id: 'insert-row-below', label: 'Row below',     icon: 'vertical_align_bottom', run: insertRowBelow },
+            { kind: 'item', id: 'insert-col-left',  label: 'Column left',   icon: 'keyboard_tab_rtl',      run: insertColumnLeft },
+            { kind: 'item', id: 'insert-col-right', label: 'Column right',  icon: 'keyboard_tab',          run: insertColumnRight },
+          ],
+        },
+        { kind: 'separator', id: 'sep-autofit' },
         { kind: 'item', id: 'autofit-col', label: 'Auto-fit column width', icon: 'settings_ethernet', run: autoFitColumns },
         { kind: 'item', id: 'autofit-row', label: 'Auto-fit row height', icon: 'height', run: autoFitRows },
+        { kind: 'separator', id: 'sep-date' },
+        { kind: 'item', id: 'insert-today', label: "Today's date", icon: 'today', shortcut: 'Ctrl+;', run: insertTodayDate },
+        { kind: 'item', id: 'insert-time', label: 'Current time', icon: 'schedule', shortcut: 'Ctrl+Shift+:', run: insertCurrentTime },
       ],
     },
     format: {
       label: 'Format',
       items: [
-        ...(
-          ['general', 'number', 'integer', 'currency', 'accounting', 'percent', 'date', 'time', 'scientific', 'text'] as NumberFormatKey[]
-        ).map<MenuItem>((k) => ({
-          kind: 'item',
-          id: `num-${k}`,
-          label: k[0]!.toUpperCase() + k.slice(1),
+        // Number formats live behind a submenu so they don't push the
+        // other Format actions off the bottom of the dropdown. The user
+        // hovers "Number format" and gets all 10 variants in one place.
+        {
+          kind: 'submenu',
+          id: 'num-format',
+          label: 'Number format',
           icon: 'looks_one',
-          onClick: () => api && setNumberFormatByKey(api, k),
-        })),
-        { kind: 'separator', id: 'sep-1' },
+          items: (
+            ['general', 'number', 'integer', 'currency', 'accounting', 'percent', 'date', 'time', 'scientific', 'text'] as NumberFormatKey[]
+          ).map<MenuItem>((k) => ({
+            kind: 'item',
+            id: `num-${k}`,
+            label: k[0]!.toUpperCase() + k.slice(1),
+            icon: 'looks_one',
+            onClick: () => api && setNumberFormatByKey(api, k),
+          })),
+        },
         { kind: 'item', id: 'decimal-up', label: 'Increase decimals', icon: 'add', run: increaseDecimal },
         { kind: 'item', id: 'decimal-down', label: 'Decrease decimals', icon: 'remove', run: decreaseDecimal },
+        { kind: 'separator', id: 'sep-cond' },
+        { kind: 'item', id: 'conditional-formatting', label: 'Conditional formatting…', icon: 'palette', run: openConditionalFormatting },
+        { kind: 'separator', id: 'sep-visibility' },
+        // Hide / Unhide grouped — Excel's Format → Visibility submenu.
+        {
+          kind: 'submenu',
+          id: 'visibility',
+          label: 'Visibility',
+          icon: 'visibility',
+          items: [
+            { kind: 'item', id: 'hide-row',   label: 'Hide row',     icon: 'visibility_off', run: hideSelectedRows },
+            { kind: 'item', id: 'unhide-row', label: 'Unhide row',   icon: 'visibility',     run: unhideSelectedRows },
+            { kind: 'item', id: 'hide-col',   label: 'Hide column',  icon: 'visibility_off', run: hideSelectedColumns },
+            { kind: 'item', id: 'unhide-col', label: 'Unhide column', icon: 'visibility',     run: unhideSelectedColumns },
+          ],
+        },
+        { kind: 'separator', id: 'sep-fit' },
+        { kind: 'item', id: 'autofit-col', label: 'Auto-fit column width', icon: 'settings_ethernet', run: autoFitColumns },
+        { kind: 'item', id: 'autofit-row', label: 'Auto-fit row height', icon: 'height', run: autoFitRows },
+        { kind: 'separator', id: 'sep-delete' },
+        { kind: 'item', id: 'delete-row', label: 'Delete row', icon: 'delete_sweep', run: deleteSelectedRow },
+        { kind: 'item', id: 'delete-col', label: 'Delete column', icon: 'folder_delete', run: deleteSelectedColumn },
       ],
     },
     data: {
       label: 'Data',
       items: [
         { kind: 'item', id: 'sort-custom', label: 'Sort range…', icon: 'sort', run: openCustomSort },
-        { kind: 'separator', id: 'sep-0' },
         { kind: 'item', id: 'data-validation', label: 'Data validation…', icon: 'rule', run: openDataValidation },
-        { kind: 'item', id: 'conditional-formatting', label: 'Conditional formatting…', icon: 'palette', run: openConditionalFormatting },
-        { kind: 'separator', id: 'sep-1' },
+        { kind: 'separator', id: 'sep-clean' },
         { kind: 'item', id: 'text-to-columns', label: 'Text to Columns', icon: 'splitscreen', run: splitTextToColumns },
         { kind: 'item', id: 'remove-duplicates', label: 'Remove Duplicates', icon: 'filter_list_off', run: removeDuplicates },
         { kind: 'item', id: 'show-all-rows', label: 'Show all rows', icon: 'unfold_more', run: showAllRows },
-        { kind: 'separator', id: 'sep-2' },
+        { kind: 'separator', id: 'sep-outline' },
         { kind: 'item', id: 'group-rows', label: 'Group rows', icon: 'unfold_less', onClick: () => { outlineActions.groupRows(); } },
         { kind: 'item', id: 'group-cols', label: 'Group columns', icon: 'view_week', onClick: () => { outlineActions.groupCols(); } },
         { kind: 'item', id: 'ungroup', label: 'Ungroup', icon: 'unfold_more_double', onClick: () => { outlineActions.ungroupSelection(); } },
-        { kind: 'separator', id: 'sep-3' },
-        { kind: 'item', id: 'tables-panel', label: ui.tablesPanelVisible ? 'Hide Tables panel' : 'Tables panel', icon: 'table_rows', onClick: ui.toggleTablesPanel },
-        { kind: 'item', id: 'outline-panel', label: ui.outlinePanelVisible ? 'Hide Outline panel' : 'Outline panel', icon: 'list', onClick: ui.toggleOutlinePanel },
-        { kind: 'item', id: 'charts-panel', label: ui.chartsPanelVisible ? 'Hide Charts panel' : 'Charts panel', icon: 'bar_chart', onClick: ui.toggleChartsPanel },
-        { kind: 'item', id: 'comments-panel', label: 'Comments panel', icon: 'forum', run: toggleCommentPanel },
       ],
     },
     help: {

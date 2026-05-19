@@ -8,20 +8,84 @@ import { Tooltip } from './Tooltip';
 export function RibbonGroup({
   label,
   rows,
+  lead,
+  row1,
+  row2,
   children,
 }: {
   label: string;
-  /** Stack children vertically as separate rows. */
+  /** Stack children vertically as separate rows (legacy single-children API). */
   rows?: boolean;
-  children: ReactNode;
+  /** Optional "primary" big button on the left of the group that spans
+   *  both rows. Use BigToolbarButton here. Excel uses this slot for
+   *  group-defining actions: Paste in Clipboard, Styles button, etc. */
+  lead?: ReactNode;
+  /** Top row of small buttons (high-frequency actions). */
+  row1?: ReactNode;
+  /** Bottom row of small buttons (secondary actions). */
+  row2?: ReactNode;
+  /** Legacy flat children — used by single-row groups that haven't been
+   *  migrated to row1/row2 yet. */
+  children?: ReactNode;
 }) {
+  const explicit = row1 !== undefined || row2 !== undefined || lead !== undefined;
   return (
     <div className="ribbon__group" data-testid={`ribbon-group-${label.toLowerCase()}`}>
-      <div className={`ribbon__group-body${rows ? ' ribbon__group-body--rows' : ''}`}>
-        {children}
-      </div>
+      {explicit ? (
+        <div className="ribbon__group-body ribbon__group-body--two-row">
+          {lead && <div className="ribbon__group-lead">{lead}</div>}
+          <div className="ribbon__group-stack">
+            <div className="ribbon__group-row" data-row="1">{row1}</div>
+            <div className="ribbon__group-row" data-row="2">{row2}</div>
+          </div>
+        </div>
+      ) : (
+        <div className={`ribbon__group-body${rows ? ' ribbon__group-body--rows' : ''}`}>
+          {children}
+        </div>
+      )}
       <div className="ribbon__group-label">{label}</div>
     </div>
+  );
+}
+
+/**
+ * Big "primary" button — icon stacked on top, label below, optional
+ * dropdown chevron. Spans both rows of its RibbonGroup. Use sparingly:
+ * one per group at most, reserved for the group's anchor action
+ * (Paste, Styles, Format as Table). Matches Excel ribbon visuals.
+ */
+export function BigToolbarButton({
+  id,
+  label,
+  icon,
+  disabled,
+  hasChevron,
+  onClick,
+}: {
+  id: string;
+  label: string;
+  icon: string;
+  disabled?: boolean;
+  hasChevron?: boolean;
+  onClick?: () => void;
+}) {
+  const split = splitShortcut(label);
+  return (
+    <Tooltip label={split.label} shortcut={split.shortcut}>
+      <button
+        type="button"
+        className="btn btn--big"
+        data-testid={`ribbon-btn-${id}`}
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        <Icon name={icon} size="lg" />
+        <span className="btn__big-label">{split.label}</span>
+        {hasChevron && <Icon name="arrow_drop_down" size="sm" className="btn__big-chevron" />}
+      </button>
+    </Tooltip>
   );
 }
 

@@ -68,6 +68,29 @@ export function setFontSize(api: FUniver, size: number) {
   activeRange(api)?.setFontSize(size);
 }
 
+/**
+ * Bump the active cell's font size by `delta` (commonly +1 / -1 from
+ * the A↑ / A↓ buttons). Reads the current size off the active cell's
+ * style; falls back to 11 (Excel default) when no explicit size set.
+ * Clamped to the same [6, 72] window the font-size dropdown offers.
+ */
+export function adjustFontSize(api: FUniver, delta: number) {
+  const wb = api.getActiveWorkbook();
+  const sheet = wb?.getActiveSheet();
+  const range = sheet?.getActiveRange();
+  if (!wb || !sheet || !range) return;
+  const cell = sheet.getRange(range.getRow(), range.getColumn());
+  const data = cell.getCellData();
+  const style =
+    typeof data?.s === 'string'
+      ? (wb.getWorkbook().getStyles().get(data.s) ?? null)
+      : (data?.s ?? null);
+  const current = typeof style?.fs === 'number' && style.fs > 0 ? style.fs : 11;
+  const next = Math.max(6, Math.min(72, current + delta));
+  if (next === current) return;
+  setFontSize(api, next);
+}
+
 export function setFontColor(api: FUniver, color: string) {
   activeRange(api)?.setFontColor(color || null);
 }
