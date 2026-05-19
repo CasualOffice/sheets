@@ -148,6 +148,53 @@ button {
   border-radius: var(--radius-sm);
 }
 
+/* Inter (UI) and Material Symbols Outlined (icons) are bundled into
+   public/fonts/ — no Google Fonts CDN. local() falls back to a
+   system-installed copy first to spare a font load on machines that
+   have one. The bundled files are the source of truth for offline.
+   Vite copies public/ into dist/ so the relative paths below resolve
+   both in dev and in the installed app. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Inter Regular'), local('Inter-Regular'),
+       url('/fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: local('Inter Medium'), local('Inter-Medium'),
+       url('/fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Inter SemiBold'), local('Inter-SemiBold'),
+       url('/fonts/inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Inter Bold'), local('Inter-Bold'),
+       url('/fonts/inter-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: local('Material Symbols Outlined'),
+       url('/fonts/material-symbols-outlined.woff2') format('woff2');
+}
+
 /* Material Symbols Outlined — single source of icon truth. */
 .icon {
   font-family: "Material Symbols Outlined";
