@@ -551,6 +551,37 @@ button {
   border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
+/* Local-user profile chip — shown in place of the Share button when
+   the editor is running inside Casual Office (single-user, no collab). */
+.titlebar__profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--color-line, rgba(0, 0, 0, 0.08));
+  font-size: 12px;
+  font-weight: var(--weight-medium, 500);
+  color: var(--color-text);
+  user-select: none;
+}
+.titlebar__profile-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.titlebar__profile-name {
+  white-space: nowrap;
+}
+
 /* Working-on-it pill — fires while a known-slow action is mid-flight
    (Format as Table on big sheets, Sort, Fill). Click-through so the
    user can still hit other UI. */

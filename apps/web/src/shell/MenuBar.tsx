@@ -322,36 +322,42 @@ export function MenuBar() {
         },
         { kind: 'separator', id: 'sep-1' },
         { kind: 'item', id: 'print', label: 'Print', icon: 'print', shortcut: 'Ctrl+P', onClick: () => setShowPageSetup(true) },
-        { kind: 'separator', id: 'sep-coedit' },
-        ...(collab.roomId
-          ? ([
-              {
-                kind: 'item',
-                id: 'download-room',
-                label: 'Download a copy (.xlsx)',
-                icon: 'download',
-                onClick: handleExportXlsx,
-              },
-              {
-                kind: 'item',
-                id: 'leave-room',
-                label: 'Leave room',
-                icon: 'logout',
-                onClick: () => {
-                  // Drop the /r/<id> path; SPA reload starts a fresh single-user
-                  // workbook. State in the room continues for other peers.
-                  window.location.href = window.location.origin + '/';
-                },
-              },
-            ] as MenuItem[])
+        // Co-editing menu entries are hidden when running inside Casual
+        // Office (single-user desktop product); the web build keeps the
+        // Share / Leave / Download-a-copy choices as before.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...((window as any).__deskApp__?.isDesktop
+          ? ([] as MenuItem[])
           : ([
-              {
-                kind: 'item',
-                id: 'start-room',
-                label: 'Share for co-editing…',
-                icon: 'group_add',
-                onClick: () => ui.openShareRoom(),
-              },
+              { kind: 'separator', id: 'sep-coedit' },
+              ...(collab.roomId
+                ? ([
+                    {
+                      kind: 'item',
+                      id: 'download-room',
+                      label: 'Download a copy (.xlsx)',
+                      icon: 'download',
+                      onClick: handleExportXlsx,
+                    },
+                    {
+                      kind: 'item',
+                      id: 'leave-room',
+                      label: 'Leave room',
+                      icon: 'logout',
+                      onClick: () => {
+                        window.location.href = window.location.origin + '/';
+                      },
+                    },
+                  ] as MenuItem[])
+                : ([
+                    {
+                      kind: 'item',
+                      id: 'start-room',
+                      label: 'Share for co-editing…',
+                      icon: 'group_add',
+                      onClick: () => ui.openShareRoom(),
+                    },
+                  ] as MenuItem[])),
             ] as MenuItem[])),
         { kind: 'separator', id: 'sep-2' },
         { kind: 'item', id: 'properties', label: 'Properties', icon: 'info', onClick: () => setShowProperties(true) },

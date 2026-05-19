@@ -8,6 +8,68 @@ import { Icon } from './Icon';
 import { BusyPill } from './BusyPill';
 
 /**
+ * True when the editor is mounted inside the Casual Office Tauri shell
+ * (window.__deskApp__ is wired by the bootstrap from ?desk=1). In that
+ * case the workbook is local + single-user — collab UI (Share button,
+ * AvatarStack, "In room" pill) is dead weight that confuses the user,
+ * so we hide it and show a local-user profile chip instead.
+ */
+function useDesktopProfile() {
+  const [profile, setProfile] = useState<{
+    name: string;
+    avatar_hue: number;
+    avatar_path: string | null;
+  } | null>(null);
+  const isDesktop =
+    typeof window !== 'undefined' &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__deskApp__?.isDesktop === true;
+  useEffect(() => {
+    if (!isDesktop) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bridge = (window as any).__deskApp__;
+    if (typeof bridge.getProfile !== 'function') return;
+    let cancelled = false;
+    bridge
+      .getProfile()
+      .then((p: typeof profile) => { if (!cancelled) setProfile(p); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [isDesktop]);
+  return { isDesktop, profile };
+}
+
+function DesktopProfileChip({
+  profile,
+}: {
+  profile: { name: string; avatar_hue: number; avatar_path: string | null };
+}) {
+  const initials = profile.name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('') || '?';
+  const first = profile.name.split(/\s+/)[0] ?? '';
+  return (
+    <div
+      className="titlebar__profile-chip"
+      data-testid="titlebar-profile-chip"
+      title={profile.name}
+    >
+      <span
+        className="titlebar__profile-avatar"
+        style={{ backgroundColor: `hsl(${profile.avatar_hue}, 55%, 50%)` }}
+        aria-hidden="true"
+      >
+        {initials}
+      </span>
+      <span className="titlebar__profile-name">{first}</span>
+    </div>
+  );
+}
+
+/**
  * Title bar — brand on the left, editable filename in the middle. Click the
  * filename to rename inline (Google-Sheets pattern); Enter commits, Escape
  * reverts, blur commits the current draft.
@@ -17,6 +79,7 @@ export function TitleBar() {
   const ui = useUI();
   const api = useUniverAPI();
   const collab = useCollab();
+  const desktop = useDesktopProfile();
   const filename = meta.name || 'Untitled';
 
   const [editing, setEditing] = useState(false);
@@ -110,26 +173,32 @@ export function TitleBar() {
 
       <div className="titlebar__actions" data-testid="titlebar-actions">
         <BusyPill />
-        <AvatarStack />
-        {collab.roomId ? (
-          <span
-            className="titlebar__roompill"
-            data-testid="titlebar-roompill"
-            title={`Joined room ${collab.roomId}`}
-          >
-            <Icon name="group" size="sm" />
-            <span>In room</span>
-          </span>
+        {desktop.isDesktop ? (
+          desktop.profile ? <DesktopProfileChip profile={desktop.profile} /> : null
         ) : (
-          <button
-            type="button"
-            className="titlebar__share btn-primary"
-            data-testid="titlebar-share"
-            onClick={() => ui.openShareRoom()}
-          >
-            <Icon name="group_add" size="sm" />
-            <span>Share</span>
-          </button>
+          <>
+            <AvatarStack />
+            {collab.roomId ? (
+              <span
+                className="titlebar__roompill"
+                data-testid="titlebar-roompill"
+                title={`Joined room ${collab.roomId}`}
+              >
+                <Icon name="group" size="sm" />
+                <span>In room</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="titlebar__share btn-primary"
+                data-testid="titlebar-share"
+                onClick={() => ui.openShareRoom()}
+              >
+                <Icon name="group_add" size="sm" />
+                <span>Share</span>
+              </button>
+            )}
+          </>
         )}
       </div>
     </header>
