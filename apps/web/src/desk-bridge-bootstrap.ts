@@ -66,6 +66,19 @@ if (isDesktop) {
       }
       return new Uint8Array(raw as number[]).buffer as ArrayBuffer;
     };
+    /** Chunked write — same motivation as loadDocument's chunked read.
+     *  Avoids the JSON-number-array IPC truncation threshold for big
+     *  files. */
+    async function chunkedWrite(path: string, buf: ArrayBuffer) {
+      await inv('begin_save_document', { path });
+      const view = new Uint8Array(buf);
+      const CHUNK = 1 << 20;
+      for (let offset = 0; offset < view.byteLength; offset += CHUNK) {
+        const slice = view.subarray(offset, Math.min(offset + CHUNK, view.byteLength));
+        await inv('write_save_chunk', { path, offset, bytes: Array.from(slice) });
+      }
+    }
+
     async function updateWindowTitleFromPath(newPath: string) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,24 +144,23 @@ if (isDesktop) {
       },
       async save(bytes: ArrayBuffer): Promise<string | null> {
         if (filePath) {
-          await inv('save_document', {
-            path: filePath,
-            bytes: Array.from(new Uint8Array(bytes)),
-          });
+          await chunkedWrite(filePath, bytes);
           return filePath;
         }
         return bridge!.saveAs('Untitled.xlsx', bytes);
       },
       async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
-        const written = (await inv('save_document_as', {
-          suggestedName,
-          bytes: Array.from(new Uint8Array(bytes)),
-        })) as string | null;
-        if (written) {
-          filePath = written;
-          await updateWindowTitleFromPath(written);
+        const newPath = (await inv('pick_save_path', { suggestedName })) as string | null;
+        if (!newPath) return null;
+        await chunkedWrite(newPath, bytes);
+        try {
+          await inv('add_recent_file', { path: newPath });
+        } catch {
+          /* best-effort */
         }
-        return written;
+        filePath = newPath;
+        await updateWindowTitleFromPath(newPath);
+        return newPath;
       },
       // Profile exposed to the editor so it can show a local-user chip
       // in place of the collab Share button.
@@ -214,6 +226,19 @@ if (isDesktop) {
   if (bridge) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__deskApp__ = bridge;
+
+    // Ctrl/Cmd-H — focus the launcher window. Only fires in top-level
+    // mode where __TAURI__.core.invoke is directly available.
+    if (isTopLevel && tauriCore?.invoke) {
+      const inv = tauriCore.invoke;
+      window.addEventListener('keydown', (e) => {
+        const meta = e.ctrlKey || e.metaKey;
+        if (meta && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'h') {
+          e.preventDefault();
+          inv('focus_launcher_window').catch(() => undefined);
+        }
+      });
+    }
   }
 }
 
