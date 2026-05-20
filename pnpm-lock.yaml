@@ -34,6 +34,9 @@ importers:
       eslint-plugin-react-refresh:
         specifier: ^0.4.16
         version: 0.4.26(eslint@9.39.4)
+      exceljs:
+        specifier: 4.4.0
+        version: 4.4.0
       globals:
         specifier: ^15.13.0
         version: 15.15.0
