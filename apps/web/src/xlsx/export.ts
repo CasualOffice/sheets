@@ -28,10 +28,22 @@ export type ExportExtras = {
    *  group boundaries) AND ExcelJS row/col `outlineLevel`+`collapsed` (so
    *  Excel renders the native +/- gutter when the file is opened there). */
   outline?: OutlineState;
-  /** Chart models stashed under `__casual_sheets_charts__`. Native xlsx
-   *  chart encoding is deferred to Charts P5 — for v0.1.1 charts survive
-   *  *our* round-trip but appear blank when opened in Excel. */
+  /** Chart models stashed under `__casual_sheets_charts__`. Survives our
+   *  round-trip with full editability. To make charts *visible* in Excel
+   *  itself, Charts P5b also passes pre-rendered PNG snapshots via
+   *  `chartImages` below — Excel renders them as static images while our
+   *  app re-attaches the live chart from the JSON sidecar on re-open. */
   charts?: ChartModel[];
+  /** Pre-rendered chart bitmaps to embed in the xlsx as floating images,
+   *  one per chart. Anchored to the same cell rectangle as the source
+   *  ChartModel.pos. The main thread renders these via ECharts before
+   *  posting to the exporter worker (ECharts needs a DOM). */
+  chartImages?: Array<{
+    chartId: string;
+    sheetId: string;
+    png: ArrayBuffer;
+    anchor: { startRow: number; endRow: number; startColumn: number; endColumn: number };
+  }>;
   /** Pivot models stashed under `__casual_sheets_pivots__`. The computed
    *  pivot output lives in regular cell values (so it round-trips through
    *  any xlsx reader); this carries the *definition* so a future refresh

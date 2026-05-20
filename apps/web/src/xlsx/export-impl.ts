@@ -186,6 +186,25 @@ export async function workbookDataToXlsxImpl(
         }
       }
     }
+
+    // Charts P5b — embed pre-rendered chart bitmaps as floating images.
+    // The live chart model still ships via `__casual_sheets_charts__` so
+    // our app re-attaches an editable chart on re-open; Excel sees the
+    // image. `editAs: 'oneCell'` anchors the image so it scales with the
+    // top-left cell only (Excel's "Move with cells but don't size").
+    const sheetCharts = (extras.chartImages ?? []).filter((c) => c.sheetId === sheetId);
+    for (const ci of sheetCharts) {
+      const imageId = wb.addImage({ buffer: ci.png, extension: 'png' });
+      // ExcelJS's runtime accepts simple `{col, row}` anchors (per its
+      // docs), but the published type insists on the full `Anchor`
+      // struct. Cast to bypass — runtime is the source of truth.
+      ws.addImage(imageId, {
+        tl: { col: ci.anchor.startColumn, row: ci.anchor.startRow },
+        br: { col: ci.anchor.endColumn + 1, row: ci.anchor.endRow + 1 },
+        editAs: 'oneCell',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+    }
   }
 
   if (extras.outline && Object.keys(extras.outline).length > 0) {
