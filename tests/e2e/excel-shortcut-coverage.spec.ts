@@ -91,18 +91,34 @@ test.describe('Frequently used', () => {
     await page.keyboard.press('Control+o');
   });
 
-  test.fixme('Ctrl+W — close workbook (route to /)', async ({ page }) => {
-    // Browser default: close tab. We should intercept and navigate to /
-    // (drop any /r/<id> path) so a co-edit room can be left without
-    // killing the tab.
+  test('Ctrl+W — single-user resets workbook (no navigation)', async ({ page }) => {
+    // Single-user (no /r/<id> path): we replace the workbook with a
+    // fresh empty one rather than closing the tab. Assert the workbook
+    // name is back to the default.
     await setup(page);
+    await page.evaluate(() => {
+      // Mutate the title so we can detect the reset.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb: any = window.__univerAPI!.getActiveWorkbook();
+      wb.setName('Beforehand');
+    });
     await page.keyboard.press('Control+w');
+    await page.waitForTimeout(150);
+    const name = await page.evaluate(() => {
+      const wb = window.__univerAPI!.getActiveWorkbook();
+      return wb?.getName?.() ?? '';
+    });
+    expect(name).toBe('Untitled');
   });
 
-  test.fixme('Alt+F2 — open Save As (xlsx) dialog', async ({ page }) => {
+  test('Alt+F2 — Save As xlsx (download triggers)', async ({ page }) => {
     await setup(page);
+    // Triggers the xlsx exporter which dispatches a download. Wait for
+    // the request rather than blocking on the actual file save.
+    const dl = page.waitForEvent('download', { timeout: 5_000 });
     await page.keyboard.press('Alt+F2');
-    // Should trigger handleExportXlsx OR open the "Save as" submenu.
+    const file = await dl;
+    expect(file.suggestedFilename()).toMatch(/\.xlsx$/);
   });
 
   test('Ctrl+F — Find & Replace dialog', async ({ page }) => {
@@ -194,20 +210,66 @@ test.describe('Editing cells', () => {
     expect(String(v)).toBe('h1');
   });
 
-  test.fixme('Ctrl+Shift+> — Increase font size', async ({ page }) => {
+  test('Ctrl+Shift+> / Ctrl+Shift+< — adjust font size', async ({ page }) => {
     await setup(page);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 'sz' });
+      ws.getRange('A1').setFontSize(11);
+      ws.getRange('A1').activate();
+    });
+    const readSize = () =>
+      page.evaluate(() => {
+        const api = window.__univerAPI!;
+        const wb = api.getActiveWorkbook()!;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ws: any = wb.getActiveSheet();
+        const cell = ws.getRange(0, 0).getCellData();
+        const style =
+          typeof cell?.s === 'string'
+            ? wb.getWorkbook().getStyles().get(cell.s)
+            : cell?.s;
+        return typeof style?.fs === 'number' ? style.fs : 11;
+      });
     await page.keyboard.press('Control+Shift+>');
-  });
-
-  test.fixme('Ctrl+Shift+< — Decrease font size', async ({ page }) => {
-    await setup(page);
+    await page.waitForTimeout(100);
+    expect(await readSize()).toBe(12);
     await page.keyboard.press('Control+Shift+<');
+    await page.waitForTimeout(100);
+    expect(await readSize()).toBe(11);
   });
 
-  test.fixme('Ctrl+Shift+L — Toggle AutoFilter on/off', async ({ page }) => {
+  test('Ctrl+Shift+L — Toggle AutoFilter on/off', async ({ page }) => {
     await setup(page);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 'h1' });
+      ws.getRange('A2').setValue({ v: 'a' });
+      ws.getRange('A1:A2').activate();
+    });
     await page.keyboard.press('Control+Shift+L');
-    // Univer has a sheets-filter plugin; wire the toggle.
+    await page.waitForTimeout(150);
+    let has = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      return Boolean(ws.getFilter?.());
+    });
+    expect(has).toBe(true);
+    // Toggle off.
+    await page.keyboard.press('Control+Shift+L');
+    await page.waitForTimeout(150);
+    has = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      return Boolean(ws.getFilter?.());
+    });
+    expect(has).toBe(false);
   });
 
   test.fixme('Ctrl+Alt+L — Re-apply filter', async ({ page }) => {
@@ -256,14 +318,50 @@ test.describe('Editing data within a cell', () => {
     expect(String(v)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
   });
 
-  test.fixme("Ctrl+' — copy formula from cell above", async ({ page }) => {
+  test("Ctrl+' — copy formula from cell above", async ({ page }) => {
     await setup(page);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 5 });
+      ws.getRange('A2').setValue({ v: 10 });
+      ws.getRange('A3').setValue({ f: '=SUM(A1:A2)' });
+      ws.getRange('A4').activate();
+    });
     await page.keyboard.press("Control+'");
+    await page.waitForTimeout(100);
+    const formula = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      const cell = ws.getRange('A4').getCellData();
+      return cell?.f ?? '';
+    });
+    expect(formula).toBe('=SUM(A1:A2)');
   });
 
-  test.fixme("Ctrl+Shift+' — copy value from cell above", async ({ page }) => {
+  test("Ctrl+Shift+' — copy value from cell above", async ({ page }) => {
     await setup(page);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 42 });
+      ws.getRange('A2').activate();
+    });
     await page.keyboard.press("Control+Shift+'");
+    await page.waitForTimeout(100);
+    const v = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      const cell = ws.getRange('A2').getCellData();
+      // Should hold the literal value, not a formula.
+      return { v: cell?.v ?? null, f: cell?.f ?? null };
+    });
+    expect(v.v).toBe(42);
+    expect(v.f).toBe(null);
   });
 
   test.fixme('Ctrl+Shift+A — Insert function arguments', async ({ page }) => {
@@ -282,9 +380,33 @@ test.describe('Formatting cells', () => {
     await page.keyboard.press('Control+Shift+v');
   });
 
-  test.fixme('Ctrl+Shift+& — Outline border', async ({ page }) => {
+  test('Ctrl+Shift+7 — Outside border (Excel also bound to Ctrl+Shift+&)', async ({ page }) => {
+    // The same handler covers Ctrl+Shift+& on US layouts — both resolve
+    // to e.code === 'Digit7'. We test the Digit7 variant since
+    // `Control+Shift+&` is not a stable keyboard.press input across
+    // playwright versions.
     await setup(page);
-    await page.keyboard.press('Control+Shift+&');
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('B2:C3').activate();
+    });
+    await page.keyboard.press('Control+Shift+7');
+    await page.waitForTimeout(120);
+    const hasBorder = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      const wb = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = wb.getActiveSheet();
+      const cell = ws.getRange('B2').getCellData();
+      const style =
+        typeof cell?.s === 'string'
+          ? wb.getWorkbook().getStyles().get(cell.s)
+          : cell?.s;
+      return Boolean(style?.bd?.t || style?.bd?.l);
+    });
+    expect(hasBorder).toBe(true);
   });
 
   test('Ctrl+Shift+1..6 — number format shortcuts', async ({ page }) => {
@@ -327,10 +449,7 @@ test.describe('Formatting cells', () => {
     }
   });
 
-  test.fixme('Ctrl+Shift+7 — Outside border', async ({ page }) => {
-    await setup(page);
-    await page.keyboard.press('Control+Shift+7');
-  });
+  // Ctrl+Shift+7 covered in the test above ("Outside border") — same handler.
 
   test.fixme('Ctrl+1 — Open Format Cells dialog', async ({ page }) => {
     await setup(page);

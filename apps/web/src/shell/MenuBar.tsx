@@ -36,6 +36,7 @@ import { newPivotId } from '../pivots/types';
 import { useOutlineActions } from '../outline/use-outline-actions';
 import { useOutline } from '../outline/outline-context';
 import {
+  adjustFontSize,
   copy as actCopy,
   cut as actCut,
   decreaseDecimal,
@@ -43,6 +44,7 @@ import {
   openFindReplace,
   paste as actPaste,
   redo,
+  setBorders,
   setNumberFormatByKey,
   undo,
   type NumberFormatKey,
@@ -51,6 +53,7 @@ import {
   applyAutoFunction,
   autoFitColumns,
   autoFitRows,
+  copyFromAbove,
   deleteSelectedColumn,
   deleteSelectedRow,
   forceRecalculate,
@@ -87,6 +90,7 @@ import {
   showAllRows,
   splitTextToColumns,
   toggleCommentPanel,
+  toggleFilter,
   toggleGridlines,
   unfreezePanes,
   unhideSelectedColumns,
@@ -374,6 +378,60 @@ export function MenuBar() {
         if (inTextInput) return;
         e.preventDefault();
         if (api) forceRecalculate(api);
+      }
+      // ── Font size: Ctrl+Shift+> / Ctrl+Shift+< ──────────────────
+      // Excel's "grow/shrink font". The Period/Comma codes are layout-
+      // stable; e.key on US is `>` / `<` but localizes elsewhere.
+      if (mod && e.shiftKey && !e.altKey && e.code === 'Period') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) adjustFontSize(api, +1);
+      } else if (mod && e.shiftKey && !e.altKey && e.code === 'Comma') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) adjustFontSize(api, -1);
+      }
+      // ── AutoFilter toggle: Ctrl+Shift+L ─────────────────────────
+      // Same key (`l`) as Insert Table — distinguished by Shift.
+      if (mod && e.shiftKey && !e.altKey && k === 'l') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) toggleFilter(api);
+      }
+      // ── Outline border: Ctrl+Shift+& (US) / Ctrl+Shift+7 ────────
+      // Both map to Excel's "outside border". US keyboards report
+      // Shift+7 as `&`; Digit7 is the layout-stable signal.
+      if (mod && e.shiftKey && !e.altKey && e.code === 'Digit7') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) setBorders(api, 'outside');
+      }
+      // ── Copy from above: Ctrl+' / Ctrl+Shift+' ──────────────────
+      // Excel's "fill down from row above" pair. Quote (`'`) is layout-
+      // stable on US — falling back to e.key for non-US.
+      if (mod && !e.altKey && (e.key === "'" || e.code === 'Quote')) {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) copyFromAbove(api, e.shiftKey ? 'value' : 'formula');
+      }
+      // ── Save As xlsx: Alt+F2 ────────────────────────────────────
+      if (!mod && e.altKey && !e.shiftKey && e.key === 'F2') {
+        if (inTextInput) return;
+        e.preventDefault();
+        void handleExportXlsx();
+      }
+      // ── Close workbook / leave room: Ctrl+W ─────────────────────
+      // Browser default is "close tab" — preventDefault and route to /
+      // instead so a co-edit room can be left without killing the tab.
+      // No-op meaning preserved single-user: just resets the workbook.
+      if (mod && !e.altKey && !e.shiftKey && k === 'w') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (collab.roomId) {
+          window.location.href = window.location.origin + '/';
+        } else {
+          handleNew();
+        }
       }
     };
     window.addEventListener('keydown', onKey, { capture: true });

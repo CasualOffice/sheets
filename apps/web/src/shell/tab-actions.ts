@@ -259,6 +259,30 @@ export function insertCurrentTime(api: FUniver) {
   range.setValue({ v });
 }
 
+/**
+ * Ctrl+' / Ctrl+Shift+' — copy from the cell directly above into the active
+ * cell. The Ctrl+' variant copies the formula (preserving the `=…`), the
+ * Ctrl+Shift+' variant copies the computed value (no formula). No-op on row 1.
+ */
+export function copyFromAbove(api: FUniver, mode: 'formula' | 'value') {
+  const sheet = activeSheet(api);
+  const range = activeRange(api);
+  if (!sheet || !range) return;
+  const row = range.getRow();
+  if (row <= 0) return;
+  const col = range.getColumn();
+  const above = sheet.getRange(row - 1, col).getCellData();
+  if (!above) return;
+  const target = sheet.getRange(row, col);
+  if (mode === 'formula' && typeof above.f === 'string' && above.f.length > 0) {
+    target.setValue({ f: above.f });
+  } else {
+    // Value mode (or formula mode with no formula above) — strip the formula
+    // and write the evaluated value so the new cell holds the literal.
+    target.setValue({ v: above.v ?? null });
+  }
+}
+
 export function hideSelectedRows(api: FUniver) {
   api.executeCommand('sheet.command.set-rows-hidden');
 }
