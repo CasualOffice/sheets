@@ -62,6 +62,21 @@ test.describe('Formula bar', () => {
     await expect(page.getByTestId('name-box')).toHaveValue('A1');
   });
 
+  test('Ctrl+G focuses the Name Box and selects its current reference', async ({ page }) => {
+    await selectRange(page, 'C3');
+    await page.keyboard.press('Control+g');
+
+    const nameBox = page.getByTestId('name-box');
+    await expect(nameBox).toBeFocused();
+    await expect(nameBox).toHaveValue('C3');
+    const selection = await nameBox.evaluate((el: HTMLInputElement) => ({
+      start: el.selectionStart,
+      end: el.selectionEnd,
+      value: el.value,
+    }));
+    expect(selection).toEqual({ start: 0, end: 2, value: 'C3' });
+  });
+
   test('Typing text and Enter commits to the active cell', async ({ page }) => {
     const input = page.getByTestId('formula-input');
     await input.fill('Hello world');

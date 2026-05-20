@@ -125,6 +125,84 @@ type MenuItem =
       items: MenuItem[];
     };
 
+function openContextMenuForActiveCell(api: FUniver): void {
+  const canvas = document.querySelector('[id^="univer-sheet-main-canvas_"]') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const wb = api.getActiveWorkbook();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sheet = wb?.getActiveSheet() as any;
+  const range = sheet?.getActiveRange?.();
+  if (!sheet || !range) return;
+
+  let sx = 0;
+  let sy = 0;
+  const scrollState = sheet.getScrollState?.() as
+    | { sheetViewStartRow?: number; sheetViewStartColumn?: number; offsetX?: number; offsetY?: number }
+    | undefined;
+  if (scrollState) {
+    try {
+      const r = scrollState.sheetViewStartRow ?? 0;
+      const c = scrollState.sheetViewStartColumn ?? 0;
+      const topLeft = sheet.getRange(r, c).getCellRect();
+      if (topLeft) {
+        sx = topLeft.left + (scrollState.offsetX ?? 0);
+        sy = topLeft.top + (scrollState.offsetY ?? 0);
+      }
+    } catch {
+      /* ignore and fall back to unscrolled coordinates */
+    }
+  }
+
+  try {
+    const rect = sheet.getRange(range.getRow(), range.getColumn()).getCellRect();
+    if (!rect) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const clientX = canvasRect.left + (rect.left - sx) + Math.max(6, Math.min(20, rect.right - rect.left - 6));
+    const clientY = canvasRect.top + (rect.top - sy) + Math.max(6, Math.min(20, rect.bottom - rect.top - 6));
+
+    const baseInit = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      button: 2,
+      buttons: 2,
+      clientX,
+      clientY,
+    };
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        ...baseInit,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+      }),
+    );
+    canvas.dispatchEvent(new MouseEvent('mousedown', baseInit));
+    canvas.dispatchEvent(
+      new PointerEvent('pointerup', {
+        ...baseInit,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+      }),
+    );
+    canvas.dispatchEvent(new MouseEvent('mouseup', baseInit));
+    canvas.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        button: 2,
+        buttons: 2,
+        clientX,
+        clientY,
+      }),
+    );
+  } catch {
+    /* grid rect not ready */
+  }
+}
+
 export function MenuBar() {
   const api = useUniverAPI();
   const workbook = useWorkbook();
@@ -220,6 +298,14 @@ export function MenuBar() {
           // no app handler; we replace it with the file picker.
           e.preventDefault();
           void handlersRef.current.open();
+        } else if (k === 'g' && !e.shiftKey) {
+          // Ctrl+G — Excel-style Go To. Phase 1 focuses the Name Box
+          // and selects its contents so typing replaces the current A1.
+          // Unlike Find/Replace, this should work even from other text
+          // inputs inside the shell because users expect it to jump into
+          // the navigation affordance from anywhere.
+          e.preventDefault();
+          document.dispatchEvent(new CustomEvent('casual-focus-name-box'));
         } else if (k === 'f' && !e.shiftKey) {
           // Skip when focus is in a plain text input — browsers expect
           // Ctrl+F to do in-page find there. The find dialog is for the
@@ -285,6 +371,13 @@ export function MenuBar() {
         if (inTextInput) return;
         e.preventDefault();
         if (api) insertNewSheet(api);
+      } else if (e.key === 'F10' && e.shiftKey && !mod && !e.altKey) {
+        // Shift+F10 — keyboard context menu for the active cell/range.
+        // Reuse Univer's existing canvas context-menu path by
+        // synthesizing a right-click at the active cell's viewport rect.
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) openContextMenuForActiveCell(api);
       }
       if (e.key === 'F2' && !mod && !e.shiftKey && !e.altKey) {
         // F2 — drop the active cell into edit mode without clearing

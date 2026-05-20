@@ -40,9 +40,12 @@ export function registerPasteMergeHook(api: FUniver): (() => void) | null {
   const svc = clipboard as
     | {
         addClipboardHook: (hook: ClipboardHook) => { dispose: () => void };
+        _htmlToUSM?: { convert: (html: string) => HtmlToUsmResult };
       }
     | undefined;
   if (!svc?.addClipboardHook) return null;
+
+  const teardownFormulaPatch = patchExcelHtmlFormulaParsing(svc);
 
   const onPasteCells: ClipboardHook['onPasteCells'] = (_pasteFrom, pasteTo, data) => {
     const ranges: MergeRange[] = [];
@@ -214,6 +217,7 @@ export function registerPasteMergeHook(api: FUniver): (() => void) | null {
     mergeDisposable.dispose();
     colWidthDisposable.dispose();
     rowHeightDisposable.dispose();
+    teardownFormulaPatch();
     if (import.meta.env.DEV) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (globalThis as any).__pasteMergeHook__;
@@ -223,6 +227,80 @@ export function registerPasteMergeHook(api: FUniver): (() => void) | null {
       delete (globalThis as any).__pasteRowHeightHook__;
     }
   };
+}
+
+function patchExcelHtmlFormulaParsing(svc: {
+  _htmlToUSM?: { convert: (html: string) => HtmlToUsmResult };
+}) {
+  const parser = svc._htmlToUSM;
+  if (!parser?.convert) return () => {};
+  const patched = parser as { convert: (html: string) => HtmlToUsmResult; __casualExcelFormulaPatched__?: boolean };
+  if (patched.__casualExcelFormulaPatched__) return () => {};
+  const original = patched.convert.bind(parser);
+  patched.convert = (html: string) => {
+    const out = original(html);
+    applyExcelHtmlFormulas(html, out);
+    return out;
+  };
+  patched.__casualExcelFormulaPatched__ = true;
+  return () => {
+    patched.convert = original;
+    delete patched.__casualExcelFormulaPatched__;
+  };
+}
+
+function applyExcelHtmlFormulas(html: string, parsed: HtmlToUsmResult) {
+  const formulas = extractExcelHtmlFormulas(html);
+  if (formulas.length === 0) return;
+  for (const { row, column, formula } of formulas) {
+    const cell = parsed.cellMatrix?.getValue?.(row, column) as
+      | { f?: string }
+      | null
+      | undefined;
+    if (!cell || typeof formula !== 'string' || formula.length === 0) continue;
+    cell.f = formula;
+  }
+}
+
+function extractExcelHtmlFormulas(html: string) {
+  if (typeof document === 'undefined') return [] as Array<{ row: number; column: number; formula: string }>;
+  const doc = document.implementation.createHTMLDocument('');
+  const range = doc.createRange();
+  range.selectNodeContents(doc.body);
+  doc.body.append(range.createContextualFragment(html));
+
+  const out: Array<{ row: number; column: number; formula: string }> = [];
+  let rowOffset = 0;
+  for (const table of Array.from(doc.querySelectorAll('table'))) {
+    const occupied = new Set<string>();
+    const rows = Array.from(table.querySelectorAll('tr'));
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const cells = Array.from(rows[rowIndex].querySelectorAll('td, th'));
+      let columnIndex = 0;
+      for (const cell of cells) {
+        while (occupied.has(`${rowIndex}:${columnIndex}`)) columnIndex += 1;
+        const formula = extractCellFormula(cell);
+        if (formula) {
+          out.push({ row: rowOffset + rowIndex, column: columnIndex, formula });
+        }
+        const rowSpan = Number(cell.getAttribute('rowspan') ?? cell.getAttribute('rowSpan')) || 1;
+        const colSpan = Number(cell.getAttribute('colspan') ?? cell.getAttribute('colSpan')) || 1;
+        for (let r = 0; r < rowSpan; r++) {
+          for (let c = 0; c < colSpan; c++) {
+            occupied.add(`${rowIndex + r}:${columnIndex + c}`);
+          }
+        }
+        columnIndex += colSpan;
+      }
+    }
+    rowOffset += rows.length;
+  }
+  return out;
+}
+
+function extractCellFormula(cell: Element) {
+  const raw = cell.outerHTML.match(/\b(?:x:fmla|fmla)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/i);
+  return raw?.[1] ?? raw?.[2] ?? raw?.[3] ?? '';
 }
 
 // Minimal local types for the bits of Univer's clipboard hook we touch.
@@ -240,6 +318,12 @@ type DataMatrix = {
   forValue?: (
     cb: (r: number, c: number, cell: SpanCell | null) => void,
   ) => unknown;
+  getValue?: (row: number, column: number) => unknown;
+};
+type HtmlToUsmResult = {
+  cellMatrix?: DataMatrix;
+  rowProperties?: unknown[];
+  colProperties?: unknown[];
 };
 type MutationInfo = { id: string; params: unknown };
 type ColProperty = Record<string, string | undefined>;

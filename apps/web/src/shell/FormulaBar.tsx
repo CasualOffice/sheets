@@ -588,6 +588,20 @@ function NameBox({ a1 }: { a1: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const value = draft ?? a1;
 
+  useEffect(() => {
+    const focusNameBox = () => {
+      const input = inputRef.current;
+      if (!input) return;
+      setDraft(a1);
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
+    };
+    document.addEventListener('casual-focus-name-box', focusNameBox);
+    return () => document.removeEventListener('casual-focus-name-box', focusNameBox);
+  }, [a1]);
+
   const commit = () => {
     const target = (draft ?? '').trim();
     setDraft(null);

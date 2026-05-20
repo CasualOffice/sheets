@@ -57,11 +57,10 @@ async function activeRangeBox(page: Page) {
 // ─────────────────────────────────────────────────────────────────────────
 
 test.describe('Frequently used', () => {
-  test.fixme('Ctrl+G — Go to specific cell (Name Box focus or Go To dialog)', async ({ page }) => {
+  test('Ctrl+G — Go to specific cell (Name Box focus or Go To dialog)', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Control+g');
-    // Expectation: Name Box receives focus OR a Go To dialog opens.
-    // Wire in MenuBar.tsx keydown handler.
+    await expect(page.getByTestId('name-box')).toBeFocused();
   });
 
   test('Ctrl+P — opens print/page-setup dialog', async ({ page }) => {
@@ -148,10 +147,10 @@ test.describe('Frequently used', () => {
     await page.waitForTimeout(150);
   });
 
-  test.fixme('Shift+F10 — Open context menu', async ({ page }) => {
+  test('Shift+F10 — Open context menu', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Shift+F10');
-    // Univer's context menu (section.univer-popup) should appear.
+    await expect(page.locator('section.univer-popup:visible').first()).toBeVisible({ timeout: 3_000 });
   });
 
   test.fixme('Alt+Q — Jump to Search/Tell Me', async ({ page }) => {
