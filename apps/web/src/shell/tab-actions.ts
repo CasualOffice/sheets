@@ -259,6 +259,30 @@ export function insertCurrentTime(api: FUniver) {
   range.setValue({ v });
 }
 
+/**
+ * Ctrl+' / Ctrl+Shift+' — copy from the cell directly above into the active
+ * cell. The Ctrl+' variant copies the formula (preserving the `=…`), the
+ * Ctrl+Shift+' variant copies the computed value (no formula). No-op on row 1.
+ */
+export function copyFromAbove(api: FUniver, mode: 'formula' | 'value') {
+  const sheet = activeSheet(api);
+  const range = activeRange(api);
+  if (!sheet || !range) return;
+  const row = range.getRow();
+  if (row <= 0) return;
+  const col = range.getColumn();
+  const above = sheet.getRange(row - 1, col).getCellData();
+  if (!above) return;
+  const target = sheet.getRange(row, col);
+  if (mode === 'formula' && typeof above.f === 'string' && above.f.length > 0) {
+    target.setValue({ f: above.f });
+  } else {
+    // Value mode (or formula mode with no formula above) — strip the formula
+    // and write the evaluated value so the new cell holds the literal.
+    target.setValue({ v: above.v ?? null });
+  }
+}
+
 export function hideSelectedRows(api: FUniver) {
   api.executeCommand('sheet.command.set-rows-hidden');
 }
@@ -747,4 +771,22 @@ export function toggleFilter(api: FUniver) {
   }
   const rangeWithCreateFilter = range as unknown as { createFilter?: () => unknown };
   rangeWithCreateFilter.createFilter?.();
+}
+
+/* ── Formulas tab — force recalc ────────────────────────────────────────── */
+
+/**
+ * Excel's F9 — re-run the whole dependency graph even for cells whose
+ * inputs didn't change. Useful after editing a volatile UDF or when a
+ * referenced external source has refreshed and the engine missed it.
+ *
+ * The mutation id is the one engine-formula listens on internally
+ * (`vendor/univer/packages/engine-formula/src/commands/mutations/
+ * set-formula-calculation.mutation.ts:83`); passing `forceCalculation`
+ * skips the dependency short-circuit.
+ */
+export function forceRecalculate(api: FUniver) {
+  api.executeCommand('formula.mutation.set-formula-calculation-start', {
+    forceCalculation: true,
+  });
 }
