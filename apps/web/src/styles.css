@@ -3502,6 +3502,48 @@ button {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Autosave restore banner — surfaces between the toolbar and the formula
+   bar when a recovered snapshot is available. Soft amber so it's noticed
+   but doesn't shout. Sits in the natural document flow (grid-row pushes
+   down) rather than overlaying so the user can read it and still see the
+   grid below.
+   ───────────────────────────────────────────────────────────────────────── */
+.autosave-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #fff7ed;
+  border-bottom: 1px solid #fdba74;
+  color: #7c2d12;
+  font-size: 13px;
+}
+.autosave-banner__text {
+  flex: 1;
+}
+.autosave-banner__btn {
+  font: inherit;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid #fdba74;
+  background: transparent;
+  color: #7c2d12;
+  cursor: pointer;
+}
+.autosave-banner__btn:hover {
+  background: #fed7aa;
+}
+.autosave-banner__btn--primary {
+  background: #f97316;
+  color: #fff;
+  border-color: #f97316;
+}
+.autosave-banner__btn--primary:hover {
+  background: #ea580c;
+  border-color: #ea580c;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    Responsive shell — keep the app usable on a phone-sized viewport.
    The Univer canvas grid already handles touch (pinch-zoom, drag-scroll,
    long-press selection). The chrome around it is what breaks: a 7-tab

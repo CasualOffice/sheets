@@ -9,6 +9,7 @@ import type { OutlineState } from '../outline/types';
 import type { ChartModel } from '../charts/types';
 import { renderChartToPng, pixelsForChart } from '../charts/render-to-png';
 import type { PivotModel } from '../pivots/types';
+import { discardAutosaveAfterExplicitSave } from '../autosave/useAutosave';
 import {
   csvToWorkbookData,
   odsToWorkbookData,
@@ -159,6 +160,9 @@ export async function saveAsXlsx(
   const finalName = ensureExt(filename, 'xlsx');
   triggerDownload(blob, finalName);
   toast(api, `Saved as ${finalName}`);
+  // The on-disk file now supersedes the autosave slot — drop it so a
+  // crash after a successful save doesn't re-prompt with stale state.
+  void discardAutosaveAfterExplicitSave();
 }
 
 /**

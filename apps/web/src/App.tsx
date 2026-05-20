@@ -29,6 +29,8 @@ import { ChartsProvider } from './charts/charts-context';
 import { ChartLayer } from './charts/ChartLayer';
 import { ChartsPanel } from './shell/ChartsPanel';
 import { PivotsProvider } from './pivots/pivots-context';
+import { useAutosave } from './autosave/useAutosave';
+import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
 
 export function App() {
   // Snapshot lives in a ref, NOT React state — see workbook-context.tsx.
@@ -169,6 +171,7 @@ export function App() {
           <OutlineProvider>
             <GrowthDriver />
             <FileDropDriver />
+            <AutosaveDriver />
             <CollabDriver>
               <div
                 className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
@@ -177,6 +180,7 @@ export function App() {
                 <TitleBar />
                 <MenuBar />
                 <Toolbar />
+                <AutosaveRestoreBanner />
                 {formulaBarVisible && <FormulaBar />}
                 <div className="grid-row">
                   <main className="grid-host" data-testid="grid-host">
@@ -208,6 +212,12 @@ export function App() {
 /** Effect-only component — auto-grows the active sheet near edges. */
 function GrowthDriver(): ReactNode {
   useWorkbookGrowth();
+  return null;
+}
+
+/** Effect-only — drives the IDB autosave loop. No-op in collab rooms. */
+function AutosaveDriver(): ReactNode {
+  useAutosave();
   return null;
 }
 
