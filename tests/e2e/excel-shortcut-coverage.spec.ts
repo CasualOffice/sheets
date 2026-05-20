@@ -451,11 +451,10 @@ test.describe('Formatting cells', () => {
 
   // Ctrl+Shift+7 covered in the test above ("Outside border") — same handler.
 
-  test.fixme('Ctrl+1 — Open Format Cells dialog', async ({ page }) => {
+  test('Ctrl+1 — Open Format Cells dialog', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Control+1');
-    // Excel's multi-tab Format Cells dialog (Number / Alignment /
-    // Font / Border / Fill / Protection). Doesn't exist in our build.
+    await expect(page.getByTestId('format-cells-dialog')).toBeVisible();
   });
 });
 

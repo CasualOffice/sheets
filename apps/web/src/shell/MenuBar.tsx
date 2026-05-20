@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { Icon } from './Icon';
 import { PropertiesDialog } from './PropertiesDialog';
+import { FormatCellsDialog } from './FormatCellsDialog';
 import { AboutDialog } from './AboutDialog';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
@@ -214,6 +215,7 @@ export function MenuBar() {
   const charts = useCharts();
   const [open, setOpen] = useState<MenuId | null>(null);
   const [showProperties, setShowProperties] = useState(false);
+  const [showFormatCells, setShowFormatCells] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showPageSetup, setShowPageSetup] = useState(false);
   const [showInsertChart, setShowInsertChart] = useState(false);
@@ -326,6 +328,11 @@ export function MenuBar() {
           if (inTextInput) return;
           e.preventDefault();
           if (api) insertHyperlink(api);
+        } else if (e.code === 'Digit1' && !e.shiftKey) {
+          // Ctrl+1 — Excel-style Format Cells dialog.
+          if (inTextInput) return;
+          e.preventDefault();
+          setShowFormatCells(true);
         }
         // ── Sheet navigation ───────────────────────────────────────
         // Use e.key for PageUp/PageDown since they're not letters
@@ -799,6 +806,15 @@ export function MenuBar() {
     format: {
       label: 'Format',
       items: [
+        {
+          kind: 'item',
+          id: 'format-cells',
+          label: 'Format cells…',
+          icon: 'format_shapes',
+          shortcut: 'Ctrl+1',
+          onClick: () => setShowFormatCells(true),
+        },
+        { kind: 'separator', id: 'sep-format-cells' },
         // Number formats live behind a submenu so they don't push the
         // other Format actions off the bottom of the dropdown. The user
         // hovers "Number format" and gets all 10 variants in one place.
@@ -930,6 +946,10 @@ export function MenuBar() {
         <PropertiesDialog
           onClose={() => setShowProperties(false)}
         />
+      )}
+
+      {showFormatCells && (
+        <FormatCellsDialog onClose={() => setShowFormatCells(false)} />
       )}
 
       {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}

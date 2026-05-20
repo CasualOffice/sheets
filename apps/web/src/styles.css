@@ -2923,6 +2923,82 @@ button {
   font-family: inherit;
 }
 
+.format-cells {
+  display: grid;
+  grid-template-columns: 144px minmax(0, 1fr);
+  gap: 18px;
+  min-width: 560px;
+}
+
+.format-cells__tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.format-cells__tab {
+  height: 32px;
+  padding: 0 12px;
+  text-align: left;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  cursor: pointer;
+}
+
+.format-cells__tab:hover {
+  background: var(--color-hover);
+}
+
+.format-cells__tab--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+
+.format-cells__panel {
+  min-width: 0;
+}
+
+.format-cells__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.format-cells__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-left: 144px;
+}
+
+.format-cells__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.format-cells__check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+
+.format-cells__color {
+  width: 56px;
+  height: 30px;
+  padding: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
 .btn-primary {
   height: 28px;
   padding: 0 var(--space-5);
@@ -3645,4 +3721,3 @@ button {
   :root { --toolbar-h: 0px; }
   .toolbar { display: none; }
 }
-
