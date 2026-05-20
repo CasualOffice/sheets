@@ -7,6 +7,7 @@ import { timeIt } from '../perf';
 import type { ExportExtras } from '../xlsx/export';
 import type { OutlineState } from '../outline/types';
 import type { ChartModel } from '../charts/types';
+import { renderChartToPng, pixelsForChart } from '../charts/render-to-png';
 import type { PivotModel } from '../pivots/types';
 import {
   csvToWorkbookData,
@@ -146,10 +147,12 @@ export async function saveAsXlsx(
   // sheets. Capture it once and pass it down to anything that needs the
   // snapshot (xlsx writer + hyperlink extractor).
   const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
+  const chartImages = await renderChartImagesForExport(api, options.charts);
   const extras: ExportExtras = {
     ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
+    ...(chartImages.length > 0 ? { chartImages } : {}),
     ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
   };
   const blob = await workbookDataToXlsx(snapshot, extras);
@@ -171,13 +174,40 @@ export async function exportCurrentWorkbookAsXlsxBlob(
   const wb = api.getActiveWorkbook();
   if (!wb) return null;
   const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
+  const chartImages = await renderChartImagesForExport(api, options.charts);
   const extras: ExportExtras = {
     ...collectExportExtras(snapshot),
     ...(options.outline ? { outline: options.outline } : {}),
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
+    ...(chartImages.length > 0 ? { chartImages } : {}),
     ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
   };
   return workbookDataToXlsx(snapshot, extras);
+}
+
+/**
+ * Render every live chart to a PNG so the worker can embed it. Runs on
+ * the main thread because ECharts needs a DOM container. Errors render
+ * to null and are skipped — a missing image is better than a failed
+ * export, and the JSON sidecar still carries the editable model.
+ */
+async function renderChartImagesForExport(
+  api: FUniver,
+  charts: ChartModel[] | undefined,
+): Promise<NonNullable<ExportExtras['chartImages']>> {
+  if (!charts?.length) return [];
+  const out: NonNullable<ExportExtras['chartImages']> = [];
+  for (const model of charts) {
+    try {
+      const { width, height } = pixelsForChart(api, model);
+      const png = await renderChartToPng(api, model, width, height);
+      if (!png) continue;
+      out.push({ chartId: model.id, sheetId: model.sheetId, png, anchor: model.pos });
+    } catch (err) {
+      console.warn('[xlsx export] chart render failed; skipping', model.id, err);
+    }
+  }
+  return out;
 }
 
 /**
