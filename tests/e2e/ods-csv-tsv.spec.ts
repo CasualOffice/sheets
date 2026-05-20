@@ -52,6 +52,40 @@ test.describe('Spreadsheet formats — ods / csv / tsv round-trip', () => {
     ]);
   });
 
+  test('ods number formats round-trip through snapshot styles', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb: any = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = wb.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 1234.56, s: { n: { pattern: '"$"#,##0.00' } } });
+      ws.getRange('A2').setValue({ v: 0.25, s: { n: { pattern: '0.00%' } } });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const snap: any = wb.save();
+      const blob = await window.__odsMod!.workbookDataToOds(snap);
+      const buf = await blob.arrayBuffer();
+      const reloaded = await window.__odsMod!.odsToWorkbookData(buf);
+      const id = reloaded.sheetOrder[0];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cells = reloaded.sheets[id]!.cellData as any;
+      const a1 = cells['0']['0'];
+      const a2 = cells['1']['0'];
+      return {
+        a1Pattern: reloaded.styles?.[a1.s]?.n?.pattern,
+        a2Pattern: reloaded.styles?.[a2.s]?.n?.pattern,
+        a1Value: a1.v,
+        a2Value: a2.v,
+      };
+    });
+
+    expect(result.a1Pattern).toBe('"$"#,##0.00');
+    expect(result.a2Pattern).toBe('0.00%');
+    expect(result.a1Value).toBe(1234.56);
+    expect(result.a2Value).toBe(0.25);
+  });
+
   test('csv export matches expected text and re-imports', async ({ page }) => {
     const result = await page.evaluate(async () => {
       const api = window.__univerAPI!;
