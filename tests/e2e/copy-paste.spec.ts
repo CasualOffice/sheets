@@ -45,6 +45,19 @@ async function selectAndPaste(page: import('@playwright/test').Page, a1: string)
   await page.waitForTimeout(150);
 }
 
+async function selectAndPasteFormatting(page: import('@playwright/test').Page, a1: string) {
+  await page.evaluate(async (cell) => {
+    const api = window.__univerAPI!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+    ws.getRange(cell).activate();
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (api as any).executeCommand('sheet.command.paste-format');
+  }, a1);
+  await page.waitForTimeout(150);
+}
+
 test.describe('copy/paste fidelity round-trip', () => {
   test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
@@ -166,5 +179,72 @@ test.describe('copy/paste fidelity round-trip', () => {
     // numfmt plugin — verify the pattern survives. We only assert
     // it's present + non-empty (the exact string can normalize).
     expect(typeof style?.pattern === 'string' && style.pattern.length > 0).toBe(true);
+  });
+
+  test('paste formatting only keeps the target value intact', async ({ page }) => {
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({
+        v: 'source',
+        s: { bl: 1, bg: { rgb: '#fff59d' } },
+      });
+      ws.getRange('B1').setValue({ v: 'keep me' });
+    });
+    await selectAndCopy(page, 'A1');
+    await selectAndPasteFormatting(page, 'B1');
+    const after = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb: any = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = wb.getActiveSheet();
+      const cd = ws.getRange('B1').getCellData();
+      const sRef = cd?.s;
+      const style = typeof sRef === 'string' ? wb.getWorkbook().getStyles().get(sRef) : sRef;
+      return { value: ws.getRange('B1').getValue(), style };
+    });
+    expect(after.value).toBe('keep me');
+    expect(after.style?.bl).toBe(1);
+    expect(after.style?.bg).toBeTruthy();
+  });
+
+  test('paste formatting only is exposed in the Edit menu', async ({ page }) => {
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({
+        v: 'source',
+        s: { bl: 1, bg: { rgb: '#fff59d' } },
+      });
+      ws.getRange('B1').setValue({ v: 'keep me' });
+    });
+    await selectAndCopy(page, 'A1');
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('B1').activate();
+    });
+    await page.getByTestId('menubar-edit').click();
+    await expect(page.getByTestId('menu-item-paste-format')).toBeVisible();
+    await page.getByTestId('menu-item-paste-format').click();
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb: any = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = wb.getActiveSheet();
+      const cd = ws.getRange('B1').getCellData();
+      const sRef = cd?.s;
+      const style = typeof sRef === 'string' ? wb.getWorkbook().getStyles().get(sRef) : sRef;
+      return { value: ws.getRange('B1').getValue(), style };
+    });
+    expect(after.value).toBe('keep me');
+    expect(after.style?.bl).toBe(1);
+    expect(after.style?.bg).toBeTruthy();
   });
 });

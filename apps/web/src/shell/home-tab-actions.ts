@@ -152,6 +152,10 @@ export function paste(api: FUniver) {
   api.executeCommand('univer.command.paste');
 }
 
+export function pasteFormattingOnly(api: FUniver) {
+  api.executeCommand('sheet.command.paste-format');
+}
+
 /* ── Number format helpers ──────────────────────────────────────────────── */
 
 export const NUMBER_FORMAT_PATTERNS = {

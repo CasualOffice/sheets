@@ -64,8 +64,58 @@ test.describe('ods dimensions round-trip', () => {
     });
 
     expect(result.col0).toBe(125);
-    expect(result.col1).toBe(77);
-    expect(result.row0).toBe(24);
-    expect(result.row1).toBe(18);
+      expect(result.col1).toBe(77);
+      expect(result.row0).toBe(24);
+      expect(result.row1).toBe(18);
+  });
+
+  test('hidden row and column metadata survive ods export and import', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const snapshot: OdsWorkbookData = {
+        id: 'wb-dims-hidden-1',
+        rev: 1,
+        name: 'wb',
+        appVersion: '0.22.1',
+        locale: 1,
+        styles: {},
+        sheetOrder: ['s1'],
+        sheets: {
+          s1: {
+            id: 's1',
+            name: 'Data',
+            cellData: { 0: { 0: { v: 'x' } } },
+            rowCount: 100,
+            columnCount: 26,
+            columnData: {
+              0: { w: 125 },
+              1: { hd: 1 },
+            },
+            rowData: {
+              0: { h: 24 },
+              1: { hd: 1 },
+            },
+          },
+        },
+      };
+
+      const blob = await window.__odsDims!.workbookDataToOds(snapshot);
+      const buf = await blob.arrayBuffer();
+      const XLSX = await import('/node_modules/.vite/deps/@e965_xlsx.js');
+      const cfb = XLSX.CFB.read(new Uint8Array(buf), { type: 'array' });
+      const idx = cfb.FullPaths.indexOf('Root Entry/content.xml');
+      const contentXml = new TextDecoder().decode(cfb.FileIndex[idx]?.content as Uint8Array);
+      const reloaded = await window.__odsDims!.odsToWorkbookData(buf);
+      const sheetId = reloaded.sheetOrder[0];
+      const sheet = reloaded.sheets[sheetId];
+      return {
+        col1Hidden: sheet?.columnData?.[1]?.hd ?? null,
+        row1Hidden: sheet?.rowData?.[1]?.hd ?? null,
+        contentXml,
+      };
+    });
+
+    expect(result.col1Hidden).toBe(1);
+    expect(result.row1Hidden).toBe(1);
+    expect(result.contentXml).toContain('table:visibility="collapse"');
   });
 });

@@ -173,11 +173,13 @@ test.describe('Frequently used', () => {
     await expect(page.locator('section.univer-popup:visible').first()).toBeVisible({ timeout: 3_000 });
   });
 
-  test.fixme('Alt+Q — Jump to Search/Tell Me', async ({ page }) => {
-    // We don't have a Search/Tell Me field. Could route to formula bar
-    // or add a search affordance later.
+  test('Alt+Q — Jump to Search/Tell Me', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Alt+q');
+    await expect(page.getByTestId('command-search-dialog')).toBeVisible();
+    await page.getByTestId('command-search-input').fill('format cells');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('format-cells-dialog')).toBeVisible();
   });
 
   test('Alt+F1 — Insert chart (dialog opens with selection range)', async ({ page }) => {
@@ -398,9 +400,48 @@ test.describe('Editing data within a cell', () => {
 // ─────────────────────────────────────────────────────────────────────────
 
 test.describe('Formatting cells', () => {
-  test.fixme('Shift+Ctrl+V — Paste formatting only', async ({ page }) => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  test('Ctrl+Shift+V — Paste formatting only', async ({ page }) => {
     await setup(page);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({
+        v: 'source',
+        s: { bl: 1, bg: { rgb: '#fff59d' } },
+      });
+      ws.getRange('B1').setValue({ v: 'keep me' });
+      ws.getRange('A1').activate();
+    });
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (window.__univerAPI as any).executeCommand('univer.command.copy');
+    });
+    await page.waitForTimeout(80);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('B1').activate();
+    });
     await page.keyboard.press('Control+Shift+v');
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb: any = api.getActiveWorkbook()!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = wb.getActiveSheet();
+      const cd = ws.getRange('B1').getCellData();
+      const sRef = cd?.s;
+      const style = typeof sRef === 'string' ? wb.getWorkbook().getStyles().get(sRef) : sRef;
+      return { value: ws.getRange('B1').getValue(), style };
+    });
+    expect(after.value).toBe('keep me');
+    expect(after.style?.bl).toBe(1);
+    expect(after.style?.bg).toBeTruthy();
   });
 
   test('Ctrl+Shift+7 — Outside border (Excel also bound to Ctrl+Shift+&)', async ({ page }) => {

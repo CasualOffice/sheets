@@ -7,14 +7,18 @@
  * format. We use the SheetJS Community fork (`@e965/xlsx`, Apache-2.0)
  * because it's the only well-maintained library that handles .ods on npm.
  *
- * Scope (MVP):
- *   - Values + cached formula results
+ * Scope:
+ *   - Values + formulas + cached formula results
  *   - Sheet order + names
  *   - Merges
+ *   - Column widths / row heights
+ *   - Hidden rows / columns
+ *   - Frozen panes
+ *   - Basic styles (font, fill, alignment, number formats)
+ *   - Hyperlinks, comments, defined names
  *
- * Loss: styles, formulas (we keep cached values), column widths, charts,
- * frozen panes. SheetJS Community surfaces these in its model, but mapping
- * them through to Univer is a larger pass — comes in a follow-up.
+ * Sheet visibility is not reliably represented by the ODS library model we
+ * use here, so hidden sheet state remains out of scope for now.
  */
 import * as XLSX from '@e965/xlsx';
 import {
@@ -74,8 +78,8 @@ function getHyperlinkFromCell(cell: { p?: ICellData['p'] }): { url: string; disp
 
 type FreezeMeta = { xSplit: number; ySplit: number; startRow: number; startColumn: number };
 type DimensionMeta = {
-  columnsBySheetName: Record<string, Record<number, { w?: number }>>;
-  rowsBySheetName: Record<string, Record<number, { h?: number }>>;
+  columnsBySheetName: Record<string, Record<number, { w?: number; hd?: number }>>;
+  rowsBySheetName: Record<string, Record<number, { h?: number; hd?: number }>>;
 };
 type CellStyleMeta = {
   stylesByName: Record<string, IStyleData>;
@@ -192,10 +196,14 @@ function parseDimensionStylesFromContentXml(xml: string): DimensionMeta {
         const repeated = Number(child.getAttribute('table:number-columns-repeated') ?? '1') || 1;
         const styleName = child.getAttribute('table:style-name');
         const width = styleName ? columnStyleSizes.get(styleName) : undefined;
+        const hidden = child.getAttribute('table:visibility');
         for (let i = 0; i < repeated; i++) {
-          if (width !== undefined) {
+          if (width !== undefined || hidden && hidden !== 'visible') {
             columnsBySheetName[sheetName] ??= {};
-            columnsBySheetName[sheetName][colIndex] = { w: width };
+            columnsBySheetName[sheetName][colIndex] = {
+              ...(width !== undefined ? { w: width } : {}),
+              ...(hidden && hidden !== 'visible' ? { hd: 1 } : {}),
+            };
           }
           colIndex++;
         }
@@ -205,10 +213,14 @@ function parseDimensionStylesFromContentXml(xml: string): DimensionMeta {
         const repeated = Number(child.getAttribute('table:number-rows-repeated') ?? '1') || 1;
         const styleName = child.getAttribute('table:style-name');
         const height = styleName ? rowStyleSizes.get(styleName) : undefined;
+        const hidden = child.getAttribute('table:visibility');
         for (let i = 0; i < repeated; i++) {
-          if (height !== undefined) {
+          if (height !== undefined || hidden && hidden !== 'visible') {
             rowsBySheetName[sheetName] ??= {};
-            rowsBySheetName[sheetName][rowIndex] = { h: height };
+            rowsBySheetName[sheetName][rowIndex] = {
+              ...(height !== undefined ? { h: height } : {}),
+              ...(hidden && hidden !== 'visible' ? { hd: 1 } : {}),
+            };
           }
           rowIndex++;
         }
@@ -549,6 +561,68 @@ function patchOdsContentStyles(buffer: ArrayBuffer, data: IWorkbookData): ArrayB
   if (!changed) return buffer;
 
   upsertZipText(cfb, 'content.xml', nextXml);
+  return XLSX.CFB.write(cfb, { fileType: 'zip', type: 'array' }) as ArrayBuffer;
+}
+
+function patchOdsHiddenDimensions(buffer: ArrayBuffer, data: IWorkbookData): ArrayBuffer {
+  const cfb = XLSX.CFB.read(new Uint8Array(buffer), { type: 'array' });
+  const contentEntry = getZipEntry(cfb, 'content.xml');
+  if (!contentEntry?.content) return buffer;
+
+  const contentXml = decodeZipText(contentEntry.content);
+  const doc = new DOMParser().parseFromString(contentXml, 'application/xml');
+  const tables = Array.from(doc.getElementsByTagName('*')).filter((el) => el.localName === 'table');
+  let changed = false;
+
+  for (const table of tables) {
+    const sheetName = table.getAttribute('table:name');
+    if (!sheetName) continue;
+    const sheetId = data.sheetOrder.find((id) => data.sheets[id]?.name === sheetName);
+    const sheet = sheetId ? data.sheets[sheetId] : undefined;
+    if (!sheet) continue;
+
+    const columnData = (sheet.columnData ?? {}) as Record<string, { hd?: number }>;
+    const rowData = (sheet.rowData ?? {}) as Record<string, { hd?: number }>;
+
+    let colIndex = 0;
+    let rowIndex = 0;
+    for (const child of Array.from(table.children)) {
+      if (child.localName === 'table-column') {
+        const repeated = Number(child.getAttribute('table:number-columns-repeated') ?? '1') || 1;
+        let hidden = false;
+        for (let i = 0; i < repeated; i++) {
+          if (columnData[colIndex + i]?.hd === 1) {
+            hidden = true;
+            break;
+          }
+        }
+        if (hidden) {
+          child.setAttribute('table:visibility', 'collapse');
+          changed = true;
+        }
+        colIndex += repeated;
+      }
+
+      if (child.localName === 'table-row') {
+        const repeated = Number(child.getAttribute('table:number-rows-repeated') ?? '1') || 1;
+        let hidden = false;
+        for (let i = 0; i < repeated; i++) {
+          if (rowData[rowIndex + i]?.hd === 1) {
+            hidden = true;
+            break;
+          }
+        }
+        if (hidden) {
+          child.setAttribute('table:visibility', 'collapse');
+          changed = true;
+        }
+        rowIndex += repeated;
+      }
+    }
+  }
+
+  if (!changed) return buffer;
+  upsertZipText(cfb, 'content.xml', new XMLSerializer().serializeToString(doc));
   return XLSX.CFB.write(cfb, { fileType: 'zip', type: 'array' }) as ArrayBuffer;
 }
 
@@ -952,13 +1026,16 @@ export async function workbookDataToOds(data: IWorkbookData): Promise<Blob> {
 
     const columnData = (wsd.columnData ?? {}) as Record<string, { w?: number; hd?: number }>;
     const colEntries = Object.entries(columnData)
-      .filter(([, meta]) => typeof meta?.w === 'number' && meta.w > 0)
+      .filter(([, meta]) => typeof meta?.w === 'number' && meta.w > 0 || meta?.hd === 1)
       .sort((a, b) => Number(a[0]) - Number(b[0]));
     if (colEntries.length > 0) {
-      const cols: Array<{ wpx: number; wch: number }> = [];
+      const cols: Array<{ wpx?: number; wch?: number; hidden?: boolean }> = [];
       for (const [cKey, meta] of colEntries) {
         const c = Number(cKey);
-        cols[c] = { wpx: meta.w!, wch: Math.max(0, meta.w! / 7) };
+        cols[c] = {
+          ...(typeof meta?.w === 'number' && meta.w > 0 ? { wpx: meta.w, wch: Math.max(0, meta.w / 7) } : {}),
+          ...(meta?.hd === 1 ? { hidden: true } : {}),
+        };
         if (c > maxCol) maxCol = c;
       }
       sheet['!cols'] = cols;
@@ -966,13 +1043,16 @@ export async function workbookDataToOds(data: IWorkbookData): Promise<Blob> {
 
     const rowData = (wsd.rowData ?? {}) as Record<string, { h?: number; hd?: number }>;
     const rowEntries = Object.entries(rowData)
-      .filter(([, meta]) => typeof meta?.h === 'number' && meta.h > 0)
+      .filter(([, meta]) => typeof meta?.h === 'number' && meta.h > 0 || meta?.hd === 1)
       .sort((a, b) => Number(a[0]) - Number(b[0]));
     if (rowEntries.length > 0) {
-      const rows: Array<{ hpx: number; hpt: number }> = [];
+      const rows: Array<{ hpx?: number; hpt?: number; hidden?: boolean }> = [];
       for (const [rKey, meta] of rowEntries) {
         const r = Number(rKey);
-        rows[r] = { hpx: meta.h!, hpt: pxToPoints(meta.h!) };
+        rows[r] = {
+          ...(typeof meta?.h === 'number' && meta.h > 0 ? { hpx: meta.h, hpt: pxToPoints(meta.h) } : {}),
+          ...(meta?.hd === 1 ? { hidden: true } : {}),
+        };
         if (r > maxRow) maxRow = r;
       }
       sheet['!rows'] = rows;
@@ -990,7 +1070,8 @@ export async function workbookDataToOds(data: IWorkbookData): Promise<Blob> {
 
   const out = XLSX.write(wb, { type: 'array', bookType: 'ods' }) as ArrayBuffer;
   const withStyles = patchOdsContentStyles(out, data);
-  const patched = patchOdsSettings(withStyles, data);
+  const withHidden = patchOdsHiddenDimensions(withStyles, data);
+  const patched = patchOdsSettings(withHidden, data);
   return new Blob([patched], {
     type: 'application/vnd.oasis.opendocument.spreadsheet',
   });

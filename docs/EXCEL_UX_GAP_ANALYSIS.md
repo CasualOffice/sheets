@@ -31,16 +31,14 @@ The product is already strong on core spreadsheet interaction:
 - xlsx import/export
 - print/page setup
 
-The biggest remaining Excel-fit gaps are:
+The earlier Excel-fit gaps in this document have largely been closed.
+The remaining single-user work is now concentrated in a much smaller set:
 
-1. external Excel paste fidelity
-2. `Ctrl+1` Format Cells
-3. `Ctrl+G` Go To
-4. function discovery UX (`Shift+F3`, argument helper)
-5. keyboard context/focus affordances
-6. paste special / formatting-only paste
-7. flash fill
-8. multi-range selection mode
+1. flash fill
+2. residual keyboard-focus polish that shows up in real usage rather than in the main shortcut set
+3. any last-mile ODS or clipboard edge cases uncovered by broader real-world files
+
+After that, the next major lane is co-editing.
 
 ## Definition Of Done
 
@@ -257,38 +255,25 @@ These are positive product differences, not parity problems.
 
 ## Recommended Slice Plan
 
-If this gets implemented as a series of small PRs, the most defensible order is:
+If this gets implemented as a series of small PRs, the most defensible order from here is:
 
-1. External Excel paste fidelity
-   Why first: it directly affects migration from real Excel files and clipboard workflows.
-   Exit criteria: values, merges, bold headers, and `x:fmla` formulas survive the HTML clipboard path.
+1. Flash Fill
+   Why first: it is the most visible remaining desktop-Excel convenience feature for single-user work.
+   Exit criteria: simple pattern-based fills handle the common cases without requiring manual copy-down.
 
-2. `Ctrl+G` Go To
-   Why second: low implementation risk and immediate muscle-memory win.
-   Exit criteria: `Ctrl+G` focuses the Name Box or opens a Go To affordance with deterministic keyboard completion.
+2. Residual keyboard-focus polish
+   Why second: any remaining focus-zone issues should be treated as polish, not as a primary product lane.
+   Exit criteria: no visible keyboard dead ends in the single-user shell.
 
-3. `Ctrl+1` Format Cells
-   Why third: it closes the biggest “this is not Excel” formatting gap.
-   Exit criteria: a compact dialog covers number, alignment, font, border, and fill using the existing formatting model.
-
-4. Insert Function + argument helper
-   Why fourth: it improves discoverability without forcing ribbon hunting.
-   Exit criteria: `Shift+F3` and formula editing expose searchable function help and argument guidance.
-
-5. Paste Special / formatting-only paste
-   Why fifth: follows naturally after clipboard fidelity work and can reuse the same clipboard-normalization path.
-   Exit criteria: keyboard and menu entry points support formatting-only paste on an existing selection.
-
-6. Focus and keyboard affordance cleanup
-   Why sixth: once the high-value commands exist, keyboard routing becomes the next credibility layer.
-   Exit criteria: context menu and focus-zone movement work without pointer-only escape hatches.
+3. Co-editing backlog
+   Why third: once the single-user flows are coherent, collaboration-specific issues can be tackled without mixing concerns.
+   Exit criteria: co-editing issues are broken into small, testable slices with explicit ownership.
 
 ## What Not To Chase Yet
 
 These may be useful later, but they should not block the “normal Excel user feels at home” goal:
 
 - full desktop-Excel dialog sprawl beyond the first `Ctrl+1` subset
-- broad command-palette work before `Ctrl+G` and `Shift+F3` exist
 - flash fill before clipboard and formatting parity are solid
 - niche shortcut completion that does not affect the first 5 minutes of use
 - page-layout perfection beyond the current print workflow unless output complaints become frequent
@@ -306,14 +291,14 @@ Use this as the review bar for parity-focused PRs:
 
 ## Product Recommendation
 
-If the explicit goal is “a normal Excel user should feel at home in the first 5 minutes,” focus on these:
+If the explicit goal is “a normal Excel user should feel at home in the first 5 minutes,” the core single-user workflow is now mostly in place.
 
-- desktop Excel paste
-- Format Cells
-- Go To
-- function discovery
+The remaining work should be judged against:
 
-Those are the gaps users feel immediately.
+- flash fill for quick data cleaning
+- any lingering keyboard-focus rough edges
+
+Those are the last single-user behaviors that still stand out before moving to co-editing.
 
 If the goal is “better than Excel for collaborative web work,” the product is already differentiated:
 

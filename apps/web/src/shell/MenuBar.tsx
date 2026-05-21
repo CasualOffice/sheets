@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { PropertiesDialog } from './PropertiesDialog';
 import { FormatCellsDialog } from './FormatCellsDialog';
 import { AboutDialog } from './AboutDialog';
+import { CommandSearchDialog, type CommandSearchItem } from './CommandSearchDialog';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useUI } from '../use-ui';
@@ -44,6 +45,7 @@ import {
   increaseDecimal,
   openFindReplace,
   paste as actPaste,
+  pasteFormattingOnly,
   redo,
   setBorders,
   setNumberFormatByKey,
@@ -268,6 +270,33 @@ function openContextMenuForActiveCell(api: FUniver): void {
   }
 }
 
+function collectCommandSearchItems(
+  items: MenuItem[],
+  api: FUniver | null,
+  trail: string[] = [],
+  out: CommandSearchItem[] = [],
+): CommandSearchItem[] {
+  for (const item of items) {
+    if (item.kind === 'separator') continue;
+    if (item.kind === 'submenu') {
+      collectCommandSearchItems(item.items, api, [...trail, item.label], out);
+      continue;
+    }
+    if (item.disabled) continue;
+    out.push({
+      id: item.id,
+      label: item.label,
+      path: [...trail, item.label].join(' > '),
+      shortcut: item.shortcut,
+      run: async () => {
+        if (item.run && api) await item.run(api);
+        if (item.onClick) item.onClick();
+      },
+    });
+  }
+  return out;
+}
+
 export function MenuBar() {
   const api = useUniverAPI();
   const workbook = useWorkbook();
@@ -286,6 +315,7 @@ export function MenuBar() {
   const [insertChartDefault, setInsertChartDefault] = useState('A1');
   const [showInsertPivot, setShowInsertPivot] = useState(false);
   const [insertPivotDefault, setInsertPivotDefault] = useState('A1');
+  const [showCommandSearch, setShowCommandSearch] = useState(false);
   const addToSelectionModeRef = useRef(false);
   const selectionRangesRef = useRef<SheetRange[]>([]);
   const syntheticSelectionRef = useRef(false);
@@ -391,6 +421,11 @@ export function MenuBar() {
           if (inTextInput) return;
           e.preventDefault();
           if (api) void openFindReplace(api);
+        } else if (k === 'v' && e.shiftKey) {
+          // Ctrl+Shift+V — Paste formatting only.
+          if (inTextInput) return;
+          e.preventDefault();
+          if (api) pasteFormattingOnly(api);
         } else if (k === 'k' && !e.shiftKey) {
           // Ctrl+K — insert hyperlink.
           if (inTextInput) return;
@@ -617,6 +652,11 @@ export function MenuBar() {
         if (inTextInput) return;
         e.preventDefault();
         void handleExportXlsx();
+      }
+      // ── Tell Me / command search: Alt+Q ────────────────────────
+      if (!mod && e.altKey && !e.shiftKey && k === 'q') {
+        e.preventDefault();
+        setShowCommandSearch(true);
       }
       // ── Close workbook / leave room: Ctrl+W ─────────────────────
       // Browser default is "close tab" — preventDefault and route to /
@@ -871,6 +911,7 @@ export function MenuBar() {
         { kind: 'item', id: 'cut', label: 'Cut', icon: 'content_cut', shortcut: 'Ctrl+X', run: actCut },
         { kind: 'item', id: 'copy', label: 'Copy', icon: 'content_copy', shortcut: 'Ctrl+C', run: actCopy },
         { kind: 'item', id: 'paste', label: 'Paste', icon: 'content_paste', shortcut: 'Ctrl+V', run: actPaste },
+        { kind: 'item', id: 'paste-format', label: 'Paste formatting only', icon: 'content_paste', shortcut: 'Ctrl+Shift+V', run: pasteFormattingOnly },
         { kind: 'separator', id: 'sep-find' },
         { kind: 'item', id: 'find-replace', label: 'Find & Replace…', icon: 'search', shortcut: 'Ctrl+F', run: openFindReplace },
         { kind: 'separator', id: 'sep-cells' },
@@ -1066,6 +1107,14 @@ export function MenuBar() {
           icon: 'bug_report',
           onClick: openBugReport,
         },
+        {
+          kind: 'item',
+          id: 'command-search',
+          label: 'Search / Tell Me…',
+          icon: 'search',
+          shortcut: 'Alt+Q',
+          onClick: () => setShowCommandSearch(true),
+        },
         { kind: 'separator', id: 'sep-1' },
         {
           kind: 'item',
@@ -1122,6 +1171,16 @@ export function MenuBar() {
       )}
 
       {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
+
+      {showCommandSearch && (
+        <CommandSearchDialog
+          items={collectCommandSearchItems(
+            Object.values(menus).flatMap((menu) => menu.items),
+            api,
+          )}
+          onClose={() => setShowCommandSearch(false)}
+        />
+      )}
 
       {showInsertChart && api && (
         <InsertChartDialog
