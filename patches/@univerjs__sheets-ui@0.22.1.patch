@@ -1,7 +1,39 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 3018878bbe100e9669f2ae1fada340727e213ee9..ffd1d2a9d5bb81c719d6b59b9d8afb183241a608 100644
+index 3018878bbe100e9669f2ae1fada340727e213ee9..f59154c0cfef1df08a02c477db4f9d1bc93d3996 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
+@@ -3190,12 +3190,14 @@ class HtmlToUSMService {
+ 			const cellValue = (value === null || value === void 0 || (_value$richTextParma8 = value.richTextParma) === null || _value$richTextParma8 === void 0 || (_value$richTextParma8 = _value$richTextParma8.p) === null || _value$richTextParma8 === void 0 || (_value$richTextParma8 = _value$richTextParma8.body) === null || _value$richTextParma8 === void 0 ? void 0 : _value$richTextParma8.textRuns) ? {
+ 				v: value.richTextParma.v,
+ 				p: value.richTextParma.p,
+ 				s: style,
++				f: value.formula,
+ 				rowSpan: value.rowSpan,
+ 				colSpan: value.colSpan
+ 			} : {
+ 				v: value.content,
+ 				s: style,
++				f: value.formula,
+ 				rowSpan: value.rowSpan,
+ 				colSpan: value.colSpan
+ 			};
+@@ -3252,6 +3254,8 @@ class HtmlToUSMService {
+ 				let cellText = "";
+ 				let cellRichStyle;
+ 				let numfmtPattern;
++				const formulaMatch = cell.outerHTML.match(/\b(?:x:fmla|fmla)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/i);
++				const formula = (formulaMatch === null || formulaMatch === void 0 ? void 0 : formulaMatch[1]) || (formulaMatch === null || formulaMatch === void 0 ? void 0 : formulaMatch[2]) || (formulaMatch === null || formulaMatch === void 0 ? void 0 : formulaMatch[3]) || void 0;
+ 				const pattern = this._getMsoNumfmtForNode(cell);
+ 				if (pattern) {
+ 					cellText = cell.innerHTML;
+@@ -3278,6 +3281,7 @@ class HtmlToUSMService {
+ 					rowSpan,
+ 					colSpan,
+ 					content: cellText,
++					formula,
+ 					style: cellStyle,
+ 					richTextParma: {
+ 						p: cellRichStyle,
 @@ -4444,11 +4444,13 @@ let SheetClipboardService = class SheetClipboardService extends _univerjs_core.D
  		const filteredHooks = enabledHooks.filter((h) => !h.specialPasteInfo && h.id !== PREDEFINED_HOOK_NAME_PASTE.DEFAULT_PASTE || pasteType === h.id);
  		filteredHooks.forEach((h) => {
@@ -18,9 +50,41 @@ index 3018878bbe100e9669f2ae1fada340727e213ee9..ffd1d2a9d5bb81c719d6b59b9d8afb18
  				redoMutationsInfo.push(...rowReturn.redos);
  				undoMutationsInfo.push(...rowReturn.undos);
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 8c9e6600971d658e95109d58a8e11258c81a19da..e1697df97e8b633b4d11580299a4dfee340a851d 100644
+index 8c9e6600971d658e95109d58a8e11258c81a19da..76da463a6b46db19fc44ba1f84371479f2bbe4e0 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
+@@ -3161,12 +3161,14 @@ var HtmlToUSMService = class HtmlToUSMService {
+ 			const cellValue = (value === null || value === void 0 || (_value$richTextParma8 = value.richTextParma) === null || _value$richTextParma8 === void 0 || (_value$richTextParma8 = _value$richTextParma8.p) === null || _value$richTextParma8 === void 0 || (_value$richTextParma8 = _value$richTextParma8.body) === null || _value$richTextParma8 === void 0 ? void 0 : _value$richTextParma8.textRuns) ? {
+ 				v: value.richTextParma.v,
+ 				p: value.richTextParma.p,
+ 				s: style,
++				f: value.formula,
+ 				rowSpan: value.rowSpan,
+ 				colSpan: value.colSpan
+ 			} : {
+ 				v: value.content,
+ 				s: style,
++				f: value.formula,
+ 				rowSpan: value.rowSpan,
+ 				colSpan: value.colSpan
+ 			};
+@@ -3223,6 +3225,8 @@ var HtmlToUSMService = class HtmlToUSMService {
+ 				let cellText = "";
+ 				let cellRichStyle;
+ 				let numfmtPattern;
++				const formulaMatch = cell.outerHTML.match(/\b(?:x:fmla|fmla)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/i);
++				const formula = (formulaMatch === null || formulaMatch === void 0 ? void 0 : formulaMatch[1]) || (formulaMatch === null || formulaMatch === void 0 ? void 0 : formulaMatch[2]) || (formulaMatch === null || formulaMatch === void 0 ? void 0 : formulaMatch[3]) || void 0;
+ 				const pattern = this._getMsoNumfmtForNode(cell);
+ 				if (pattern) {
+ 					cellText = cell.innerHTML;
+@@ -3249,6 +3252,7 @@ var HtmlToUSMService = class HtmlToUSMService {
+ 					rowSpan,
+ 					colSpan,
+ 					content: cellText,
++					formula,
+ 					style: cellStyle,
+ 					richTextParma: {
+ 						p: cellRichStyle,
 @@ -4415,11 +4415,16 @@ let SheetClipboardService = class SheetClipboardService extends Disposable {
  		const filteredHooks = enabledHooks.filter((h) => !h.specialPasteInfo && h.id !== PREDEFINED_HOOK_NAME_PASTE.DEFAULT_PASTE || pasteType === h.id);
  		filteredHooks.forEach((h) => {

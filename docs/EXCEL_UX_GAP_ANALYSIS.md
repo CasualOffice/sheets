@@ -42,6 +42,25 @@ The biggest remaining Excel-fit gaps are:
 7. flash fill
 8. multi-range selection mode
 
+## Definition Of Done
+
+For this document, “Excel-familiar” does not mean “clone every Excel feature.”
+It means a normal Excel user can open the app and, within the first few minutes:
+
+- open an existing workbook without confusion
+- navigate with expected shortcuts
+- paste from Excel without obvious damage
+- find common formatting commands in expected places
+- recover familiar modal workflows for `Ctrl+1`, `Ctrl+G`, and function insertion
+- stay oriented when moving between grid, formula bar, ribbon, menus, and dialogs
+
+That bar is met when:
+
+- the first-run workflows above are covered by stable E2E tests
+- the top shortcut gaps are no longer `fixme`
+- clipboard and formatting behavior no longer feel “web-app different”
+- a user does not need product-specific knowledge to finish common Excel tasks
+
 ## Current Validation Status
 
 Latest local full E2E run:
@@ -116,6 +135,20 @@ Overall:
 | Ribbon/grid focus transfer (`Ctrl+F6`) | Missing | `excel-shortcut-coverage.spec.ts` | Medium | Medium | P2 | Formalize focus zones and cycling order |
 | Search / Tell Me (`Alt+Q`) | Missing | `excel-shortcut-coverage.spec.ts` | Medium | Medium | P3 | Add command palette / action search |
 | AutoFilter state is not exposed cleanly | Partial | `Ctrl+Shift+L` currently smoke-tested, not deep-asserted | Medium | Medium | P2 | Provide stable filter read model / UI signal for tests and UX |
+
+## Implementation Map
+
+These are the likely code touchpoints for the highest-value parity fixes. They are not hard constraints, but they are the shortest path through the current codebase.
+
+| Gap | Primary code touchpoints | Why here |
+| --- | --- | --- |
+| External Excel paste fidelity | `apps/web/src/univer/paste-merge-hook.ts`, `tests/e2e/paste-from-excel.spec.ts` | this is where HTML clipboard normalization and merge handling already live |
+| `Ctrl+1` Format Cells | `apps/web/src/shell/MenuBar.tsx`, `apps/web/src/shell/RibbonControls.tsx`, `apps/web/src/shell/PropertiesDialog.tsx` or a new `FormatCellsDialog.tsx` | keyboard wiring exists in menu/ribbon command handling; dialog can reuse existing format controls |
+| `Ctrl+G` Go To | `apps/web/src/shell/FormulaBar.tsx`, `apps/web/src/shell/MenuBar.tsx`, `tests/e2e/formula-bar.spec.ts` | the Name Box already exists, so the first step is likely focus and selection behavior rather than a net-new subsystem |
+| Insert Function / argument helper | `apps/web/src/shell/formula-functions.ts`, `apps/web/src/shell/FormulaBar.tsx`, `tests/e2e/formula-picker.spec.ts` | formula discovery UX already has a partial surface to extend |
+| Paste Special / formatting-only paste | `apps/web/src/univer/paste-merge-hook.ts`, `apps/web/src/shell/MenuBar.tsx`, `apps/web/src/shell/file-menu.ts` | paste routing plus command exposure need to align |
+| Multi-range selection | selection hooks in `apps/web/src/hooks/`, keyboard handling in `apps/web/src/shell/MenuBar.tsx`, targeted E2E coverage | requires both state-model and keyboard-mode behavior |
+| Keyboard context menu / focus-zone navigation | `apps/web/src/shell/MenuBar.tsx`, `apps/web/src/shell/Toolbar.tsx`, `apps/web/src/shell/FormulaBar.tsx`, dialog focus handling | this is mostly focus architecture, not data-model work |
 
 ## Features a Normal Excel User Commonly Uses That Are Not There Yet
 
@@ -222,6 +255,55 @@ These are positive product differences, not parity problems.
 
 13. Command palette / Tell Me
 
+## Recommended Slice Plan
+
+If this gets implemented as a series of small PRs, the most defensible order is:
+
+1. External Excel paste fidelity
+   Why first: it directly affects migration from real Excel files and clipboard workflows.
+   Exit criteria: values, merges, bold headers, and `x:fmla` formulas survive the HTML clipboard path.
+
+2. `Ctrl+G` Go To
+   Why second: low implementation risk and immediate muscle-memory win.
+   Exit criteria: `Ctrl+G` focuses the Name Box or opens a Go To affordance with deterministic keyboard completion.
+
+3. `Ctrl+1` Format Cells
+   Why third: it closes the biggest “this is not Excel” formatting gap.
+   Exit criteria: a compact dialog covers number, alignment, font, border, and fill using the existing formatting model.
+
+4. Insert Function + argument helper
+   Why fourth: it improves discoverability without forcing ribbon hunting.
+   Exit criteria: `Shift+F3` and formula editing expose searchable function help and argument guidance.
+
+5. Paste Special / formatting-only paste
+   Why fifth: follows naturally after clipboard fidelity work and can reuse the same clipboard-normalization path.
+   Exit criteria: keyboard and menu entry points support formatting-only paste on an existing selection.
+
+6. Focus and keyboard affordance cleanup
+   Why sixth: once the high-value commands exist, keyboard routing becomes the next credibility layer.
+   Exit criteria: context menu and focus-zone movement work without pointer-only escape hatches.
+
+## What Not To Chase Yet
+
+These may be useful later, but they should not block the “normal Excel user feels at home” goal:
+
+- full desktop-Excel dialog sprawl beyond the first `Ctrl+1` subset
+- broad command-palette work before `Ctrl+G` and `Shift+F3` exist
+- flash fill before clipboard and formatting parity are solid
+- niche shortcut completion that does not affect the first 5 minutes of use
+- page-layout perfection beyond the current print workflow unless output complaints become frequent
+
+## Acceptance Checklist For The Top Gaps
+
+Use this as the review bar for parity-focused PRs:
+
+- Every new shortcut path has a dedicated E2E assertion, not just a smoke test.
+- Keyboard and menu entry points land on the same command behavior.
+- Dialogs restore focus predictably after close.
+- New formatting UI maps onto the existing workbook model instead of creating a parallel state path.
+- External clipboard fixes prove both visible UI outcome and underlying workbook state where practical.
+- New parity work does not regress the existing side-panel, co-edit, or responsive shell strengths.
+
 ## Product Recommendation
 
 If the explicit goal is “a normal Excel user should feel at home in the first 5 minutes,” focus on these:
@@ -245,4 +327,3 @@ The best strategy is not to copy all of Excel first. It is:
 1. close the top muscle-memory gaps
 2. keep the existing web-native strengths
 3. avoid introducing heavy desktop-style complexity where a simpler web UX is already better
-

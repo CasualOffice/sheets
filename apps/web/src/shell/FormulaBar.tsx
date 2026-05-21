@@ -10,6 +10,7 @@ import {
 import { flushSync } from 'react-dom';
 import { useUniverAPI } from '../use-univer';
 import { useActiveCellState } from '../hooks/useActiveCellState';
+import { Dialog } from './Dialog';
 import {
   canInsertRefAtCaret,
   commitToActiveCell,
@@ -21,7 +22,10 @@ import {
 import { Icon } from './Icon';
 import { Tooltip } from './Tooltip';
 import {
+  expandFunctionArgsAtCaret,
   extractFunctionFragment,
+  FORMULA_FUNCTIONS,
+  getFunctionSignature,
   suggestFunctions,
   suggestSheetNames,
   type FormulaFn,
@@ -51,6 +55,9 @@ export function FormulaBar() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [suggestionsAnchor, setSuggestionsAnchor] = useState<DOMRect | null>(null);
+  const [showInsertFunction, setShowInsertFunction] = useState(false);
+  const [functionSearch, setFunctionSearch] = useState('');
+  const [addToSelectionMode, setAddToSelectionMode] = useState(false);
 
   const draftCellRef = useRef<string | null>(null);
 
@@ -263,6 +270,27 @@ export function FormulaBar() {
     setDraft(e.target.value);
   };
 
+  const startFormulaEdit = useCallback(() => {
+    if (!editing) {
+      draftCellRef.current = a1;
+      flushSync(() => setDraft('='));
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(1, 1);
+        lastCaretRef.current = 1;
+      });
+      return;
+    }
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus();
+      const caret = input.selectionStart ?? (draft ?? '').length;
+      input.setSelectionRange(caret, caret);
+      lastCaretRef.current = caret;
+    });
+  }, [editing, a1, draft]);
+
   const insertSuggestion = (s: Suggestion) => {
     if (!inputRef.current) return;
     const caret = inputRef.current.selectionStart ?? value.length;
@@ -283,6 +311,73 @@ export function FormulaBar() {
       inputRef.current?.focus();
     });
   };
+
+  const insertFunctionFromDialog = useCallback(
+    (fn: FormulaFn) => {
+      const input = inputRef.current;
+      const current = editing ? (draft ?? '') : '=';
+      const base = current.startsWith('=') ? current : `=${current}`;
+      const caret = input?.selectionStart ?? base.length;
+      const frag = extractFunctionFragment(base, caret) ?? '';
+      const before = base.slice(0, caret - frag.length);
+      const after = base.slice(caret);
+      const insertion = `${fn.name}()`;
+      const next = `${before}${insertion}${after}`;
+      const nextCaret = before.length + fn.name.length + 1;
+      draftCellRef.current = a1;
+      flushSync(() => {
+        setDraft(next);
+        setShowInsertFunction(false);
+      });
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(nextCaret, nextCaret);
+        lastCaretRef.current = nextCaret;
+      });
+    },
+    [editing, draft, a1],
+  );
+
+  const insertFunctionArgs = useCallback(() => {
+    const input = inputRef.current;
+    if (!input || !editing) return;
+    const caret = input.selectionStart ?? (draft ?? '').length;
+    const expanded = expandFunctionArgsAtCaret(draft ?? '', caret);
+    if (!expanded) return;
+    flushSync(() => setDraft(expanded.value));
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(expanded.selectionStart, expanded.selectionEnd);
+      lastCaretRef.current = expanded.selectionEnd;
+    });
+  }, [editing, draft]);
+
+  useEffect(() => {
+    const openInsertFunction = () => {
+      startFormulaEdit();
+      setShowInsertFunction(true);
+      setFunctionSearch('');
+    };
+    const openFunctionArgs = () => {
+      if (!editing) startFormulaEdit();
+      requestAnimationFrame(() => insertFunctionArgs());
+    };
+    document.addEventListener('casual-open-insert-function', openInsertFunction);
+    document.addEventListener('casual-insert-function-args', openFunctionArgs);
+    return () => {
+      document.removeEventListener('casual-open-insert-function', openInsertFunction);
+      document.removeEventListener('casual-insert-function-args', openFunctionArgs);
+    };
+  }, [startFormulaEdit, insertFunctionArgs, editing]);
+
+  useEffect(() => {
+    const onModeChange = (event: Event) => {
+      const active = (event as CustomEvent<{ active?: boolean }>).detail?.active;
+      setAddToSelectionMode(Boolean(active));
+    };
+    document.addEventListener('casual-add-to-selection-mode-changed', onModeChange);
+    return () => document.removeEventListener('casual-add-to-selection-mode-changed', onModeChange);
+  }, []);
 
   /** Programmatically switch back to the origin sheet+cell that was
    *  active when the user started typing the formula. Used by commit
@@ -337,6 +432,19 @@ export function FormulaBar() {
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.shiftKey && !e.altKey && e.key === 'F3') {
+      e.preventDefault();
+      setShowInsertFunction(true);
+      setFunctionSearch('');
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      insertFunctionArgs();
+      return;
+    }
+
     if (suggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -402,6 +510,15 @@ export function FormulaBar() {
   return (
     <div className="formula-bar" data-testid="formula-bar">
       <NameBox a1={a1} />
+      {addToSelectionMode && (
+        <span
+          className="formula-bar__selection-mode"
+          data-testid="add-to-selection-indicator"
+          title="Add non-adjacent ranges to the current selection"
+        >
+          Add to Selection
+        </span>
+      )}
       {isMultiCell && (
         <span
           className="formula-bar__sel-dims"
@@ -444,13 +561,19 @@ export function FormulaBar() {
           </button>
         </Tooltip>
         <Tooltip label="Insert function">
-          <span
+          <button
+            type="button"
             className="formula-bar__fx"
             data-testid="formula-fx"
             aria-label="Insert function"
+            onClick={() => {
+              startFormulaEdit();
+              setShowInsertFunction(true);
+              setFunctionSearch('');
+            }}
           >
             fx
-          </span>
+          </button>
         </Tooltip>
       </div>
 
@@ -571,7 +694,120 @@ export function FormulaBar() {
           })}
         </ul>
       )}
+
+      {showInsertFunction && (
+        <InsertFunctionDialog
+          search={functionSearch}
+          onSearch={setFunctionSearch}
+          onClose={() => setShowInsertFunction(false)}
+          onChoose={insertFunctionFromDialog}
+        />
+      )}
     </div>
+  );
+}
+
+function InsertFunctionDialog({
+  search,
+  onSearch,
+  onClose,
+  onChoose,
+}: {
+  search: string;
+  onSearch: (value: string) => void;
+  onClose: () => void;
+  onChoose: (fn: FormulaFn) => void;
+}) {
+  const matches = FORMULA_FUNCTIONS.filter((fn) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return fn.name.toLowerCase().includes(q) || fn.description.toLowerCase().includes(q);
+  }).slice(0, 40);
+  const [selected, setSelected] = useState(0);
+
+  useEffect(() => {
+    setSelected(0);
+  }, [search]);
+
+  const choice = matches[selected] ?? matches[0] ?? null;
+
+  return (
+    <Dialog
+      title="Insert Function"
+      onClose={onClose}
+      data-testid="insert-function-dialog"
+      footer={
+        <>
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            data-testid="insert-function-apply"
+            disabled={!choice}
+            onClick={() => choice && onChoose(choice)}
+          >
+            Insert
+          </button>
+        </>
+      }
+    >
+      <div className="insert-function">
+        <input
+          className="input"
+          data-testid="insert-function-search"
+          aria-label="Search functions"
+          placeholder="Search functions"
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setSelected((i) => Math.min(matches.length - 1, i + 1));
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setSelected((i) => Math.max(0, i - 1));
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              if (choice) onChoose(choice);
+            }
+          }}
+        />
+        <div className="insert-function__body">
+          <ul className="insert-function__list" data-testid="insert-function-list" role="listbox">
+            {matches.map((fn, i) => (
+              <li
+                key={fn.name}
+                role="option"
+                aria-selected={i === selected}
+                className={`insert-function__item${i === selected ? ' insert-function__item--active' : ''}`}
+                data-testid={`insert-function-item-${fn.name}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChoose(fn);
+                }}
+                onMouseEnter={() => setSelected(i)}
+              >
+                <div className="insert-function__name">{fn.name}</div>
+                <div className="insert-function__desc">{fn.description}</div>
+              </li>
+            ))}
+          </ul>
+          <div className="insert-function__detail" data-testid="insert-function-detail">
+            {choice ? (
+              <>
+                <div className="insert-function__detail-name">{choice.name}</div>
+                <div className="insert-function__detail-sig">{getFunctionSignature(choice)}</div>
+                <p className="insert-function__detail-desc">{choice.description}</p>
+              </>
+            ) : (
+              <p className="insert-function__detail-desc">No matching functions.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -588,6 +824,20 @@ function NameBox({ a1 }: { a1: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const value = draft ?? a1;
 
+  useEffect(() => {
+    const focusNameBox = () => {
+      const input = inputRef.current;
+      if (!input) return;
+      setDraft(a1);
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
+    };
+    document.addEventListener('casual-focus-name-box', focusNameBox);
+    return () => document.removeEventListener('casual-focus-name-box', focusNameBox);
+  }, [a1]);
+
   const commit = () => {
     const target = (draft ?? '').trim();
     setDraft(null);
@@ -595,6 +845,14 @@ function NameBox({ a1 }: { a1: string }) {
     const wb = api.getActiveWorkbook();
     const sheet = wb?.getActiveSheet();
     if (!sheet) return;
+    if (document.body.dataset.addToSelectionMode === 'true') {
+      document.dispatchEvent(
+        new CustomEvent('casual-add-selection-a1', {
+          detail: { target },
+        }),
+      );
+      return;
+    }
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const range = (sheet as any).getRange(target);

@@ -62,6 +62,21 @@ test.describe('Formula bar', () => {
     await expect(page.getByTestId('name-box')).toHaveValue('A1');
   });
 
+  test('Ctrl+G focuses the Name Box and selects its current reference', async ({ page }) => {
+    await selectRange(page, 'C3');
+    await page.keyboard.press('Control+g');
+
+    const nameBox = page.getByTestId('name-box');
+    await expect(nameBox).toBeFocused();
+    await expect(nameBox).toHaveValue('C3');
+    const selection = await nameBox.evaluate((el: HTMLInputElement) => ({
+      start: el.selectionStart,
+      end: el.selectionEnd,
+      value: el.value,
+    }));
+    expect(selection).toEqual({ start: 0, end: 2, value: 'C3' });
+  });
+
   test('Typing text and Enter commits to the active cell', async ({ page }) => {
     const input = page.getByTestId('formula-input');
     await input.fill('Hello world');
@@ -228,5 +243,34 @@ test.describe('Formula bar', () => {
     // Fourth F4 → back to A1
     await input.press('F4');
     await expect(input).toHaveValue('=A1+B2');
+  });
+
+  test('Shift+F3 opens Insert Function and inserts the selected function', async ({ page }) => {
+    await page.keyboard.press('Shift+F3');
+    await expect(page.getByTestId('insert-function-dialog')).toBeVisible();
+    await page.getByTestId('insert-function-search').fill('vlook');
+    await page.getByTestId('insert-function-item-VLOOKUP').click();
+    const input = page.getByTestId('formula-input');
+    await expect(input).toHaveValue('=VLOOKUP()');
+    const selection = await input.evaluate((el: HTMLInputElement) => ({
+      start: el.selectionStart,
+      end: el.selectionEnd,
+      value: el.value,
+    }));
+    expect(selection).toEqual({ start: 9, end: 9, value: '=VLOOKUP()' });
+  });
+
+  test('Ctrl+Shift+A expands the current function into an argument template', async ({ page }) => {
+    const input = page.getByTestId('formula-input');
+    await input.click();
+    await input.fill('=SUM(');
+    await input.evaluate((el: HTMLInputElement) => el.setSelectionRange(5, 5));
+    await page.keyboard.press('Control+Shift+a');
+    await expect(input).toHaveValue('=SUM(number1, [number2])');
+    const selection = await input.evaluate((el: HTMLInputElement) => ({
+      start: el.selectionStart,
+      end: el.selectionEnd,
+    }));
+    expect(selection).toEqual({ start: 5, end: 23 });
   });
 });

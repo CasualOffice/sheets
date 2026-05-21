@@ -1018,6 +1018,21 @@ button {
   box-shadow: inset 0 0 0 2px var(--color-accent, #1a73e8);
 }
 
+.formula-bar__selection-mode {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b4f00;
+  background: #fff4ce;
+  border: 1px solid #f1d17a;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 /* "3R × 2C" badge between the Name Box and the formula actions when
    the selection spans more than one cell. Excel shows this transiently
    during drag; we keep it visible while the multi-cell selection is
@@ -1069,7 +1084,15 @@ button {
   font-size: var(--text-sm);
   font-style: italic;
   color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
   user-select: none;
+}
+
+.formula-bar__fx:hover {
+  color: var(--color-text);
 }
 
 .formula-bar__input {
@@ -2923,6 +2946,162 @@ button {
   font-family: inherit;
 }
 
+.format-cells {
+  display: grid;
+  grid-template-columns: 144px minmax(0, 1fr);
+  gap: 18px;
+  min-width: 560px;
+}
+
+.format-cells__tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.format-cells__tab {
+  height: 32px;
+  padding: 0 12px;
+  text-align: left;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: var(--weight-medium, 500);
+  cursor: pointer;
+}
+
+.format-cells__tab:hover {
+  background: var(--color-hover);
+}
+
+.format-cells__tab--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+
+.format-cells__panel {
+  min-width: 0;
+}
+
+.format-cells__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.format-cells__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-left: 144px;
+}
+
+.format-cells__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.format-cells__check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+
+.format-cells__color {
+  width: 56px;
+  height: 30px;
+  padding: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.insert-function {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 620px;
+}
+
+.insert-function__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 12px;
+  min-height: 320px;
+}
+
+.insert-function__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+
+.insert-function__item {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  cursor: pointer;
+}
+
+.insert-function__item:last-child {
+  border-bottom: 0;
+}
+
+.insert-function__item:hover {
+  background: var(--color-hover);
+}
+
+.insert-function__item--active {
+  background: var(--color-selected);
+}
+
+.insert-function__name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: var(--weight-semibold, 600);
+}
+
+.insert-function__desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.insert-function__detail {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.insert-function__detail-name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: var(--weight-semibold, 600);
+}
+
+.insert-function__detail-sig {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-accent);
+}
+
+.insert-function__detail-desc {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 .btn-primary {
   height: 28px;
   padding: 0 var(--space-5);
@@ -3645,4 +3824,3 @@ button {
   :root { --toolbar-h: 0px; }
   .toolbar { display: none; }
 }
-

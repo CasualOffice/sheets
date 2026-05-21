@@ -18,12 +18,24 @@ export function toggleBold(api: FUniver, currentlyBold: boolean) {
   activeRange(api)?.setFontWeight(currentlyBold ? 'normal' : 'bold');
 }
 
+export function setBold(api: FUniver, bold: boolean) {
+  activeRange(api)?.setFontWeight(bold ? 'bold' : 'normal');
+}
+
 export function toggleItalic(api: FUniver, currentlyItalic: boolean) {
   activeRange(api)?.setFontStyle(currentlyItalic ? 'normal' : 'italic');
 }
 
+export function setItalic(api: FUniver, italic: boolean) {
+  activeRange(api)?.setFontStyle(italic ? 'italic' : 'normal');
+}
+
 export function toggleUnderline(api: FUniver, currentlyUnderline: boolean) {
   activeRange(api)?.setFontLine(currentlyUnderline ? 'none' : 'underline');
+}
+
+export function setUnderline(api: FUniver, underline: boolean) {
+  activeRange(api)?.setFontLine(underline ? 'underline' : 'none');
 }
 
 /**
@@ -101,6 +113,10 @@ export function setFillColor(api: FUniver, color: string) {
 
 export function toggleWrap(api: FUniver, currentlyWrapped: boolean) {
   activeRange(api)?.setWrap(!currentlyWrapped);
+}
+
+export function setWrap(api: FUniver, wrapped: boolean) {
+  activeRange(api)?.setWrap(wrapped);
 }
 
 /**

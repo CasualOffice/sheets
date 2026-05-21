@@ -52,16 +52,35 @@ async function activeRangeBox(page: Page) {
   });
 }
 
+async function dispatchShortcut(
+  page: Page,
+  init: { key: string; code?: string; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean },
+) {
+  await page.evaluate((eventInit) => {
+    const target = (document.activeElement as HTMLElement | null) ?? document.body;
+    target.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: eventInit.key,
+        code: eventInit.code ?? eventInit.key,
+        ctrlKey: eventInit.ctrlKey ?? false,
+        shiftKey: eventInit.shiftKey ?? false,
+        altKey: eventInit.altKey ?? false,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, init);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // 1. Frequently used shortcuts
 // ─────────────────────────────────────────────────────────────────────────
 
 test.describe('Frequently used', () => {
-  test.fixme('Ctrl+G — Go to specific cell (Name Box focus or Go To dialog)', async ({ page }) => {
+  test('Ctrl+G — Go to specific cell (Name Box focus or Go To dialog)', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Control+g');
-    // Expectation: Name Box receives focus OR a Go To dialog opens.
-    // Wire in MenuBar.tsx keydown handler.
+    await expect(page.getByTestId('name-box')).toBeFocused();
   });
 
   test('Ctrl+P — opens print/page-setup dialog', async ({ page }) => {
@@ -129,10 +148,10 @@ test.describe('Frequently used', () => {
     await page.waitForTimeout(500);
   });
 
-  test.fixme('Shift+F3 — Insert function (alt: Ctrl+F)', async ({ page }) => {
+  test('Shift+F3 — Insert function (alt: Ctrl+F)', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Shift+F3');
-    // Excel: opens "Insert Function" dialog. We don't have it.
+    await expect(page.getByTestId('insert-function-dialog')).toBeVisible();
   });
 
   test('Ctrl+B — Bold (Univer native)', async ({ page }) => {
@@ -148,10 +167,10 @@ test.describe('Frequently used', () => {
     await page.waitForTimeout(150);
   });
 
-  test.fixme('Shift+F10 — Open context menu', async ({ page }) => {
+  test('Shift+F10 — Open context menu', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Shift+F10');
-    // Univer's context menu (section.univer-popup) should appear.
+    await expect(page.locator('section.univer-popup:visible').first()).toBeVisible({ timeout: 3_000 });
   });
 
   test.fixme('Alt+Q — Jump to Search/Tell Me', async ({ page }) => {
@@ -365,9 +384,12 @@ test.describe('Editing data within a cell', () => {
     expect(v.f).toBe(null);
   });
 
-  test.fixme('Ctrl+Shift+A — Insert function arguments', async ({ page }) => {
+  test('Ctrl+Shift+A — Insert function arguments', async ({ page }) => {
     await setup(page);
+    await page.getByTestId('formula-input').click();
+    await page.getByTestId('formula-input').fill('=SUM(');
     await page.keyboard.press('Control+Shift+a');
+    await expect(page.getByTestId('formula-input')).toHaveValue('=SUM(number1, [number2])');
   });
 });
 
@@ -452,11 +474,10 @@ test.describe('Formatting cells', () => {
 
   // Ctrl+Shift+7 covered in the test above ("Outside border") — same handler.
 
-  test.fixme('Ctrl+1 — Open Format Cells dialog', async ({ page }) => {
+  test('Ctrl+1 — Open Format Cells dialog', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Control+1');
-    // Excel's multi-tab Format Cells dialog (Number / Alignment /
-    // Font / Border / Fill / Protection). Doesn't exist in our build.
+    await expect(page.getByTestId('format-cells-dialog')).toBeVisible();
   });
 });
 
@@ -669,9 +690,33 @@ test.describe('Cells, rows, columns', () => {
     );
   });
 
-  test.fixme('Shift+F8 — Add non-adjacent range to selection (multi-range mode)', async ({ page }) => {
+  test('Shift+F8 — Add non-adjacent range to selection (multi-range mode)', async ({ page }) => {
     await setup(page);
-    await page.keyboard.press('Shift+F8');
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1:A2').activate();
+    });
+    await dispatchShortcut(page, { key: 'F8', code: 'F8', shiftKey: true });
+    await expect(page.getByTestId('add-to-selection-indicator')).toBeVisible();
+    await page.getByTestId('name-box').fill('C3:C4');
+    await page.getByTestId('name-box').press('Enter');
+    const ranges = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      return ws
+        .getSelection()
+        .getActiveRangeList()
+        .map((range: { getRange: () => unknown }) => range.getRange());
+    });
+    expect(ranges).toEqual([
+      { startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 },
+      { startRow: 2, endRow: 3, startColumn: 2, endColumn: 2 },
+    ]);
+    await dispatchShortcut(page, { key: 'F8', code: 'F8', shiftKey: true });
+    await expect(page.getByTestId('add-to-selection-indicator')).toHaveCount(0);
   });
 });
 

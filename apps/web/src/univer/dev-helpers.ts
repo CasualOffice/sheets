@@ -1,5 +1,6 @@
 import { CustomRangeType, type IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
+import { ISheetClipboardService } from '@univerjs/sheets-ui';
 import { SheetTableService } from '@univerjs/sheets-table';
 
 type HyperLinkDump = {
@@ -10,11 +11,29 @@ type HyperLinkDump = {
   display?: string;
 };
 
+type ParsedClipboardCell = {
+  row: number;
+  column: number;
+  v?: unknown;
+  s?: unknown;
+  f?: unknown;
+  rowSpan?: number;
+  colSpan?: number;
+};
+
+type ParsedClipboardDump = {
+  cells: ParsedClipboardCell[];
+  rowProperties: Array<Record<string, unknown>>;
+  colProperties: Array<Record<string, unknown>>;
+};
+
 declare global {
   interface Window {
     __univerAPI?: FUniver;
     __getTableStyleId__?: (tableId: string) => string | undefined;
     __getHyperLinks__?: () => HyperLinkDump[];
+    __legacyPasteHtml__?: (html: string, text?: string) => Promise<boolean>;
+    __parseHtmlClipboard__?: (html: string) => ParsedClipboardDump | null;
   }
 }
 
@@ -94,10 +113,71 @@ export function installDevHelpers(api: FUniver): () => void {
     }
     return out;
   };
+  window.__legacyPasteHtml__ = async (html, text = '') => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const injector = (api as any)._injector as
+      | { get: (token: unknown) => unknown }
+      | undefined;
+    if (!injector) return false;
+    const svc = injector.get(ISheetClipboardService) as
+      | {
+          legacyPaste: (html: string, text?: string, files?: File[]) => Promise<boolean>;
+        }
+      | undefined;
+    if (!svc?.legacyPaste) return false;
+    return svc.legacyPaste(html, text, []);
+  };
+  window.__parseHtmlClipboard__ = (html) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const injector = (api as any)._injector as
+      | { get: (token: unknown) => unknown }
+      | undefined;
+    if (!injector) return null;
+    const svc = injector.get(ISheetClipboardService) as
+      | {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          _htmlToUSM?: { convert: (html: string) => any };
+        }
+      | undefined;
+    const parsed = svc?._htmlToUSM?.convert(html);
+    if (!parsed?.cellMatrix?.forValue) return null;
+    const cells: ParsedClipboardCell[] = [];
+    parsed.cellMatrix.forValue(
+      (
+        row: number,
+        column: number,
+        cell: {
+          v?: unknown;
+          s?: unknown;
+          f?: unknown;
+          rowSpan?: number;
+          colSpan?: number;
+        } | null,
+      ) => {
+        if (!cell) return;
+        cells.push({
+          row,
+          column,
+          v: cell.v,
+          s: cell.s,
+          f: cell.f,
+          rowSpan: cell.rowSpan,
+          colSpan: cell.colSpan,
+        });
+      },
+    );
+    return {
+      cells,
+      rowProperties: parsed.rowProperties ?? [],
+      colProperties: parsed.colProperties ?? [],
+    };
+  };
 
   return () => {
     delete window.__univerAPI;
     delete window.__getTableStyleId__;
     delete window.__getHyperLinks__;
+    delete window.__legacyPasteHtml__;
+    delete window.__parseHtmlClipboard__;
   };
 }
