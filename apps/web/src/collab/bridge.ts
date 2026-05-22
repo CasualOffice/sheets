@@ -6,6 +6,7 @@ import {
   type ICommandInfo,
   type IExecutionOptions,
 } from '@univerjs/core';
+import { deepRewriteUnitId } from './bridge-helpers';
 // y-protocols ships type declarations only as ESM and our tsconfig
 // doesn't pick them up cleanly; loose-type the Awareness surface we
 // actually use (getStates → Map keyed by clientID).
@@ -71,6 +72,10 @@ const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   'sheet.mutation.remove-sheet',
   'sheet.mutation.set-worksheet-name',
   'sheet.mutation.set-worksheet-order',
+  // Sheet visibility — hide/show. NB: `set-worksheet-activate` is
+  // deliberately omitted so each peer keeps their own active sheet
+  // independent of which sheet another user is editing.
+  'sheet.mutation.set-worksheet-hidden',
   // Freeze.
   'sheet.mutation.set-frozen',
   // Hyperlinks (sheets-hyper-link).
@@ -141,8 +146,13 @@ export type BridgeOptions = {
    * record arrives from a peer. The bridge can't call
    * `replaceWorkbook` directly (it lives in React state); the host
    * (`CollabDriver`) wires this through.
+   *
+   * MAY return a promise. Replay of subsequent op-log entries is
+   * paused until the promise resolves — without that, mutations
+   * land on the OLD unit before Univer's async unit-swap completes,
+   * which silently forks state on late joiners.
    */
-  onSnapshotReceived?: (wb: IWorkbookData) => void;
+  onSnapshotReceived?: (wb: IWorkbookData) => void | Promise<void>;
 };
 
 /**
@@ -224,52 +234,111 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // don't double-apply on incremental updates. On connect, replay everything
   // we haven't seen — that's how late joiners catch up.
   let appliedCount = 0;
+  // Single-flight guard: when a snapshot record needs an async workbook
+  // swap, subsequent records have to wait for the swap to land — otherwise
+  // they execute against the old unit id and silently fork state. We also
+  // want a single observer callback at a time so re-entrant Yjs events
+  // don't interleave half-applied loops.
+  let replayInFlight: Promise<void> | null = null;
 
-  const replayPending = (): void => {
-    const total = log.length;
-    // Stage 6 compaction shrinks the log atomically. If our cursor
-    // is past the new end, reset to 0 and replay the snapshot record
-    // (which is always at position 0 right after compaction).
-    if (appliedCount > total) {
-      appliedCount = 0;
-    }
-    while (appliedCount < total) {
-      const rec = log.get(appliedCount);
-      appliedCount += 1;
-      if (!rec) continue;
-      if (rec.c === myClientId) continue; // our own write — Univer already ran it
-      if (rec.kind === 'snapshot') {
-        // Compaction record from a peer — replace the local workbook
-        // with the snapshot. Without `onSnapshotReceived` wired (e.g.
-        // in unit tests that drive the bridge directly), skip the
-        // record; the next post-snapshot mutations may still apply
-        // cleanly if state is close enough.
-        if (opts.onSnapshotReceived) {
-          try {
-            opts.onSnapshotReceived(rec.wb);
-          } catch (err) {
-            console.warn('[collab] failed to apply compaction snapshot', err);
+  const replayPending = (): Promise<void> => {
+    if (replayInFlight) return replayInFlight;
+    // CRITICAL: assign `replayInFlight = p` BEFORE invoking the async
+    // IIFE. The previous version was:
+    //   replayInFlight = (async () => { try { ... } finally { replayInFlight = null; } })();
+    // For an empty log the IIFE body has no `await` and runs
+    // synchronously — the `finally` set `replayInFlight = null`
+    // BEFORE the outer `replayInFlight = ...promise...` assignment,
+    // which then OVERWROTE the null with the freshly-resolved promise.
+    // Result: `replayInFlight` stayed truthy forever and every
+    // subsequent `replayPending()` returned immediately without
+    // doing anything — remote mutations sat in the Yjs log untouched.
+    // Tracker: docs/COLLAB-FIXES.md issue #29.
+    let resolveOuter!: () => void;
+    const p = new Promise<void>((r) => { resolveOuter = r; });
+    replayInFlight = p;
+    void (async () => {
+      try {
+        // Loop until we catch up. `log.length` may grow while we're awaiting
+        // a snapshot apply, so re-read on each pass.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const total = log.length;
+          // Stage 6 compaction shrinks the log atomically. If our cursor
+          // is past the new end, reset to 0 and replay the snapshot record
+          // (which is always at position 0 right after compaction).
+          if (appliedCount > total) appliedCount = 0;
+          if (appliedCount >= total) {
+            break;
           }
-        } else {
-          console.warn('[collab] received compaction snapshot but no handler — workbook may diverge');
+          const rec = log.get(appliedCount);
+          appliedCount += 1;
+          if (!rec) continue;
+          if (rec.c === myClientId) continue; // our own write — Univer already ran it
+          if (rec.kind === 'snapshot') {
+            // Compaction record from a peer — replace the local workbook
+            // with the snapshot. Without `onSnapshotReceived` wired (e.g.
+            // in unit tests that drive the bridge directly), skip the
+            // record; the next post-snapshot mutations may still apply
+            // cleanly if state is close enough.
+            //
+            // CRITICAL: await the handler. Univer's unit swap is async, and
+            // continuing the loop before the new unit is wired into the
+            // facade means rewriteUnitId() reads the OLD active unit and
+            // every subsequent mutation targets a stale workbook.
+            if (opts.onSnapshotReceived) {
+              try {
+                await opts.onSnapshotReceived(rec.wb);
+              } catch (err) {
+                console.warn('[collab] failed to apply compaction snapshot', err);
+              }
+            } else {
+              console.warn('[collab] received compaction snapshot but no handler — workbook may diverge');
+            }
+            continue;
+          }
+          // Each browser creates its workbook with its OWN random unit id, so
+          // raw replay would target the sender's unit (which doesn't exist
+          // here) — rewrite to our local active unit. Sheet ids (`sheet-1`)
+          // are already deterministic across the room.
+          const params = rewriteUnitId(api, rec.p);
+          // Univer's ActiveWorksheetController unconditionally switches
+          // the active sheet on every insert-sheet mutation — there's no
+          // `fromCollab` opt-out inside Univer. Save our current active
+          // sheet around the replay and restore it after the next tick
+          // so peers don't get yanked to whichever sheet someone else
+          // just created.
+          const sheetBefore =
+            rec.id === 'sheet.mutation.insert-sheet' ? captureActiveSheetId(api) : null;
+          // Fire-and-forget; ordering is preserved by Univer's command bus
+          // serialising its own dispatch.
+          // `.catch` surfaces malformed-mutation / out-of-bounds replays
+          // that would otherwise silently fork local state — every
+          // divergence we've chased after a release started as one of
+          // these swallowed throws.
+          cmdSvc.executeCommand(rec.id, params, { fromCollab: true })
+            .then(() => {
+              if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
+            })
+            .catch((err) => {
+              console.warn('[collab] replay failed for', rec.id, err);
+              if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
+            });
         }
-        continue;
+      } finally {
+        // Only clear if we're still the in-flight token. A future
+        // re-entrant guard scheme might let multiple flights coexist;
+        // this check keeps us correct under that.
+        if (replayInFlight === p) replayInFlight = null;
+        resolveOuter();
       }
-      // Each browser creates its workbook with its OWN random unit id, so
-      // raw replay would target the sender's unit (which doesn't exist
-      // here) — rewrite to our local active unit. Sheet ids (`sheet-1`)
-      // are already deterministic across the room.
-      const params = rewriteUnitId(api, rec.p);
-      // Fire-and-forget; ordering is preserved by serial awaits not being
-      // necessary (each command finishes synchronously enough for the next
-      // to start, and Univer's command bus serializes its own dispatch).
-      void cmdSvc.executeCommand(rec.id, params, { fromCollab: true });
-    }
+    })();
+    return p;
   };
 
   const observer = (event: Y.YArrayEvent<OpRecord>) => {
     void event;
-    replayPending();
+    void replayPending();
   };
   log.observe(observer);
 
@@ -277,7 +346,7 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // already synced the existing log (provider was connected before us),
   // observe() won't fire — we'd miss everything. Replay synchronously
   // once on mount to catch up.
-  replayPending();
+  void replayPending();
 
   // ── Stage 6: periodic compaction by the designated writer ────────
   // Only one client in the room compacts at a time — the one with the
@@ -366,20 +435,63 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
 
 /**
  * Substitute the active local workbook's unit id into a mutation's
- * `params.unitId` so cross-peer mutations target our local workbook.
- * Sheet-level `subUnitId` keys (`sheet-1`, …) are deterministic from
- * the emptyWorkbook snapshot, so they pass through unchanged.
+ * `unitId` fields — top-level AND nested ones (e.g. `range.unitId`,
+ * `source.unitId`, `target.unitId`) — so cross-peer mutations target
+ * our local workbook. Sheet-level `subUnitId` keys (`sheet-1`, …)
+ * are deterministic from the emptyWorkbook snapshot, so they pass
+ * through unchanged.
  *
- * Returns a shallow-cloned params object so we don't mutate the Yjs
- * record (Y.Array entries are frozen plain objects).
+ * Returns a structurally cloned params object so we don't mutate the
+ * Yjs record (Y.Array entries are frozen plain objects). Walks objects
+ * and arrays recursively; stops at non-plain values (strings, numbers,
+ * dates, etc.).
+ *
+ * Performance: most mutations have shallow params — the recursive walk
+ * adds microseconds. Per-cell value maps stay shallow because they're
+ * indexed by stringified row/col, not nested objects.
  */
 function rewriteUnitId(api: FUniver, params: unknown): unknown {
-  if (!params || typeof params !== 'object') return params;
   const wb = api.getActiveWorkbook();
   if (!wb) return params;
   const localUnitId = wb.getId();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const p = params as Record<string, any>;
-  if (typeof p.unitId !== 'string' || p.unitId === localUnitId) return params;
-  return { ...p, unitId: localUnitId };
+  return deepRewriteUnitId(params, localUnitId);
+}
+
+/**
+ * Save the local active sheet id before replaying a `fromCollab`
+ * mutation that Univer's controllers may use as a side-channel signal
+ * to switch sheets (notably `insert-sheet` — see
+ * ActiveWorksheetController in @univerjs/sheets). Returning `null`
+ * means "couldn't read, don't try to restore".
+ */
+function captureActiveSheetId(api: FUniver): string | null {
+  try {
+    const wb = api.getActiveWorkbook();
+    if (!wb) return null;
+    const sheet = wb.getActiveSheet();
+    if (!sheet) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const id = (sheet as any).getSheetId?.() ?? (sheet as any).getId?.() ?? null;
+    return typeof id === 'string' ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function restoreActiveSheetId(api: FUniver, sheetId: string): void {
+  try {
+    const wb = api.getActiveWorkbook();
+    if (!wb) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const current = (wb.getActiveSheet() as any)?.getSheetId?.();
+    if (current === sheetId) return; // nothing to do
+    const sheets = wb.getSheets();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const target = sheets.find((s: any) => s.getSheetId?.() === sheetId);
+    if (!target) return; // sheet got deleted in the meantime — leave Univer's choice alone
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (wb as any).setActiveSheet?.(target);
+  } catch (err) {
+    console.warn('[collab] failed to restore active sheet after remote insert-sheet', err);
+  }
 }
