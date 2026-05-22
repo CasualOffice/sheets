@@ -2138,6 +2138,37 @@ button {
   padding: 0;
 }
 
+/* Border-weight swatches — wider than the colour swatches so the line
+   inside (which IS the visual representation of the thickness) has
+   room to render at 1/2/3 px. Active state mirrors the colour-swatch
+   pattern so the popup looks consistent. */
+.menu__weight-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--color-border-strong) 60%, transparent);
+  background: var(--color-surface);
+  cursor: pointer;
+  padding: 0 6px;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.menu__weight-swatch:hover { transform: scale(1.04); }
+
+.menu__weight-swatch--active {
+  box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 3px var(--color-surface);
+}
+
+.menu__weight-swatch-line {
+  display: block;
+  width: 100%;
+  border-radius: 1px;
+}
+
 /* Submenu — a nested .menu opened from a parent item. The wrapper anchors
    the popup; the popup floats to the right of the parent menu. */
 .menu__submenu {
@@ -3351,8 +3382,26 @@ button {
   border: 2px solid var(--presence-color, #1a73e8);
   background: color-mix(in srgb, var(--presence-color, #1a73e8) 12%, transparent);
   border-radius: 2px;
-  transition: top 80ms linear, left 80ms linear, width 80ms linear, height 80ms linear;
+  /* Intentionally NO transition on top/left/width/height. Univer's grid
+     scrolls by repainting the canvas — the DOM canvas element itself
+     doesn't move, so the cursor's absolute coords need to update every
+     frame to track the cell. A CSS transition on top/left makes the
+     cursor lerp from its old viewport position to the new one over
+     80 ms; during continuous scrolling, each frame's repaint starts
+     a new lerp, so the cursor visually pins to the viewport instead
+     of moving with the cell. Smooth selection-change transitions are
+     handled by `--presence-cursor--moving` below, applied only when
+     the peer's anchor cell actually changes. */
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+}
+
+/* Applied for one frame when a peer's selection moves to a different
+   cell, so the rectangle eases between cells instead of teleporting.
+   PresenceLayer toggles this class on cells whose anchor (sr,sc,er,ec)
+   differs from the previous frame. */
+.presence-cursor--moving {
+  transition: top 120ms ease-out, left 120ms ease-out,
+    width 120ms ease-out, height 120ms ease-out;
 }
 
 .presence-cursor__label {

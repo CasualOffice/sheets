@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUniverAPI } from '../use-univer';
+import { getHeaderGutter, getUniverHost, getUniverMainCanvas } from '../univer-dom';
 import { usePresence } from './presence-context';
 
 /**
@@ -39,14 +40,21 @@ type Rect = {
    *  collision avoidance bumps later peers up by multiples of
    *  LABEL_SLOT_HEIGHT so they stack instead of stomping. */
   labelTop: number;
+  /** Cell-anchor key (`unitId:sheetId:sr:sc:er:ec`). When this string
+   *  differs from the previous frame's value, the peer's selection
+   *  moved to a new range — we apply the `--moving` transition class
+   *  so the rectangle eases between cells. When it matches, only the
+   *  on-screen position is changing (e.g. user scrolling), so we
+   *  paint instantly without a transition. */
+  anchorKey: string;
 };
 
 const LABEL_HEIGHT = 18;
 const LABEL_SLOT_HEIGHT = 20;
 const LABEL_BASE_TOP = -20;
 /** Rough px-per-character for label width estimation. Lets us detect
- *  collisions without measuring DOM (the layer rebuilds every 4
- *  frames, so DOM measurement would thrash). */
+ *  collisions without measuring DOM (the layer rebuilds every frame,
+ *  so DOM measurement would thrash). */
 const LABEL_CHAR_WIDTH = 6.5;
 const LABEL_PAD = 12;
 
@@ -54,18 +62,24 @@ export function PresenceLayer() {
   const api = useUniverAPI();
   const { peers } = usePresence();
   const [rects, setRects] = useState<Rect[]>([]);
+  // The rAF closure below captures `rects` only when the effect runs (deps:
+  // [api, peers]). On scroll-driven recomputes neither dep changes, so the
+  // stale closure copy makes `rectsEqual(next, rects)` always wrong against
+  // the original mount snapshot — every frame causes a setState even when
+  // positions are stable. ChartLayer fixed this with the same pattern.
+  const rectsRef = useRef<Rect[]>(rects);
+  rectsRef.current = rects;
   const hostRef = useRef<HTMLElement | null>(null);
   const layerRef = useRef<HTMLDivElement | null>(null);
   // Latest scroll offset from Univer's grid. `getCellRect` returns
   // content-space coords; subtract this to land in canvas-visible space.
+  // Stashed for debugging — the rAF loop reads scroll inline each frame
+  // and no longer needs a tick counter to gate recomputes.
   const scrollRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  // Bumped whenever scroll changes so the polling loop knows to recompute
-  // even if peer selection didn't move.
-  const scrollTickRef = useRef(0);
 
   // Resolve the Univer host once, then on each render rebuild rects.
   useEffect(() => {
-    hostRef.current = document.querySelector('[data-testid="univer-host"]') as HTMLElement | null;
+    hostRef.current = getUniverHost();
   }, []);
 
   // Scroll offset is read inline in `recompute` via `getScrollState()` —
@@ -78,37 +92,32 @@ export function PresenceLayer() {
   useEffect(() => {
     if (!api) return;
     let raf = 0;
-    let idleFrame = 0;
-    let lastScrollTick = scrollTickRef.current;
-    let lastScrollAtFrame = -1000;
     const tick = () => {
-      // Always recompute while a scroll is in progress, plus a small
-      // tail of ~20 frames after the last scroll event so the rendered
-      // position settles instead of snapping. Outside scroll, fall back
-      // to every-4-frames polling (selection/resize wobbles only).
-      const tickNow = ++idleFrame;
-      const scrollChanged = scrollTickRef.current !== lastScrollTick;
-      if (scrollChanged) {
-        lastScrollTick = scrollTickRef.current;
-        lastScrollAtFrame = tickNow;
-      }
-      const inScrollTail = tickNow - lastScrollAtFrame < 20;
-      const everyFourth = idleFrame % 4 === 0;
-      if (inScrollTail || everyFourth) recompute();
+      // Recompute every animation frame. Univer scrolls the grid by
+      // repainting the canvas — the DOM doesn't emit a scroll event,
+      // so our only way to track scroll position is to poll. The work
+      // per frame is ~O(peers): two `getCellRect` calls + a getBCR per
+      // peer plus a `getHeaderGutter`, all O(1). For typical rooms
+      // (< 10 active peers) this is well under a millisecond per frame.
+      // Throttling was previously to every 4 frames, but that pinned
+      // remote cursors to the viewport for the first ~50 ms of any
+      // scroll, on top of the CSS transition that pinned them for
+      // another ~80 ms — see docs/COLLAB-FIXES.md #14.
+      recompute();
       raf = requestAnimationFrame(tick);
     };
     const recompute = () => {
-      const host = hostRef.current ?? (document.querySelector('[data-testid="univer-host"]') as HTMLElement | null);
+      const host = hostRef.current ?? getUniverHost();
       if (!host) {
-        if (rects.length) setRects([]);
+        if (rectsRef.current.length) setRects([]);
         return;
       }
       // The main grid canvas — its viewport-relative position is the
       // reference frame `getCellRect()` returns coords in. Without the
       // canvas offset we'd anchor cursors at (0,0) of the document.
-      const canvas = host.querySelector('canvas[id^="univer-sheet-main-canvas_"]') as HTMLCanvasElement | null;
+      const canvas = getUniverMainCanvas(host);
       if (!canvas) {
-        if (rects.length) setRects([]);
+        if (rectsRef.current.length) setRects([]);
         return;
       }
       const hostRect = host.getBoundingClientRect();
@@ -118,10 +127,15 @@ export function PresenceLayer() {
       // host-local coords (the portal's coordinate frame).
       const dx = canvasRect.left - hostRect.left;
       const dy = canvasRect.top - hostRect.top;
+      // Header gutter — getCellRect returns coords in cell-content space,
+      // which starts AT (rowHeaderWidth, columnHeaderHeight) inside the
+      // canvas. Without adding these back, every cursor sits ~40 px up
+      // and to the left of the cell it's labelling.
+      const gutter = getHeaderGutter(api);
 
       const wb = api.getActiveWorkbook();
       if (!wb) {
-        if (rects.length) setRects([]);
+        if (rectsRef.current.length) setRects([]);
         return;
       }
       const activeSheet = wb.getActiveSheet();
@@ -130,14 +144,24 @@ export function PresenceLayer() {
 
       // See header note — poll `getScrollState()` and derive the pixel
       // offset from the cell currently at viewport top-left.
+      //
+      // CRITICAL: `getScrollState()` itself can throw a redi
+      // QuantityCheckError ("Expect 1 dependency item(s) for id
+      // 'SheetScrollManagerService' but get 0") during the brief
+      // window between Univer mount and full render-unit DI graph
+      // setup. The whole block, INCLUDING the getScrollState call,
+      // must be inside a try/catch — otherwise the rAF loop throws,
+      // surfaces as an uncaught error in dev tools, and trips Vite's
+      // overlay. In production the throw also halts the tick, freezing
+      // remote cursor tracking.
       let sx = 0;
       let sy = 0;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const scrollState = (activeSheet as any)?.getScrollState?.() as
-        | { sheetViewStartRow?: number; sheetViewStartColumn?: number; offsetX?: number; offsetY?: number }
-        | undefined;
-      if (scrollState) {
-        try {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const scrollState = (activeSheet as any)?.getScrollState?.() as
+          | { sheetViewStartRow?: number; sheetViewStartColumn?: number; offsetX?: number; offsetY?: number }
+          | undefined;
+        if (scrollState) {
           const r = scrollState.sheetViewStartRow ?? 0;
           const c = scrollState.sheetViewStartColumn ?? 0;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -146,14 +170,14 @@ export function PresenceLayer() {
             sx = topLeft.left + (scrollState.offsetX ?? 0);
             sy = topLeft.top + (scrollState.offsetY ?? 0);
           }
-        } catch {
-          /* skeleton not ready — leave scroll at 0 this frame */
         }
+      } catch {
+        /* skeleton / scroll service not ready — leave scroll at 0 this frame */
       }
-      if (sx !== scrollRef.current.x || sy !== scrollRef.current.y) {
-        scrollRef.current = { x: sx, y: sy };
-        scrollTickRef.current += 1;
-      }
+      // Stash latest scroll so other consumers (devtools, debugging hooks)
+      // can read it without redoing the math. We no longer use it to gate
+      // recompute timing — recompute fires every frame now.
+      scrollRef.current = { x: sx, y: sy };
 
       const next: Rect[] = [];
       for (const peer of peers) {
@@ -188,13 +212,15 @@ export function PresenceLayer() {
           const br2 = ws.getRange(er, ec).getCellRect();
           if (!tl || !br2) continue;
           // `getCellRect` returns cell positions in the canvas's *content*
-          // space — i.e. pre-scroll. Subtract the current scroll offset
-          // to land in the visible-canvas frame, then add the canvas-vs-
-          // host offset to translate into the portal's coord system.
-          const left = Math.min(tl.left, br2.left) - sx + dx;
-          const top = Math.min(tl.top, br2.top) - sy + dy;
-          const right = Math.max(tl.right, br2.right) - sx + dx;
-          const bottom = Math.max(tl.bottom, br2.bottom) - sy + dy;
+          // space — i.e. pre-scroll AND pre-header-gutter. Subtract the
+          // current scroll offset to land in the visible-canvas frame,
+          // add the header gutter to shift past the row/column labels,
+          // then add the canvas-vs-host offset to translate into the
+          // portal's coord system.
+          const left = Math.min(tl.left, br2.left) - sx + dx + gutter.rowHeaderWidth;
+          const top = Math.min(tl.top, br2.top) - sy + dy + gutter.columnHeaderHeight;
+          const right = Math.max(tl.right, br2.right) - sx + dx + gutter.rowHeaderWidth;
+          const bottom = Math.max(tl.bottom, br2.bottom) - sy + dy + gutter.columnHeaderHeight;
           // Clip to the canvas area so cursors don't paint over headers
           // or float into the column-label gutter.
           if (right < dx || bottom < dy) continue;
@@ -209,6 +235,12 @@ export function PresenceLayer() {
             height: bottom - top,
             liveText,
             labelTop: LABEL_BASE_TOP,
+            // Anchor key changes when the peer's selection moves to a
+            // different cell. Position-only changes (scroll, zoom) leave
+            // it the same — that's our signal to disable the CSS
+            // transition for those frames so the cursor doesn't lerp
+            // 80 ms behind the canvas.
+            anchorKey: `${wb.getId()}:${activeSheetId}:${sr}:${sc}:${er}:${ec}`,
           });
         } catch {
           /* getCellRect can throw mid-resize — drop this frame for that peer */
@@ -219,7 +251,7 @@ export function PresenceLayer() {
 
       // Cheap diff: only setState when the rect set actually changed,
       // so we don't churn React 15× per second.
-      if (rectsEqual(next, rects)) return;
+      if (rectsEqual(next, rectsRef.current)) return;
       setRects(next);
     };
 
@@ -229,9 +261,28 @@ export function PresenceLayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, peers]);
 
+  // Per-peer previous anchor key. Used to set `.presence-cursor--moving`
+  // for one render after the peer's selection moves to a new cell, so
+  // we get a smooth cell-to-cell ease without lerping every scroll
+  // frame. Persists across renders via a ref so the comparison sees the
+  // last committed value.
+  const prevAnchorRef = useRef<Map<number, string>>(new Map());
+
   if (rects.length === 0) return null;
-  const host = hostRef.current ?? (document.querySelector('[data-testid="univer-host"]') as HTMLElement | null);
+  const host = hostRef.current ?? getUniverHost();
   if (!host) return null;
+
+  // Snapshot which cursors should animate this render. Done outside the
+  // map() so we update the prev-anchor map exactly once per render and
+  // don't trigger React-StrictMode double-invoke weirdness.
+  const animating = new Set<number>();
+  const nextAnchors = new Map<number, string>();
+  for (const r of rects) {
+    const prev = prevAnchorRef.current.get(r.clientId);
+    if (prev !== undefined && prev !== r.anchorKey) animating.add(r.clientId);
+    nextAnchors.set(r.clientId, r.anchorKey);
+  }
+  prevAnchorRef.current = nextAnchors;
 
   return createPortal(
     <div
@@ -240,35 +291,40 @@ export function PresenceLayer() {
       data-testid="presence-layer"
       aria-hidden="true"
     >
-      {rects.map((r) => (
-        <div
-          key={r.clientId}
-          className={'presence-cursor' + (r.liveText !== undefined ? ' presence-cursor--editing' : '')}
-          data-testid="presence-cursor"
-          data-live={r.liveText !== undefined ? '1' : '0'}
-          style={
-            {
-              left: `${r.left}px`,
-              top: `${r.top}px`,
-              width: `${r.width}px`,
-              height: `${r.height}px`,
-              ['--presence-color' as string]: r.color,
-            } as React.CSSProperties
-          }
-        >
-          <span
-            className="presence-cursor__label"
-            style={{ top: `${r.labelTop}px` }}
+      {rects.map((r) => {
+        const classes = ['presence-cursor'];
+        if (r.liveText !== undefined) classes.push('presence-cursor--editing');
+        if (animating.has(r.clientId)) classes.push('presence-cursor--moving');
+        return (
+          <div
+            key={r.clientId}
+            className={classes.join(' ')}
+            data-testid="presence-cursor"
+            data-live={r.liveText !== undefined ? '1' : '0'}
+            style={
+              {
+                left: `${r.left}px`,
+                top: `${r.top}px`,
+                width: `${r.width}px`,
+                height: `${r.height}px`,
+                ['--presence-color' as string]: r.color,
+              } as React.CSSProperties
+            }
           >
-            {r.name}
-          </span>
-          {r.liveText !== undefined && r.liveText.length > 0 && (
-            <span className="presence-cursor__ghost" data-testid="presence-cursor-ghost">
-              {r.liveText}
+            <span
+              className="presence-cursor__label"
+              style={{ top: `${r.labelTop}px` }}
+            >
+              {r.name}
             </span>
-          )}
-        </div>
-      ))}
+            {r.liveText !== undefined && r.liveText.length > 0 && (
+              <span className="presence-cursor__ghost" data-testid="presence-cursor-ghost">
+                {r.liveText}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>,
     host,
   );
@@ -288,7 +344,8 @@ function rectsEqual(a: Rect[], b: Rect[]): boolean {
       x.name !== y.name ||
       x.color !== y.color ||
       x.liveText !== y.liveText ||
-      x.labelTop !== y.labelTop
+      x.labelTop !== y.labelTop ||
+      x.anchorKey !== y.anchorKey
     ) {
       return false;
     }

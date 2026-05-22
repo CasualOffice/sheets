@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUniverAPI } from '../use-univer';
+import { getHeaderGutter, getUniverHost, getUniverMainCanvas } from '../univer-dom';
 import { useCharts } from './charts-context';
 import { ChartOverlay } from './ChartOverlay';
 import { ChartContextMenu } from './ChartContextMenu';
@@ -45,10 +46,9 @@ export function ChartLayer() {
   renderedRef.current = rendered;
   const hostRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef({ x: 0, y: 0 });
-  const scrollTickRef = useRef(0);
 
   useEffect(() => {
-    hostRef.current = document.querySelector('[data-testid="univer-host"]') as HTMLElement | null;
+    hostRef.current = getUniverHost();
   }, []);
 
   // The chart's screen position is the cell's canvas-local rect minus
@@ -61,18 +61,14 @@ export function ChartLayer() {
   useEffect(() => {
     if (!api) return;
     let raf = 0;
-    let lastScrollTick = scrollTickRef.current;
-    let lastScrollAtFrame = -1000;
-    let frame = 0;
 
     const recompute = () => {
-      const host =
-        hostRef.current ?? (document.querySelector('[data-testid="univer-host"]') as HTMLElement | null);
+      const host = hostRef.current ?? getUniverHost();
       if (!host) {
         if (renderedRef.current.length) setRendered([]);
         return;
       }
-      const canvas = host.querySelector('canvas[id^="univer-sheet-main-canvas_"]') as HTMLCanvasElement | null;
+      const canvas = getUniverMainCanvas(host);
       if (!canvas) {
         if (renderedRef.current.length) setRendered([]);
         return;
@@ -101,13 +97,18 @@ export function ChartLayer() {
       // Cell rects come back canvas-local + pre-scroll; we convert by
       // asking for the rect of the cell currently at viewport top-left
       // — that rect's `top/left` IS the scroll offset to subtract.
+      // CRITICAL: `getScrollState()` itself can throw a redi
+      // QuantityCheckError during the brief window between Univer mount
+      // and full render-unit DI graph setup. The whole block —
+      // including the getScrollState() call — must be inside try/catch.
+      // Otherwise the rAF tick throws every frame until init completes.
       let sx = 0;
       let sy = 0;
-      const scrollState = activeSheet?.getScrollState?.() as
-        | { sheetViewStartRow?: number; sheetViewStartColumn?: number; offsetX?: number; offsetY?: number }
-        | undefined;
-      if (scrollState) {
-        try {
+      try {
+        const scrollState = activeSheet?.getScrollState?.() as
+          | { sheetViewStartRow?: number; sheetViewStartColumn?: number; offsetX?: number; offsetY?: number }
+          | undefined;
+        if (scrollState) {
           const r = scrollState.sheetViewStartRow ?? 0;
           const c = scrollState.sheetViewStartColumn ?? 0;
           const topLeft = activeSheet.getRange(r, c).getCellRect();
@@ -115,14 +116,18 @@ export function ChartLayer() {
             sx = topLeft.left + (scrollState.offsetX ?? 0);
             sy = topLeft.top + (scrollState.offsetY ?? 0);
           }
-        } catch {
-          /* skeleton not ready — leave scroll at 0 this frame */
         }
+      } catch {
+        /* skeleton / scroll service not ready — leave scroll at 0 this frame */
       }
-      if (sx !== scrollRef.current.x || sy !== scrollRef.current.y) {
-        scrollRef.current = { x: sx, y: sy };
-        scrollTickRef.current += 1;
-      }
+      // Stash the latest scroll for downstream consumers (ChartOverlay).
+      // We no longer need a tick counter to gate recomputes — they fire
+      // every frame now.
+      scrollRef.current = { x: sx, y: sy };
+
+      // Header gutter — see univer-dom.getHeaderGutter. Without this,
+      // charts sit ~40 px above and left of their cell anchor.
+      const gutter = getHeaderGutter(api);
 
       const out: RenderedChart[] = [];
       for (const c of charts) {
@@ -131,10 +136,10 @@ export function ChartLayer() {
           const tl = activeSheet.getRange(c.pos.startRow, c.pos.startColumn).getCellRect();
           const br = activeSheet.getRange(c.pos.endRow, c.pos.endColumn).getCellRect();
           if (!tl || !br) continue;
-          const left = Math.min(tl.left, br.left) - sx + dx;
-          const top = Math.min(tl.top, br.top) - sy + dy;
-          const right = Math.max(tl.right, br.right) - sx + dx;
-          const bottom = Math.max(tl.bottom, br.bottom) - sy + dy;
+          const left = Math.min(tl.left, br.left) - sx + dx + gutter.rowHeaderWidth;
+          const top = Math.min(tl.top, br.top) - sy + dy + gutter.columnHeaderHeight;
+          const right = Math.max(tl.right, br.right) - sx + dx + gutter.rowHeaderWidth;
+          const bottom = Math.max(tl.bottom, br.bottom) - sy + dy + gutter.columnHeaderHeight;
           // Clip — charts mostly off-canvas don't render (saves
           // ECharts a redraw); partially off is fine because the
           // overlay overflow:hidden on the layer below clips it.
@@ -153,14 +158,14 @@ export function ChartLayer() {
     };
 
     const tick = () => {
-      const tickNow = ++frame;
-      const scrollChanged = scrollTickRef.current !== lastScrollTick;
-      if (scrollChanged) {
-        lastScrollTick = scrollTickRef.current;
-        lastScrollAtFrame = tickNow;
-      }
-      const inScrollTail = tickNow - lastScrollAtFrame < 20;
-      if (inScrollTail || tickNow % 4 === 0) recompute();
+      // Recompute every animation frame. The cost is dominated by a
+      // handful of `getCellRect` calls per chart and one `getHeaderGutter`
+      // lookup — easily under a millisecond for typical workbooks.
+      // Throttling to every 4 frames was the source of charts visually
+      // pinning to the viewport for ~50 ms at the start of any scroll
+      // (same root cause as the remote-cursor scroll-pin bug —
+      // see docs/COLLAB-FIXES.md #14).
+      recompute();
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -219,8 +224,7 @@ export function ChartLayer() {
     return () => document.removeEventListener('mousedown', onClick, true);
   }, [selectedId, select]);
 
-  const host =
-    hostRef.current ?? (document.querySelector('[data-testid="univer-host"]') as HTMLElement | null);
+  const host = hostRef.current ?? getUniverHost();
   if (rendered.length === 0 && !ctxMenu) return null;
   if (!host) return null;
 
