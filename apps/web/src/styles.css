@@ -1214,6 +1214,79 @@ button {
   min-height: 0;
 }
 
+/* Live session-history side panel — same chrome as the other right-rail
+   panels so the visual rhythm is consistent. */
+.side-panel {
+  width: 320px;
+  flex: 0 0 320px;
+  background: var(--color-surface-alt);
+  border-top: 1px solid var(--color-divider);
+  border-left: 1px solid var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.side-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-divider);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.side-panel__title { margin: 0; font-size: inherit; font-weight: inherit; flex: 1; }
+.side-panel__count {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-strip);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: var(--text-xs);
+}
+.side-panel__empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.history-list__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+.history-list__who {
+  grid-column: 1;
+  font-weight: 600;
+}
+.history-list__when {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.history-list__what {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+  color: var(--color-text);
+}
+
 .tables-panel__head {
   display: flex;
   align-items: center;

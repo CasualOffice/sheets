@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type * as Y from 'yjs';
 
 export type CollabStatus = 'off' | 'connecting' | 'live' | 'offline' | 'denied';
 export type CollabRole = 'view' | 'write';
@@ -28,6 +29,10 @@ export type CollabCtxValue = {
   /** Aggregate Yjs sync health across visible peers. Only meaningful
    *  when `status === 'live'`; falls back to `in-sync` otherwise. */
   syncHealth: SyncHealth;
+  /** Active room's Yjs document — null when not in a room. Exposed
+   *  via context so the HistoryPanel can subscribe to the op-log
+   *  array without piping it through three layers of props. */
+  doc: Y.Doc | null;
 };
 
 export const CollabContext = createContext<CollabCtxValue>({
@@ -36,6 +41,7 @@ export const CollabContext = createContext<CollabCtxValue>({
   status: 'off',
   role: 'write',
   syncHealth: 'in-sync',
+  doc: null,
 });
 
 export function useCollab(): CollabCtxValue {

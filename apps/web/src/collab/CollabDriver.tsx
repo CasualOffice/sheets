@@ -54,6 +54,10 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   const viewModeDisposeRef = useRef<(() => void) | null>(null);
 
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
+  // Mirror docRef into state so the CollabContext value updates when
+  // the active room's doc changes. HistoryPanel and any future
+  // op-log consumer subscribe via context and rerender on transitions.
+  const [doc, setDoc] = useState<Y.Doc | null>(null);
   const [needsSelfHost, setNeedsSelfHost] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [role, setRole] = useState<CollabRole>('write');
@@ -364,6 +368,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     docRef.current = doc;
     handleRef.current = handle;
     setProvider(next);
+    setDoc(doc);
     // Expose for e2e diagnostics / browser-devtools poking. Same
     // policy as __univerAPI — no secrets, but invaluable when a real
     // user reports "the sync looks broken" and we need to inspect
@@ -409,6 +414,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     docRef.current?.destroy();
     handleRef.current = null;
     docRef.current = null;
+    setDoc(null);
   };
 
   // Presence wire — runs in this effect so the same instance feeds both
@@ -474,8 +480,8 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   }, [status, peers]);
 
   const collabCtx = useMemo(
-    () => ({ enabled: isCollabEnabled(), roomId, status, role, syncHealth }),
-    [roomId, status, role, syncHealth],
+    () => ({ enabled: isCollabEnabled(), roomId, status, role, syncHealth, doc }),
+    [roomId, status, role, syncHealth, doc],
   );
 
   const presenceCtx = useMemo(

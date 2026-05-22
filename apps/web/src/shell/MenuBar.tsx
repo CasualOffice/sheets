@@ -944,6 +944,7 @@ export function MenuBar() {
         { kind: 'item', id: 'tables-panel',  label: ui.tablesPanelVisible  ? 'Hide Tables panel'  : 'Tables panel',  icon: 'table_rows', onClick: ui.toggleTablesPanel },
         { kind: 'item', id: 'outline-panel', label: ui.outlinePanelVisible ? 'Hide Outline panel' : 'Outline panel', icon: 'list',       onClick: ui.toggleOutlinePanel },
         { kind: 'item', id: 'charts-panel',  label: ui.chartsPanelVisible  ? 'Hide Charts panel'  : 'Charts panel',  icon: 'bar_chart',  onClick: ui.toggleChartsPanel },
+        { kind: 'item', id: 'history-panel', label: ui.historyPanelVisible ? 'Hide History panel' : 'History panel', icon: 'history',    onClick: ui.toggleHistoryPanel },
         { kind: 'item', id: 'comments-panel', label: 'Comments panel', icon: 'forum', run: toggleCommentPanel },
       ],
     },

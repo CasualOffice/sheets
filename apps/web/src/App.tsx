@@ -28,6 +28,7 @@ import { BusyProvider } from './busy-context';
 import { ChartsProvider } from './charts/charts-context';
 import { ChartLayer } from './charts/ChartLayer';
 import { ChartsPanel } from './shell/ChartsPanel';
+import { HistoryPanel } from './shell/HistoryPanel';
 import { PivotsProvider } from './pivots/pivots-context';
 import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
@@ -52,6 +53,7 @@ export function App() {
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
   const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
   const [chartsPanelVisible, setChartsPanelVisible] = useState(false);
+  const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const [shareRoomOpen, setShareRoomOpen] = useState(false);
   const [loading, setLoading] = useState<LoadingState | null>(null);
 
@@ -132,6 +134,7 @@ export function App() {
           if (next) {
             setOutlinePanelVisible(false);
             setChartsPanelVisible(false);
+            setHistoryPanelVisible(false);
           }
           return next;
         }),
@@ -142,6 +145,7 @@ export function App() {
           if (next) {
             setTablesPanelVisible(false);
             setChartsPanelVisible(false);
+            setHistoryPanelVisible(false);
           }
           return next;
         }),
@@ -152,12 +156,24 @@ export function App() {
           if (next) {
             setTablesPanelVisible(false);
             setOutlinePanelVisible(false);
+            setHistoryPanelVisible(false);
+          }
+          return next;
+        }),
+      historyPanelVisible,
+      toggleHistoryPanel: () =>
+        setHistoryPanelVisible((v) => {
+          const next = !v;
+          if (next) {
+            setTablesPanelVisible(false);
+            setOutlinePanelVisible(false);
+            setChartsPanelVisible(false);
           }
           return next;
         }),
       openShareRoom: () => setShareRoomOpen(true),
     }),
-    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible],
+    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible, historyPanelVisible],
   );
 
   return (
@@ -189,6 +205,7 @@ export function App() {
                   {tablesPanelVisible && <TablesPanel />}
                   {outlinePanelVisible && <OutlinePanel />}
                   {chartsPanelVisible && <ChartsPanel />}
+                  {historyPanelVisible && <HistoryPanel />}
                 </div>
                 <SheetTabs />
                 {shareRoomOpen && (

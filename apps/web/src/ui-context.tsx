@@ -9,6 +9,10 @@ export type UICtxValue = {
   toggleOutlinePanel: () => void;
   chartsPanelVisible: boolean;
   toggleChartsPanel: () => void;
+  /** Live session-history panel — read-only list of every mutation in
+   *  the active room's Yjs op-log, who issued it, and when. */
+  historyPanelVisible: boolean;
+  toggleHistoryPanel: () => void;
   /** Show the "Share for co-editing" dialog. Lifted to app scope so the
    *  titlebar's primary Share button can open it without coupling to MenuBar. */
   openShareRoom: () => void;
