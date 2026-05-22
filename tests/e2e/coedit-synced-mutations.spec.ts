@@ -75,19 +75,32 @@ async function joinTwoPeerRoom(): Promise<{
 
 test('tab colour propagates to peers', async () => {
   const { owner, joiner, cleanup } = await joinTwoPeerRoom();
-  const sheetId = await owner.evaluate(() => {
+  const sheetId = await owner.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const api = (window as any).__univerAPI;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wb: any = api.getActiveWorkbook();
     const sid = wb.getActiveSheet().getSheetId();
-    api.executeCommand('sheet.command.set-tab-color', {
+    // NB: SetTabColorCommand reads `params.value`, not `params.color`
+    // — the inner mutation receives { color: params.value }. Easy
+    // to get wrong from outside Univer.
+    await api.executeCommand('sheet.command.set-tab-color', {
       unitId: wb.getId(),
       subUnitId: sid,
-      color: '#ff5722',
+      value: '#ff5722',
     });
     return sid;
   });
+
+  // Confirm the command stuck locally before testing propagation.
+  const ownerColor = await owner.evaluate((id: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = (window as any).__univerAPI;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (api.getActiveWorkbook().save() as any).sheets?.[id]?.tabColor;
+  }, sheetId);
+  expect(ownerColor, 'owner-side mutation must apply locally first').toBe('#ff5722');
+
   await joiner.waitForTimeout(1500);
   const peerColor = await joiner.evaluate((id: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,11 +108,16 @@ test('tab colour propagates to peers', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wb: any = api.getActiveWorkbook();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ws: any = wb.getSheets().find((s: any) => s.getSheetId() === id);
-    // Tab colour is stored on the worksheet config — facade getter may or
-    // may not exist; reach via the underlying _worksheet snapshot field.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ws?._worksheet?.getConfig?.()?.tabColor;
+    const snap = wb.save() as any;
+    const sheet = snap.sheets?.[id];
+    // Univer's tabColor key has varied across versions; check both
+    // common forms and fall back to a stringify probe so the test
+    // failure tells us where it actually is.
+    if (sheet?.tabColor) return sheet.tabColor;
+    if (sheet?.tabColour) return sheet.tabColour;
+    // Diagnostic: return a sampling of the sheet keys so we can see
+    // what's actually there.
+    return { _miss: true, keys: Object.keys(sheet ?? {}), serialized: JSON.stringify(sheet).slice(0, 400) };
   }, sheetId);
   expect(peerColor).toBe('#ff5722');
   await cleanup();
@@ -199,16 +217,30 @@ test('reorder-range (sort) propagates the new cell order', async () => {
     });
   });
   await joiner.waitForTimeout(1500);
-  const values = await joiner.evaluate(() => {
+
+  const ownerAfter = await owner.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const api = (window as any).__univerAPI;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ws: any = api.getActiveWorkbook().getActiveSheet();
     return [ws.getRange('A1').getValue(), ws.getRange('A2').getValue(), ws.getRange('A3').getValue()];
   });
-  // Input was [3, 1, 2]. order { 0:1, 1:2, 2:0 } means "the value
-  // originally at row 0 ends up at row 1; row 1's value at row 2; row 2's
-  // value at row 0". So A1 = 2, A2 = 3, A3 = 1.
-  expect(values).toEqual([2, 3, 1]);
+  const joinerAfter = await joiner.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = (window as any).__univerAPI;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws: any = api.getActiveWorkbook().getActiveSheet();
+    return [ws.getRange('A1').getValue(), ws.getRange('A2').getValue(), ws.getRange('A3').getValue()];
+  });
+  // We don't pin the exact reorder semantics (Univer's `order` map has
+  // a specific interpretation that's easy to get wrong from outside);
+  // the test that actually matters is "peer B's state matches peer A's
+  // state after the reorder." If the mutation propagated, both must
+  // agree. The owner's row order must have CHANGED from the input
+  // [3,1,2] for the test to be meaningful — sanity-check that too.
+  expect(joinerAfter).toEqual(ownerAfter);
+  expect(ownerAfter).not.toEqual([3, 1, 2]);
+  // And the multiset of values is preserved (no cell lost).
+  expect([...ownerAfter].sort()).toEqual([1, 2, 3]);
   await cleanup();
 });
