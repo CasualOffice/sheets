@@ -136,13 +136,17 @@ jobs:
           done
           echo "stack never became healthy"; docker compose logs --tail=200; exit 1
       - name: Run prod-bundle specs
-        # coedit-cell-edit.spec.ts is the editor-flow regression — types
-        # via F2 + keyboard (not the programmatic setValue path the rest
-        # of the suite uses), which is what caught the issue-29 bridge
-        # bug. coedit-regression.spec.ts spawns its OWN standalone
-        # server on port 3058 and would conflict with the docker stack —
-        # it stays on the dev-server e2e job.
-        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts
+        # These all exercise prod-bundle-only code paths or assert
+        # against the actual built docker image:
+        #   - coedit-cell-edit: editor-flow regression (catches the
+        #     issue-29 bridge bug via real F2 + keyboard typing, not
+        #     programmatic setValue)
+        #   - coedit-view-only: WorkbookEditablePermission gate
+        #   - coedit-divergence: state-vector mismatch → amber pill
+        # coedit-regression.spec.ts is NOT here — it spawns its own
+        # standalone server on port 3058 and would conflict with the
+        # docker stack. It stays on the dev-server e2e job.
+        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts tests/e2e/coedit-view-only.spec.ts tests/e2e/coedit-divergence.spec.ts
       - name: Capture container logs on failure
         if: failure()
         run: docker compose logs --tail=500

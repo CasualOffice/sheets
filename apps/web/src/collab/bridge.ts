@@ -185,6 +185,8 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
 
   const log = doc.getArray<OpRecord>(LOG_KEY);
   const myClientId = String(doc.clientID);
+  // One-shot guard for the __splitChunk__ regression watchdog below.
+  let splitChunkWarned = false;
 
   // Local → Yjs: append every synced mutation to the log. Skipped for
   // view-role clients — their local edits never leave their browser.
@@ -211,6 +213,20 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     if (role === 'view') return;
     if (options?.fromCollab) return;
     if (!SYNCED_MUTATIONS.has(info.id)) return;
+    // Univer 0.22.x doesn't use the chunked-mutation protocol that
+    // earlier versions (and the CLAUDE.md hard rule) referenced. If a
+    // future upgrade reintroduces __splitChunk__, mutations split
+    // across multiple emissions will silently corrupt on peers because
+    // our op-log doesn't reassemble them. Warn loudly the FIRST time
+    // we see one so an upgrade regression surfaces in the console
+    // instead of as a mysterious paste-corruption bug.
+    if (!splitChunkWarned && hasSplitChunkMarker(info.params)) {
+      splitChunkWarned = true;
+      console.warn(
+        '[collab] mutation "%s" carries __splitChunk__ — Univer reintroduced chunked mutations; bridge needs reassembly logic. See docs/COLLAB-FIXES.md issue 8.',
+        info.id,
+      );
+    }
     pending.push({
       c: myClientId,
       t: Date.now(),
@@ -531,4 +547,22 @@ function restoreActiveSheetId(api: FUniver, sheetId: string): void {
   } catch (err) {
     console.warn('[collab] failed to restore active sheet after remote insert-sheet', err);
   }
+}
+
+/**
+ * Cheap probe for the `__splitChunk__` marker — a flag Univer used in
+ * earlier versions to indicate a mutation was one chunk of a larger
+ * operation (large paste, copy-worksheet). Univer 0.22.x doesn't emit
+ * it, but if a future upgrade reintroduces it our op-log replay would
+ * silently corrupt because we don't reassemble chunks. Watchdog logs
+ * a warning the first time it sees one so the regression is loud.
+ *
+ * Walks one level deep — Univer carried the marker on the top-level
+ * params object historically. Deeper nesting would be a different
+ * shape and warrants a different fix.
+ */
+function hasSplitChunkMarker(params: unknown): boolean {
+  if (!params || typeof params !== 'object') return false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return Object.prototype.hasOwnProperty.call(params, '__splitChunk__');
 }
