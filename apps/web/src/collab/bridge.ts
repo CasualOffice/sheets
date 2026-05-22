@@ -353,7 +353,12 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // lowest known clientId. The interval guard prevents an over-eager
   // compactor from churning. View-only clients never compact.
   let lastCompactedAt = 0;
-  let compactionTimer: ReturnType<typeof setInterval> | null = null;
+  // Both scheduling paths declared in outer scope so the dispose
+  // closure below can clean up either one.
+  let intervalHandle: ReturnType<typeof setInterval> | null = null;
+  let idleHandle: number | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cic = (globalThis as any).cancelIdleCallback as undefined | ((id: number) => void);
   if (role !== 'view' && opts.awareness) {
     const awareness = opts.awareness;
     const tryCompact = (): void => {
@@ -398,10 +403,40 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
         console.warn('[collab] compaction attempt failed', err);
       }
     };
-    compactionTimer = setInterval(tryCompact, COMPACT_CHECK_INTERVAL_MS);
-    // Don't keep the interval alive in tests / SSR where this
-    // module might be imported but never torn down.
-    compactionTimer.unref?.();
+    // Schedule `tryCompact` via requestIdleCallback so the heavy
+    // `wb.save()` only runs when the main thread is genuinely idle —
+    // never mid-keystroke or mid-paste. The browser gives us a
+    // deadline; if it expires before we'd start, we skip and wait
+    // for the next tick. Fall back to a plain setInterval in
+    // environments without rIC (Safari < 18, some test runners).
+    //
+    // `wb.save()` itself can't move to a Web Worker (the Univer
+    // workbook is a main-thread object graph), so the realistic
+    // optimisation is "don't run it when the user is busy".
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ric = (globalThis as any).requestIdleCallback as
+      | undefined
+      | ((cb: (d: { didTimeout: boolean; timeRemaining: () => number }) => void, opts?: { timeout: number }) => number);
+    if (typeof ric === 'function') {
+      const scheduleNext = () => {
+        idleHandle = ric(
+          (deadline) => {
+            // Only run if we have at least ~5 ms to spare (typical
+            // empty-workbook save is <1 ms, big ones a few ms;
+            // anything longer should defer to the next idle window).
+            if (deadline.didTimeout || deadline.timeRemaining() > 5) {
+              tryCompact();
+            }
+            scheduleNext();
+          },
+          { timeout: COMPACT_CHECK_INTERVAL_MS },
+        );
+      };
+      scheduleNext();
+    } else {
+      intervalHandle = setInterval(tryCompact, COMPACT_CHECK_INTERVAL_MS);
+      intervalHandle.unref?.();
+    }
 
     // Dev-only sinks for the compaction e2e — lets a test trigger
     // the compaction without waiting for the 30 s interval and read
@@ -428,7 +463,9 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       // the last keystroke on the floor.
       if (pending.length > 0) flush();
       log.unobserve(observer);
-      if (compactionTimer) clearInterval(compactionTimer);
+      // Two scheduling paths in setup above — clean up whichever ran.
+      if (intervalHandle) clearInterval(intervalHandle);
+      if (idleHandle !== null && typeof cic === 'function') cic(idleHandle);
     },
   };
 }
