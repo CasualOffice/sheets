@@ -146,10 +146,13 @@ jobs:
         #   - coedit-insert-sheet: peer A adds a sheet → peer B's
         #     tab strip refreshes (catches the SheetCreated event
         #     vs CommandExecuted-mutation gap)
+        #   - coedit-sheet-ops: rename + hide/show + download
+        #     cross-peer regression (mutation-id fallback in
+        #     useSheets, live state in File→Download)
         # coedit-regression.spec.ts is NOT here — it spawns its own
         # standalone server on port 3058 and would conflict with the
         # docker stack. It stays on the dev-server e2e job.
-        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts tests/e2e/coedit-view-only.spec.ts tests/e2e/coedit-divergence.spec.ts tests/e2e/coedit-insert-sheet.spec.ts
+        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts tests/e2e/coedit-view-only.spec.ts tests/e2e/coedit-divergence.spec.ts tests/e2e/coedit-insert-sheet.spec.ts tests/e2e/coedit-sheet-ops.spec.ts
       - name: Capture container logs on failure
         if: failure()
         run: docker compose logs --tail=500

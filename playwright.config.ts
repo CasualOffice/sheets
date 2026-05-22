@@ -22,6 +22,7 @@ export default defineConfig({
     '**/coedit-view-only.spec.ts',
     '**/coedit-divergence.spec.ts',
     '**/coedit-insert-sheet.spec.ts',
+    '**/coedit-sheet-ops.spec.ts',
   ],
   use: {
     baseURL: 'http://127.0.0.1:5273',
