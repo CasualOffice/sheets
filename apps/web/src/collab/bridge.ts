@@ -35,6 +35,10 @@ const MUTATION_TO_LAZY_GROUP: Record<string, LazyPluginGroup> = {
   'sheet.mutation.add-hyper-link': 'hyperlink',
   'sheet.mutation.remove-hyper-link': 'hyperlink',
   'sheet.mutation.update-hyper-link': 'hyperlink',
+  'data-validation.mutation.addRule': 'dv',
+  'data-validation.mutation.removeRule': 'dv',
+  'data-validation.mutation.updateRule': 'dv',
+  'sheet.mutation.set-drawing-apply': 'drawing',
 };
 // y-protocols ships type declarations only as ESM and our tsconfig
 // doesn't pick them up cleanly; loose-type the Awareness surface we
@@ -148,6 +152,19 @@ const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   'sheet.mutation.set-conditional-rule',
   'sheet.mutation.delete-conditional-rule',
   'sheet.mutation.move-conditional-rule',
+  // Data validation (data-validation core). NB: this package uses the
+  // `data-validation.mutation.*` prefix, not `sheet.mutation.*`.
+  // Mutation handlers live in @univerjs/data-validation; the
+  // sheets-data-validation plugin is the lazy-loaded integration our
+  // MUTATION_TO_LAZY_GROUP map keys on.
+  'data-validation.mutation.addRule',
+  'data-validation.mutation.removeRule',
+  'data-validation.mutation.updateRule',
+  // Drawings / images (sheets-drawing). Single all-purpose mutation
+  // wraps add / remove / update via a JSON-1 op + an enum type. Params
+  // can be large (embedded image blobs) — accept the bandwidth hit
+  // until we move drawings to a side-channel resource model.
+  'sheet.mutation.set-drawing-apply',
 ]);
 
 /** Mutation ids for which the bridge captures undo params before the

@@ -101,8 +101,9 @@ Notes: update-note, remove-note.
 
 | Mutation(s) | Feature | Why deferred |
 |---|---|---|
-| add-conditional-rule, set-conditional-rule, delete-conditional-rule, move-conditional-rule | Conditional formatting | Rules live in workbook resources too — sync needs both the mutation AND a resource-channel like charts. |
-| set-drawing-apply | Insert image / shape | Drawings package has its own resource model + many mutations not in this list. Separate sync surface. |
+| ~~CF~~ | ~~Conditional formatting~~ | **FIXED** — mutations allowlisted + lazy-plugin gate ensures the receiver mounts the CF plugin before mutation replay. E2E: `coedit-conditional-formatting.spec.ts`. |
+| ~~DV~~ | ~~Data validation~~ | **FIXED** — DV uses `data-validation.mutation.*` prefix (not `sheet.mutation.*`); allowlisted + lazy-gated. E2E: `coedit-data-validation.spec.ts`. |
+| ~~set-drawing-apply~~ | ~~Insert image / shape~~ | **FIXED (transitive)** — single all-purpose mutation handles add/remove/update via JSON-1 op. Allowlisted + lazy-gated for the `drawing` plugin. Large embedded image blobs ride the op-log; acceptable until/unless a side-channel resource model is added. |
 | add-range-protection, set-range-protection, delete-range-protection, add-worksheet-protection, set-worksheet-protection, delete-worksheet-protection, set-worksheet-permission-points | Range/sheet protection | Security-adjacent; needs auth-model design before propagation. |
 | add-range-theme, set-range-theme, remove-range-theme, register/unregister/delete-worksheet-range-theme-style, set-worksheet-range-theme-style | Range themes | Rare power-user feature. |
 | set-workbook-name, set-worksheet-column-count, set-worksheet-row-count, set-worksheet-right-to-left | Workbook/sheet metadata | Rarely changed mid-session; could add to allowlist trivially. |

@@ -26,6 +26,7 @@ export default defineConfig({
     '**/coedit-cursor-math.spec.ts',
     '**/coedit-synced-mutations.spec.ts',
     '**/coedit-conditional-formatting.spec.ts',
+    '**/coedit-data-validation.spec.ts',
   ],
   use: {
     baseURL: 'http://127.0.0.1:5273',

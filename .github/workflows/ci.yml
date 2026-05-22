@@ -156,10 +156,13 @@ jobs:
         #   - coedit-synced-mutations: tab colour + move-range +
         #     reorder-range cross-peer regressions (lockdown for the
         #     SYNCED_MUTATIONS additions)
+        #   - coedit-data-validation: DV rule added by peer A appears
+        #     on peer B (lazy-plugin gate verified for the
+        #     `data-validation.mutation.*` prefix)
         # coedit-regression.spec.ts is NOT here — it spawns its own
         # standalone server on port 3058 and would conflict with the
         # docker stack. It stays on the dev-server e2e job.
-        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts tests/e2e/coedit-view-only.spec.ts tests/e2e/coedit-divergence.spec.ts tests/e2e/coedit-insert-sheet.spec.ts tests/e2e/coedit-sheet-ops.spec.ts tests/e2e/coedit-cursor-math.spec.ts tests/e2e/coedit-conditional-formatting.spec.ts tests/e2e/coedit-synced-mutations.spec.ts
+        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts tests/e2e/coedit-view-only.spec.ts tests/e2e/coedit-divergence.spec.ts tests/e2e/coedit-insert-sheet.spec.ts tests/e2e/coedit-sheet-ops.spec.ts tests/e2e/coedit-cursor-math.spec.ts tests/e2e/coedit-conditional-formatting.spec.ts tests/e2e/coedit-synced-mutations.spec.ts tests/e2e/coedit-data-validation.spec.ts
       - name: Capture container logs on failure
         if: failure()
         run: docker compose logs --tail=500
