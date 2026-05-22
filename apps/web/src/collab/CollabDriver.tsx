@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as Y from 'yjs';
-import { HocuspocusProvider } from '@hocuspocus/provider';
+import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useLoading } from '../loading-context';
@@ -277,7 +277,23 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     const url = `${baseWs}${sep}room=${encodeURIComponent(id)}${password ? `&p=${encodeURIComponent(password)}` : ''}`;
 
     const doc = new Y.Doc();
-    const next = new HocuspocusProvider({ url, name: id, document: doc });
+    // Drop messageReconnectTimeout from the default 30 s to 10 s so a
+    // dropped WebSocket flips us to `status === 'offline'` (→
+    // "Waiting to reconnect to server" banner) within ~10 s of the
+    // last server message instead of waiting half a minute. Provider's
+    // internal ping check fires every messageReconnectTimeout/10 = 1 s,
+    // and awareness updates (sv broadcast every 5 s + selection moves
+    // on every cursor change) keep the connection demonstrably alive
+    // so we don't false-positive on quiet rooms.
+    const ws = new HocuspocusProviderWebsocket({
+      url,
+      messageReconnectTimeout: 10_000,
+    });
+    const next = new HocuspocusProvider({
+      websocketProvider: ws,
+      name: id,
+      document: doc,
+    });
     const handle = startBridge(api, doc, {
       role: joinRole,
       awareness: next.awareness ?? undefined,
@@ -487,6 +503,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       <PresenceContext.Provider value={presenceCtx}>
         {needsSelfHost && <SelfHostBanner />}
         {role === 'view' && roomId && status === 'live' && <ViewOnlyBanner />}
+        {roomId && status === 'offline' && <OfflineBanner />}
         {passwordPrompt && (
           <PasswordPrompt
             state={passwordPrompt}
@@ -552,6 +569,21 @@ function ViewOnlyBanner() {
         <strong>View only.</strong>{' '}
         You're joined as a viewer — your edits stay local and don't sync to others.
         Ask the owner for the edit link if you need to change the sheet.
+      </div>
+    </div>
+  );
+}
+
+/** Banner shown when the WS provider reports an offline status (after
+ *  Hocuspocus's internal reconnect heuristics have kicked in). The
+ *  provider keeps retrying with exponential backoff in the background;
+ *  this banner just makes it visible that a reconnect is pending. */
+function OfflineBanner() {
+  return (
+    <div className="collab-banner collab-banner--warn" data-testid="offline-banner" role="status" aria-live="polite">
+      <div className="collab-banner__body">
+        <strong>Waiting to reconnect to server…</strong>{' '}
+        Your edits are queued locally and will sync when the connection is back.
       </div>
     </div>
   );

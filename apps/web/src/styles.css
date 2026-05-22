@@ -3377,6 +3377,17 @@ button {
 .collab-banner--neutral .collab-banner__close { color: var(--color-text-soft, var(--color-text)); }
 .collab-banner--neutral .collab-banner__close:hover { background: var(--color-hover); }
 
+/* Warn variant — for the "Waiting to reconnect to server" banner.
+   Amber to match the diverged sync-health pill, softer than the
+   destructive red default banner. */
+.collab-banner--warn {
+  background: color-mix(in srgb, #e7a851 18%, var(--color-surface));
+  color: #b06000;
+  border: 1px solid color-mix(in srgb, #e7a851 50%, transparent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+}
+.collab-banner--warn .collab-banner__body strong { color: #8a4a00; }
+
 /* ─────────────────────────────────────────────────────────────────────────
    Live presence: remote cursors / selections + avatar stack.
    The cursor overlay is an absolutely-positioned layer over the grid;
