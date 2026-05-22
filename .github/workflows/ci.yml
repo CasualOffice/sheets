@@ -89,3 +89,70 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  e2e-prod:
+    # Runs a subset of the e2e suite against the built docker image
+    # (single port 3000, Fastify serves web + api + WS). The dev-server
+    # path in `e2e` above does NOT exercise the prod bundle and misses
+    # prod-only bugs: minified service identifiers tripping the redi
+    # injector on startup, dev-only globals like __univerAPI being
+    # absent, the canvas-id race, etc. — every one of those shipped
+    # today before this job existed. Keep this fast: only the specs
+    # tagged for the docker config.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      # Build the prod docker image with this commit's source. Compose
+      # builds locally via the Dockerfile, then `up -d` boots the image
+      # plus the redis sidecar. We let the image use its embedded tag
+      # (schnsrw/casual-sheets:0.0.4) without pushing.
+      - name: Build & start docker stack
+        run: docker compose up -d --build
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/health >/dev/null; then
+              echo "ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "stack never became healthy"; docker compose logs --tail=200; exit 1
+      - name: Run prod-bundle specs
+        # coedit-cell-edit.spec.ts is the editor-flow regression — types
+        # via F2 + keyboard (not the programmatic setValue path the rest
+        # of the suite uses), which is what caught the issue-29 bridge
+        # bug. coedit-regression.spec.ts spawns its OWN standalone
+        # server on port 3058 and would conflict with the docker stack —
+        # it stays on the dev-server e2e job.
+        run: pnpm exec playwright test -c playwright.docker.config.ts tests/e2e/coedit-cell-edit.spec.ts
+      - name: Capture container logs on failure
+        if: failure()
+        run: docker compose logs --tail=500
+      - name: Tear down
+        if: always()
+        run: docker compose down
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-prod
+          path: playwright-report/
+          retention-days: 7
