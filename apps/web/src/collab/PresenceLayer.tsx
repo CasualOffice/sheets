@@ -200,6 +200,25 @@ export function PresenceLayer() {
         /* freeze config unreadable — treat as no freeze */
       }
 
+      // Zoom — `getCellRect` returns LOGICAL (unzoomed) content coords
+      // because the underlying skeleton stores logical row heights and
+      // column widths. Univer applies the zoom as a scene transform
+      // when drawing the canvas, so the on-screen pixel position of
+      // cell (r, c) is `tl.left * zoom + dx + headerGutter`. Read
+      // zoomRatio from the worksheet's internal model — there's no
+      // facade getter as of Univer 0.22.x. Defaults to 1 (no zoom).
+      let zoom = 1;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ws = activeSheet as any;
+        const z =
+          (ws?._worksheet?.getZoomRatio?.() as number | undefined) ??
+          (ws?.getZoomRatio?.() as number | undefined);
+        if (typeof z === 'number' && z > 0) zoom = z;
+      } catch {
+        /* zoom unreadable — leave at 1 */
+      }
+
       const next: Rect[] = [];
       for (const peer of peers) {
         // Mismatched unit ids are normal — every browser gets a random
@@ -251,10 +270,16 @@ export function PresenceLayer() {
           const inFrozenCol = sc < freezeCol;
           const ySub = inFrozenRow ? 0 : sy;
           const xSub = inFrozenCol ? 0 : sx;
-          const left = Math.min(tl.left, br2.left) - xSub + dx + gutter.rowHeaderWidth;
-          const top = Math.min(tl.top, br2.top) - ySub + dy + gutter.columnHeaderHeight;
-          const right = Math.max(tl.right, br2.right) - xSub + dx + gutter.rowHeaderWidth;
-          const bottom = Math.max(tl.bottom, br2.bottom) - ySub + dy + gutter.columnHeaderHeight;
+          // Logical (content-space) → screen-pixel transform:
+          //   screen = (content - scroll) * zoom + canvasOffset + headerGutter
+          // The gutter and canvasOffset are already in screen pixels
+          // (DOM bounding-rect numbers), so they're added AFTER the
+          // zoom multiply. Without the zoom factor, peer cursors
+          // drift proportional to the zoom delta from 100%.
+          const left = (Math.min(tl.left, br2.left) - xSub) * zoom + dx + gutter.rowHeaderWidth;
+          const top = (Math.min(tl.top, br2.top) - ySub) * zoom + dy + gutter.columnHeaderHeight;
+          const right = (Math.max(tl.right, br2.right) - xSub) * zoom + dx + gutter.rowHeaderWidth;
+          const bottom = (Math.max(tl.bottom, br2.bottom) - ySub) * zoom + dy + gutter.columnHeaderHeight;
           // Clip to the canvas area so cursors don't paint over headers
           // or float into the column-label gutter.
           if (right < dx || bottom < dy) continue;

@@ -129,6 +129,23 @@ export function ChartLayer() {
       // charts sit ~40 px above and left of their cell anchor.
       const gutter = getHeaderGutter(api);
 
+      // Zoom — getCellRect returns logical content coords; Univer
+      // applies zoom as a scene transform when drawing the canvas.
+      // Multiply (content - scroll) by zoom so the overlay tracks
+      // the canvas at any zoom level. See PresenceLayer for the
+      // same pattern + rationale.
+      let zoom = 1;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ws = activeSheet as any;
+        const z =
+          (ws?._worksheet?.getZoomRatio?.() as number | undefined) ??
+          (ws?.getZoomRatio?.() as number | undefined);
+        if (typeof z === 'number' && z > 0) zoom = z;
+      } catch {
+        /* zoom unreadable — leave at 1 */
+      }
+
       const out: RenderedChart[] = [];
       for (const c of charts) {
         if (c.sheetId !== activeSheetId) continue;
@@ -136,10 +153,10 @@ export function ChartLayer() {
           const tl = activeSheet.getRange(c.pos.startRow, c.pos.startColumn).getCellRect();
           const br = activeSheet.getRange(c.pos.endRow, c.pos.endColumn).getCellRect();
           if (!tl || !br) continue;
-          const left = Math.min(tl.left, br.left) - sx + dx + gutter.rowHeaderWidth;
-          const top = Math.min(tl.top, br.top) - sy + dy + gutter.columnHeaderHeight;
-          const right = Math.max(tl.right, br.right) - sx + dx + gutter.rowHeaderWidth;
-          const bottom = Math.max(tl.bottom, br.bottom) - sy + dy + gutter.columnHeaderHeight;
+          const left = (Math.min(tl.left, br.left) - sx) * zoom + dx + gutter.rowHeaderWidth;
+          const top = (Math.min(tl.top, br.top) - sy) * zoom + dy + gutter.columnHeaderHeight;
+          const right = (Math.max(tl.right, br.right) - sx) * zoom + dx + gutter.rowHeaderWidth;
+          const bottom = (Math.max(tl.bottom, br.bottom) - sy) * zoom + dy + gutter.columnHeaderHeight;
           // Clip — charts mostly off-canvas don't render (saves
           // ECharts a redraw); partially off is fine because the
           // overlay overflow:hidden on the layer below clips it.
