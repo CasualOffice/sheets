@@ -206,15 +206,38 @@ export async function openFindReplace(api: FUniver) {
 }
 
 /**
- * Apply borders to the active selection. Color defaults to the standard
- * neutral grid color so borders blend with Excel-style sheets; pass an
- * explicit hex from the toolbar's color picker to override.
+ * Apply borders to the active selection. Default matches Excel's
+ * default thin-border colour (black) so applied borders are clearly
+ * distinguishable from Univer's `#dee0e3` gridlines — previously
+ * `#666666`, which on a white grid at 100% zoom was indistinguishable
+ * from gridlines after subpixel antialiasing.
  */
 export type BorderChoice = 'all' | 'outside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
 
-export const DEFAULT_BORDER_COLOR = '#666666';
+/**
+ * Three line weights matching Excel's default border dropdown:
+ * thin / medium / thick. We don't expose Univer's dashed/dotted/double
+ * variants here — those live in the Format Cells dialog where the
+ * user has more room to pick. The weight is sticky for the session,
+ * same as the colour.
+ */
+export type BorderWeight = 'thin' | 'medium' | 'thick';
 
-export function setBorders(api: FUniver, choice: BorderChoice, color: string = DEFAULT_BORDER_COLOR) {
+export const DEFAULT_BORDER_COLOR = '#000000';
+export const DEFAULT_BORDER_WEIGHT: BorderWeight = 'thin';
+
+const WEIGHT_TO_STYLE: Record<BorderWeight, BorderStyleTypes> = {
+  thin: BorderStyleTypes.THIN,
+  medium: BorderStyleTypes.MEDIUM,
+  thick: BorderStyleTypes.THICK,
+};
+
+export function setBorders(
+  api: FUniver,
+  choice: BorderChoice,
+  color: string = DEFAULT_BORDER_COLOR,
+  weight: BorderWeight = DEFAULT_BORDER_WEIGHT,
+) {
   const range = activeRange(api);
   if (!range) return;
   const type =
@@ -231,7 +254,9 @@ export function setBorders(api: FUniver, choice: BorderChoice, color: string = D
               : choice === 'right'
                 ? BorderType.RIGHT
                 : BorderType.NONE;
-  const style = choice === 'none' ? BorderStyleTypes.NONE : BorderStyleTypes.THIN;
+  // "No border" ignores both weight and colour — the cell loses every
+  // side. Otherwise map the picked weight to a Univer enum.
+  const style = choice === 'none' ? BorderStyleTypes.NONE : WEIGHT_TO_STYLE[weight];
   range.setBorder(type, style, color);
 }
 

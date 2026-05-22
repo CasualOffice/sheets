@@ -279,8 +279,10 @@ export function Toolbar() {
                 { id: 'right', label: 'Right border', icon: 'border_right' },
                 { id: 'none', label: 'No border', icon: 'border_clear' },
               ]}
-              onDefault={(color) => api && setBorders(api, 'all', color)}
-              onChoose={(choice, color) => api && setBorders(api, choice as BorderChoice, color)}
+              onDefault={(color, weight) => api && setBorders(api, 'all', color, weight)}
+              onChoose={(choice, color, weight) =>
+                api && setBorders(api, choice as BorderChoice, color, weight)
+              }
             />
           </>}
         />

@@ -1,14 +1,28 @@
 import type { FUniver } from '@univerjs/core/facade';
 
-/** Sheet-tab imperative actions. */
+/**
+ * Sheet-tab imperative actions.
+ *
+ * Every mutation that needs to propagate to co-edit peers MUST dispatch
+ * through the command service (`api.executeCommand`), not via the
+ * facade's direct methods (`sheet.setName`, `target.hideSheet`, …).
+ * The collab bridge captures mutations via
+ * `ICommandService.onMutationExecutedForCollab`; facade methods that
+ * bypass the bus don't fire that hook, so renames/hides/activates
+ * would silently stay local-only. See docs/COLLAB-FIXES.md issues
+ * 21 + 22.
+ */
 
 export function switchToSheet(api: FUniver, sheetId: string) {
   const wb = api.getActiveWorkbook();
   if (!wb) return;
-  const target = wb.getSheets().find((s) => s.getSheetId() === sheetId);
-  if (!target) return;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (wb as any).setActiveSheet(target);
+  // Goes through the command bus → SetWorksheetActiveOperation mutation
+  // is captured by the bridge. The facade's `setActiveSheet` does NOT
+  // emit through the command bus and would skip remote-sync.
+  void api.executeCommand('sheet.command.set-worksheet-activate', {
+    unitId: wb.getId(),
+    subUnitId: sheetId,
+  });
 }
 
 export function renameSheet(api: FUniver, sheetId: string, name: string): boolean {
@@ -22,7 +36,11 @@ export function renameSheet(api: FUniver, sheetId: string, name: string): boolea
     .getSheets()
     .some((s) => s.getSheetId() !== sheetId && s.getSheetName() === name);
   if (exists) return false;
-  sheet.setName(name.slice(0, 31));
+  void api.executeCommand('sheet.command.set-worksheet-name', {
+    unitId: wb.getId(),
+    subUnitId: sheetId,
+    name: name.slice(0, 31),
+  });
   return true;
 }
 
@@ -30,10 +48,13 @@ export function deleteSheetById(api: FUniver, sheetId: string): boolean {
   const wb = api.getActiveWorkbook();
   if (!wb) return false;
   if (wb.getSheets().length <= 1) return false; // can't delete the last sheet
+  // `wb.deleteSheet` dispatches `RemoveSheetCommand` internally — the
+  // bridge picks up the resulting `sheet.mutation.remove-sheet`.
   return wb.deleteSheet(sheetId);
 }
 
 export function addSheet(api: FUniver) {
+  // `insertSheet` dispatches `InsertSheetCommand` → mutation captured.
   api.getActiveWorkbook()?.insertSheet();
 }
 
@@ -50,8 +71,11 @@ export function hideSheet(api: FUniver, sheetId: string): boolean {
   if (visibleCount <= 1) return false;
   const target = sheets.find((s) => s.getSheetId() === sheetId);
   if (!target) return false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (target as any).hideSheet?.();
+  void api.executeCommand('sheet.command.set-worksheet-hidden', {
+    unitId: wb.getId(),
+    subUnitId: sheetId,
+    hidden: 1, // BooleanNumber.TRUE
+  });
   return true;
 }
 
@@ -61,8 +85,10 @@ export function showSheet(api: FUniver, sheetId: string): boolean {
   if (!wb) return false;
   const target = wb.getSheets().find((s) => s.getSheetId() === sheetId);
   if (!target) return false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (target as any).showSheet?.();
+  void api.executeCommand('sheet.command.set-worksheet-show', {
+    unitId: wb.getId(),
+    subUnitId: sheetId,
+  });
   return true;
 }
 

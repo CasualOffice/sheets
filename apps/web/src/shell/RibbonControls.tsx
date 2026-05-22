@@ -292,12 +292,20 @@ export function ToolbarDropdown({
  * color-picker row at the bottom so the user can change the border color
  * before applying. The selected color persists for the lifetime of the
  * component (one workbook session) — matches Excel's "sticks until you
- * change it" behavior.
+ * change it" behavior. Same is true for the line-weight picker.
  */
 const BORDER_COLOR_PRESETS = [
   '#000000', '#666666', '#9aa0a6', '#d2d6dc',
   '#d93025', '#e8710a', '#f9ab00', '#188038',
   '#1a73e8', '#7627bb', '#a142f4', '#e91e63',
+];
+
+export type BorderWeightChoice = 'thin' | 'medium' | 'thick';
+
+const BORDER_WEIGHT_OPTIONS: Array<{ id: BorderWeightChoice; label: string; px: number }> = [
+  { id: 'thin', label: 'Thin', px: 1 },
+  { id: 'medium', label: 'Medium', px: 2 },
+  { id: 'thick', label: 'Thick', px: 3 },
 ];
 
 export function BordersControl({
@@ -306,6 +314,7 @@ export function BordersControl({
   items,
   disabled,
   defaultColor,
+  defaultWeight = 'thin',
   onChoose,
   onDefault,
 }: {
@@ -315,14 +324,19 @@ export function BordersControl({
   disabled?: boolean;
   /** Initial color before the user picks one. */
   defaultColor: string;
-  /** Fires with both the chosen border style and the currently-selected color. */
-  onChoose: (itemId: string, color: string) => void;
-  /** Fires when the icon (not the caret) is clicked. Receives the current color. */
-  onDefault?: (color: string) => void;
+  /** Initial line weight before the user picks one. */
+  defaultWeight?: BorderWeightChoice;
+  /** Fires with the chosen border style, current color, AND current weight. */
+  onChoose: (itemId: string, color: string, weight: BorderWeightChoice) => void;
+  /** Fires when the icon (not the caret) is clicked. Receives the current
+   *  color and weight so the icon-click applies "All borders" with the
+   *  user's session preferences. */
+  onDefault?: (color: string, weight: BorderWeightChoice) => void;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState(defaultColor);
+  const [weight, setWeight] = useState<BorderWeightChoice>(defaultWeight);
 
   return (
     <span
@@ -330,7 +344,7 @@ export function BordersControl({
       className="btn-split"
       data-testid="ribbon-dropdown-borders"
     >
-      <Tooltip label={`${label} (${color})`}>
+      <Tooltip label={`${label} (${weight}, ${color})`}>
         <button
           type="button"
           className="btn btn--icon btn-split__icon btn-color__icon"
@@ -338,7 +352,7 @@ export function BordersControl({
           aria-label={label}
           disabled={disabled}
           onClick={() => {
-            onDefault?.(color);
+            onDefault?.(color, weight);
             if (open) setOpen(false);
           }}
         >
@@ -376,7 +390,7 @@ export function BordersControl({
               role="menuitem"
               data-testid={`ribbon-dropdown-borders-item-${item.id}`}
               onClick={() => {
-                onChoose(item.id, color);
+                onChoose(item.id, color, weight);
                 setOpen(false);
               }}
             >
@@ -384,6 +398,33 @@ export function BordersControl({
               <span>{item.label}</span>
             </button>
           ))}
+          <div className="menu__divider" />
+          {/* Line-weight picker — thin/medium/thick. Renders a row of
+              swatches at the picked thickness so the user can see what
+              they're getting. Sticky for the session (same as colour). */}
+          <div className="menu__color-row" data-testid="ribbon-dropdown-borders-weight-row">
+            <div className="menu__color-label">Line weight</div>
+            <div className="menu__color-swatches" role="group" aria-label="Border line weight">
+              {BORDER_WEIGHT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`menu__weight-swatch${weight === opt.id ? ' menu__weight-swatch--active' : ''}`}
+                  data-testid={`ribbon-dropdown-borders-weight-${opt.id}`}
+                  aria-label={`Set border weight to ${opt.label}`}
+                  aria-pressed={weight === opt.id}
+                  title={opt.label}
+                  onClick={() => setWeight(opt.id)}
+                >
+                  <span
+                    className="menu__weight-swatch-line"
+                    style={{ background: color, height: `${opt.px}px` }}
+                    aria-hidden="true"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="menu__divider" />
           <div className="menu__color-row" data-testid="ribbon-dropdown-borders-color-row">
             <div className="menu__color-label">Line color</div>
