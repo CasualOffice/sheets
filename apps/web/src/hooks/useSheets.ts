@@ -47,6 +47,27 @@ export function useSheets(): SheetsState {
     setState(compute());
 
     const refresh = () => setState(compute());
+
+    // Facade events (SheetCreated, SheetDeleted, SheetNameChanged,
+    // SheetMoved, ActiveSheetChanged) only fire when the corresponding
+    // COMMAND runs. The collab bridge replays peer changes by invoking
+    // the MUTATION directly via `executeCommand(mutation.id, ...,
+    // { fromCollab: true })`, which means peers never see those facade
+    // events for remote changes — Univer's internal state updates but
+    // the tab strip stayed stale until something else forced a refresh.
+    //
+    // Belt-and-braces: also subscribe to CommandExecuted for every
+    // mutation id that affects the sheet list. Catches both the
+    // command path (own edits) AND the bridge's mutation-only replay
+    // path (peer edits).
+    const SHEET_LIST_MUTATIONS = new Set([
+      'sheet.mutation.insert-sheet',
+      'sheet.mutation.remove-sheet',
+      'sheet.mutation.set-worksheet-name',
+      'sheet.mutation.set-worksheet-order',
+      'sheet.mutation.set-worksheet-hidden',
+    ]);
+
     const disposables = [
       api.addEvent(api.Event.SheetCreated, refresh),
       api.addEvent(api.Event.SheetDeleted, refresh),
@@ -61,14 +82,11 @@ export function useSheets(): SheetsState {
       // unitAdded$ BEFORE setCurrentUnitForType — calling compute()
       // synchronously here would still see the old active workbook.
       api.onUniverSheetCreated(() => queueMicrotask(refresh)),
-      // Visibility (hide/show) doesn't have a dedicated facade event —
-      // the underlying mutation `sheet.mutation.set-worksheet-hidden`
-      // fires through CommandExecuted. Subscribe so the tab strip
-      // immediately removes/restores tabs when a sheet is hidden or
-      // unhidden from the context menu.
+      // Mutation-level fallback for cross-peer + visibility changes.
+      // See the SHEET_LIST_MUTATIONS comment above.
       api.addEvent(api.Event.CommandExecuted, (e) => {
         const id = (e as { id?: string }).id;
-        if (id === 'sheet.mutation.set-worksheet-hidden') refresh();
+        if (id && SHEET_LIST_MUTATIONS.has(id)) refresh();
       }),
     ];
     return () => {
