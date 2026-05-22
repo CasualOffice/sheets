@@ -179,6 +179,27 @@ export function PresenceLayer() {
       // recompute timing — recompute fires every frame now.
       scrollRef.current = { x: sx, y: sy };
 
+      // Frozen-pane split — cells with row < freezeRow stay fixed at the
+      // top (don't apply Y-scroll); cells with col < freezeCol stay
+      // fixed at the left (don't apply X-scroll). Without this, peer
+      // cursors in frozen rows/cols drift with the rest of the grid.
+      // `startRow / startColumn` is the index of the first NON-frozen
+      // row/col. xSplit / ySplit confirm intent (0 means no freeze).
+      let freezeRow = 0;
+      let freezeCol = 0;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const f = (activeSheet as any)?.getFreeze?.() as
+          | { startRow?: number; startColumn?: number; xSplit?: number; ySplit?: number }
+          | undefined;
+        if (f) {
+          if ((f.ySplit ?? 0) > 0 && (f.startRow ?? -1) > 0) freezeRow = f.startRow!;
+          if ((f.xSplit ?? 0) > 0 && (f.startColumn ?? -1) > 0) freezeCol = f.startColumn!;
+        }
+      } catch {
+        /* freeze config unreadable — treat as no freeze */
+      }
+
       const next: Rect[] = [];
       for (const peer of peers) {
         // Mismatched unit ids are normal — every browser gets a random
@@ -217,10 +238,23 @@ export function PresenceLayer() {
           // add the header gutter to shift past the row/column labels,
           // then add the canvas-vs-host offset to translate into the
           // portal's coord system.
-          const left = Math.min(tl.left, br2.left) - sx + dx + gutter.rowHeaderWidth;
-          const top = Math.min(tl.top, br2.top) - sy + dy + gutter.columnHeaderHeight;
-          const right = Math.max(tl.right, br2.right) - sx + dx + gutter.rowHeaderWidth;
-          const bottom = Math.max(tl.bottom, br2.bottom) - sy + dy + gutter.columnHeaderHeight;
+          //
+          // Frozen panes: a cell with row < freezeRow stays pinned at
+          // the top (the scrolling viewport reveals different
+          // non-frozen rows beneath but the frozen row stays put), so
+          // we DON'T subtract sy for it. Same logic for freezeCol on
+          // the X axis. We test the START row/column so the rect of a
+          // multi-cell selection straddling the freeze line lines up
+          // with the dominant (start) side — partial-frozen selections
+          // are a rare edge case in collab UX.
+          const inFrozenRow = sr < freezeRow;
+          const inFrozenCol = sc < freezeCol;
+          const ySub = inFrozenRow ? 0 : sy;
+          const xSub = inFrozenCol ? 0 : sx;
+          const left = Math.min(tl.left, br2.left) - xSub + dx + gutter.rowHeaderWidth;
+          const top = Math.min(tl.top, br2.top) - ySub + dy + gutter.columnHeaderHeight;
+          const right = Math.max(tl.right, br2.right) - xSub + dx + gutter.rowHeaderWidth;
+          const bottom = Math.max(tl.bottom, br2.bottom) - ySub + dy + gutter.columnHeaderHeight;
           // Clip to the canvas area so cursors don't paint over headers
           // or float into the column-label gutter.
           if (right < dx || bottom < dy) continue;
