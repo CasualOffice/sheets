@@ -29,6 +29,8 @@ import { ChartsProvider } from './charts/charts-context';
 import { ChartLayer } from './charts/ChartLayer';
 import { ChartsPanel } from './shell/ChartsPanel';
 import { HistoryPanel } from './shell/HistoryPanel';
+import { PanelRail } from './shell/PanelRail';
+import { PanelMutex } from './shell/PanelMutex';
 import { PivotsProvider } from './pivots/pivots-context';
 import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
@@ -50,20 +52,6 @@ export function App() {
   }));
 
   const [formulaBarVisible, setFormulaBarVisible] = useState(true);
-  // Menu bar (File / Edit / View / …). Visible by default so the test
-  // suite (and users who like the classic / Collabora-compact layout)
-  // keep seeing it. Toggleable from View tab → Hide Menu Bar for the
-  // Excel-faithful tabbed-ribbon-only look. The component stays mounted
-  // even when hidden so its keydown handlers (Ctrl+S, Ctrl+P, …) keep
-  // firing. Preference persists across reloads via localStorage.
-  const [menuBarVisible, setMenuBarVisible] = useState(() => {
-    try {
-      const v = window.localStorage.getItem('casual:menubar');
-      return v === null ? true : v === '1';
-    } catch {
-      return true;
-    }
-  });
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
   const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
   const [chartsPanelVisible, setChartsPanelVisible] = useState(false);
@@ -185,20 +173,15 @@ export function App() {
           }
           return next;
         }),
-      menuBarVisible,
-      toggleMenuBar: () =>
-        setMenuBarVisible((v) => {
-          const next = !v;
-          try {
-            window.localStorage.setItem('casual:menubar', next ? '1' : '0');
-          } catch {
-            /* private mode / quota — preference just won't persist */
-          }
-          return next;
-        }),
+      closeAllReactPanels: () => {
+        setTablesPanelVisible(false);
+        setOutlinePanelVisible(false);
+        setChartsPanelVisible(false);
+        setHistoryPanelVisible(false);
+      },
       openShareRoom: () => setShareRoomOpen(true),
     }),
-    [formulaBarVisible, menuBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible, historyPanelVisible],
+    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible, historyPanelVisible],
   );
 
   return (
@@ -215,7 +198,7 @@ export function App() {
             <AutosaveDriver />
             <CollabDriver>
               <div
-                className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}${menuBarVisible ? '' : ' app--no-menubar'}`}
+                className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
                 data-testid="app-shell"
               >
                 <TitleBar />
@@ -231,8 +214,10 @@ export function App() {
                   {outlinePanelVisible && <OutlinePanel />}
                   {chartsPanelVisible && <ChartsPanel />}
                   {historyPanelVisible && <HistoryPanel />}
+                  <PanelRail />
                 </div>
                 <SheetTabs />
+                <PanelMutex />
                 {shareRoomOpen && (
                   <CreateRoomDialog onClose={() => setShareRoomOpen(false)} />
                 )}

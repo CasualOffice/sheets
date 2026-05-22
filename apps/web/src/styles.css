@@ -90,12 +90,10 @@
   /* Layout */
   --titlebar-h: 40px;
   --menubar-h: 28px;
-  /* Tabbed ribbon: tab strip on top swaps the group set below. The tabs
-     row is intentionally compact (Excel-faithful) at 26 px; the body
-     keeps the existing 2-row layout at 66 px. */
-  --ribbon-tabs-h: 26px;
-  --toolbar-body-h: 66px;
-  --toolbar-h: calc(var(--ribbon-tabs-h) + var(--toolbar-body-h));
+  /* Single-row 2-row-group toolbar — 28 px button row × 2 + 2 px gap +
+     8 px padding = 66 px. Group labels are hidden in the toolbar so we
+     don't need room for them. */
+  --toolbar-h: 66px;
   --formula-bar-h: 26px;
   --sheet-tabs-h: 28px;
   --statusbar-h: 24px;
@@ -232,38 +230,6 @@ button {
     'sheettabs';
 }
 
-/* Menu bar hidden — gives the pure tabbed-ribbon (Excel) layout. The
-   menu-bar component is still mounted (its keydown handlers must keep
-   firing); just removed from layout via grid + display:none. */
-.app--no-menubar {
-  grid-template-rows:
-    var(--titlebar-h)
-    var(--toolbar-h)
-    var(--formula-bar-h)
-    minmax(0, 1fr)
-    var(--sheet-tabs-h);
-  grid-template-areas:
-    'titlebar'
-    'toolbar'
-    'formulabar'
-    'gridrow'
-    'sheettabs';
-}
-.app--no-menubar.app--no-formula-bar {
-  grid-template-rows:
-    var(--titlebar-h)
-    var(--toolbar-h)
-    minmax(0, 1fr)
-    var(--sheet-tabs-h);
-  grid-template-areas:
-    'titlebar'
-    'toolbar'
-    'gridrow'
-    'sheettabs';
-}
-.app--no-menubar > .menubar {
-  display: none;
-}
 
 .app > .title-bar  { grid-area: titlebar; }
 .app > .menubar    { grid-area: menubar; }
@@ -273,21 +239,13 @@ button {
 .app > .sheet-tabs { grid-area: sheettabs; }
 
 /* ── Menu bar (Google-Sheets style top dropdowns) ───────────────────────── */
-/* The menu bar sits between the title bar and the ribbon tab strip.
-   With the tabbed ribbon present, this row would otherwise compete
-   visually with the tabs for "primary nav" perception. The fix:
-   visually tie the menu bar to the title bar above it (same bg + same
-   border treatment) so the eye reads two layers — "app chrome" (title +
-   menus) and "ribbon" (tabs + body) — instead of three competing nav
-   strips. Items get a quieter color treatment and a subtle text-shadow
-   so they read as secondary, with the ribbon tabs dominant. */
 .menubar {
   display: flex;
   align-items: stretch;
   height: var(--menubar-h);
   padding: 0 var(--space-3);
-  background: var(--color-surface-alt);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-divider);
   font-size: var(--text-sm);
   z-index: 3;
 }
@@ -296,26 +254,25 @@ button {
   display: inline-flex;
   align-items: center;
   height: 100%;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-4);
   font-family: inherit;
-  font-size: 12px;
-  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  color: var(--color-text);
   background: transparent;
   border: 0;
   cursor: pointer;
   border-radius: var(--radius-sm);
   margin: var(--space-1) 0;
-  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+  transition: background var(--motion-fast) var(--ease-out);
 }
 
-.menubar__item:hover {
+.menubar__item:hover,
+.menubar__item--open {
   background: var(--color-hover);
-  color: var(--color-text);
 }
 
 .menubar__item--open {
   background: var(--color-pressed);
-  color: var(--color-text);
 }
 
 /* ── Toolbar — zone 1 (cool grey). The bg shift vs white menubar above
@@ -324,7 +281,6 @@ button {
 .toolbar {
   position: relative; /* anchors the overflow chevron buttons */
   display: flex;
-  flex-direction: column;
   align-items: stretch;
   height: var(--toolbar-h);
   background: var(--color-surface-alt);
@@ -336,71 +292,6 @@ button {
      dense toolbar exceeds the viewport and breaks the scroll-clip
      contract we rely on for the overflow chevrons. `min-width: 0`
      lets the grid cell shrink so the inner scroller can engage. */
-  min-width: 0;
-}
-
-/* ── Ribbon tabs ─────────────────────────────────────────────────────
-   Excel-style tab strip across the top of the toolbar. Each tab swaps
-   the group set rendered in the body below. The active tab gets a
-   coloured underline + bold weight; inactive tabs are plain text that
-   subtly highlight on hover. Wraps in `position: relative` so the
-   strip layout doesn't collide with the absolute overflow chevrons
-   on the body row. */
-.ribbon-tabs {
-  display: flex;
-  align-items: stretch;
-  height: var(--ribbon-tabs-h);
-  padding: 0 var(--space-5);
-  gap: 4px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: var(--color-surface-alt);
-  flex-shrink: 0;
-}
-.ribbon-tabs__tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  border: 0;
-  background: transparent;
-  font-size: 12px;
-  font-weight: var(--weight-medium, 500);
-  color: var(--color-text-secondary);
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  border-radius: 0;
-}
-.ribbon-tabs__tab:hover {
-  color: var(--color-text);
-}
-.ribbon-tabs__tab--active {
-  color: var(--color-accent);
-  font-weight: var(--weight-semibold, 600);
-}
-.ribbon-tabs__tab--active::after {
-  content: '';
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--color-accent);
-  border-radius: 2px 2px 0 0;
-}
-.ribbon-tabs__tab:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-}
-
-/* ── Toolbar body — the group row that lives under the tabs.
-   Inherits the existing single-row scroll behaviour; only its height
-   changed (to make room for the tab strip stacked above it).        */
-.toolbar__body {
-  position: relative;
-  flex: 1 1 auto;
-  height: var(--toolbar-body-h);
-  display: flex;
-  align-items: stretch;
   min-width: 0;
 }
 
@@ -1300,6 +1191,64 @@ button {
   display: flex;
   flex: 1;
   min-height: 0;
+}
+
+/* ── Right-edge panel rail ──────────────────────────────────────────
+   Vertical column of icon buttons that toggle React side panels.
+   Always visible — collapsed panels still leave the rail there, so
+   users can re-open without hunting through menus. The active panel
+   body opens to the LEFT of the rail (preceding it in flex order). */
+.panel-rail {
+  flex: 0 0 36px;
+  width: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 2px;
+  background: var(--color-surface-alt);
+  border-top: 1px solid var(--color-divider);
+  border-left: 1px solid var(--color-divider);
+}
+.panel-rail__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+  margin: 0 auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+.panel-rail__btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.panel-rail__btn--active {
+  background: var(--color-accent-soft, var(--color-pressed));
+  color: var(--color-accent);
+}
+.panel-rail__btn--active::before {
+  /* Accent rail marker on the LEFT edge of the active button —
+     matches VSCode / Office activity-bar conventions. */
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--color-accent);
+  border-radius: 0 2px 2px 0;
+}
+.panel-rail__btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 /* Grid host — zone 0 (white). The grey sheet-tabs strip below provides

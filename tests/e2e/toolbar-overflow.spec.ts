@@ -10,8 +10,10 @@ import { waitForUniver } from './_helpers';
 
 test.describe('Toolbar overflow chevrons', () => {
   test.beforeEach(async ({ page }) => {
-    // Narrow viewport so the toolbar is guaranteed to overflow.
-    await page.setViewportSize({ width: 900, height: 800 });
+    // Narrow viewport so the toolbar is guaranteed to overflow. 600 px
+    // is comfortably below any plausible groups-row total width across
+    // future ribbon adjustments.
+    await page.setViewportSize({ width: 600, height: 800 });
     await page.goto('/');
     await waitForUniver(page);
   });

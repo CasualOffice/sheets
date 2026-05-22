@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { IWorkbookData } from '@univerjs/core';
 import { useWorkbook } from '../use-workbook';
 import { useCollab } from '../collab/collab-context';
 import { clearAutosave, readAutosave, type AutosaveRecord } from './store';
@@ -12,10 +13,49 @@ import { clearAutosave, readAutosave, type AutosaveRecord } from './store';
  *
  * Hidden while inside a /r/<id> co-edit room (the room is authoritative).
  *
- * The banner self-dismisses after either action and remembers the
- * decision so it doesn't re-appear if the same tab reloads without
- * an intervening mutation.
+ * Two gates keep the banner from showing for noise:
+ *   - **Content gate**: the snapshot has to contain at least one cell
+ *     with a value or formula. A workbook the user opened-then-closed
+ *     without typing anything used to surface this banner; now it
+ *     silently auto-discards.
+ *   - **Age gate**: 24 h. Older snapshots are auto-discarded; if a user
+ *     hasn't returned to a tab in a day the saved state is almost
+ *     certainly stale.
+ *
+ * The banner self-dismisses after either action.
  */
+
+const STALE_AFTER_MS = 24 * 60 * 60 * 1000; // 24 h
+
+function countMeaningfulCells(data: IWorkbookData | null | undefined): number {
+  if (!data?.sheets) return 0;
+  let n = 0;
+  for (const sheet of Object.values(data.sheets)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cellData = (sheet as any)?.cellData;
+    if (!cellData || typeof cellData !== 'object') continue;
+    for (const row of Object.values(cellData)) {
+      if (!row || typeof row !== 'object') continue;
+      for (const cell of Object.values(row as Record<string, unknown>)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const c = cell as any;
+        if (!c) continue;
+        // Treat as a real cell only if it carries a value, formula, or
+        // rich-text body — pure-style cells (a leftover border / font)
+        // don't count as "the user typed something to restore".
+        if (
+          (c.v !== undefined && c.v !== null && c.v !== '') ||
+          (typeof c.f === 'string' && c.f.length > 0) ||
+          c.p
+        ) {
+          n += 1;
+          if (n >= 3) return n; // early-out — we only need a low threshold
+        }
+      }
+    }
+  }
+  return n;
+}
 
 export function AutosaveRestoreBanner() {
   const workbook = useWorkbook();
@@ -28,7 +68,26 @@ export function AutosaveRestoreBanner() {
     let cancelled = false;
     void (async () => {
       const r = await readAutosave();
-      if (!cancelled) setRec(r);
+      if (cancelled) return;
+      if (!r) {
+        setRec(null);
+        return;
+      }
+      // Age gate — drop stale snapshots silently.
+      if (Date.now() - r.savedAt > STALE_AFTER_MS) {
+        await clearAutosave();
+        setRec(null);
+        return;
+      }
+      // Content gate — drop "user opened a blank workbook and clicked
+      // around" snapshots silently. The banner is only useful when
+      // there's actual data to recover.
+      if (countMeaningfulCells(r.data) === 0) {
+        await clearAutosave();
+        setRec(null);
+        return;
+      }
+      setRec(r);
     })();
     return () => {
       cancelled = true;
