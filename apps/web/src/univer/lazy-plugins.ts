@@ -101,6 +101,12 @@ const LOADERS: Record<LazyPluginGroup, Loader> = {
       import('@univerjs/drawing-ui'),
       import('@univerjs/sheets-drawing'),
       import('@univerjs/sheets-drawing-ui'),
+      // Side-effect imports: install FWorksheet.insertImage / getImages /
+      // updateImages on the facade prototype. Without these, code that
+      // reaches in via the FUniver facade (e2e specs, future shell glue)
+      // sees an undefined method even though the plugin is registered.
+      import('@univerjs/sheets-drawing/facade'),
+      import('@univerjs/sheets-drawing-ui/facade'),
     ]);
     return [
       [d.UniverDrawingPlugin],

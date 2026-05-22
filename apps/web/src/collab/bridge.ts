@@ -165,6 +165,20 @@ const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   // can be large (embedded image blobs) — accept the bandwidth hit
   // until we move drawings to a side-channel resource model.
   'sheet.mutation.set-drawing-apply',
+  // Workbook / worksheet metadata. Each is rarely changed mid-session
+  // but cheap to propagate when it does happen. Without these,
+  // renaming the workbook or toggling gridlines silently stays
+  // local-only — confusing in a shared room.
+  // NOTE: `set-worksheet-right-to-left` is intentionally NOT here —
+  // neither the command nor the mutation is registered in
+  // @univerjs/sheets@0.22.1 (it's exported but never wired up by any
+  // plugin), so nothing in our app can emit it. Add it back if a
+  // future Univer bump registers it.
+  'sheet.mutation.set-workbook-name',
+  'sheet.mutation.set-worksheet-row-count',
+  'sheet.mutation.set-worksheet-column-count',
+  'sheet.mutation.toggle-gridlines',
+  'sheet.mutation.set-gridlines-color',
 ]);
 
 /** Mutation ids for which the bridge captures undo params before the

@@ -2,6 +2,7 @@ import { CustomRangeType, type IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import { ISheetClipboardService } from '@univerjs/sheets-ui';
 import { SheetTableService } from '@univerjs/sheets-table';
+import { ensurePluginByName, type LazyPluginGroup } from './lazy-plugins';
 
 type HyperLinkDump = {
   subUnitId: string;
@@ -30,6 +31,7 @@ type ParsedClipboardDump = {
 declare global {
   interface Window {
     __univerAPI?: FUniver;
+    __ensurePlugin__?: (group: LazyPluginGroup) => Promise<void>;
     __getTableStyleId__?: (tableId: string) => string | undefined;
     __getHyperLinks__?: () => HyperLinkDump[];
     __legacyPasteHtml__?: (html: string, text?: string) => Promise<boolean>;
@@ -52,9 +54,16 @@ declare global {
 export function installDevHelpers(api: FUniver): () => void {
   // Always expose the facade so prod-build regression tests can reach in.
   window.__univerAPI = api;
+  // Expose the lazy-plugin loader in BOTH dev and prod so e2e specs can
+  // deterministically wait for a feature plugin (drawings, CF, DV, etc.)
+  // to be registered before invoking its command. Without this, tests
+  // race `idleLoadAll`, which is fine 95% of the time but flakes the
+  // first run after a cold boot.
+  window.__ensurePlugin__ = ensurePluginByName;
   if (!import.meta.env.DEV) {
     return () => {
       delete window.__univerAPI;
+      delete window.__ensurePlugin__;
     };
   }
   window.__getTableStyleId__ = (tableId) => {
@@ -181,6 +190,7 @@ export function installDevHelpers(api: FUniver): () => void {
 
   return () => {
     delete window.__univerAPI;
+    delete window.__ensurePlugin__;
     delete window.__getTableStyleId__;
     delete window.__getHyperLinks__;
     delete window.__legacyPasteHtml__;

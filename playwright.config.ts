@@ -27,6 +27,8 @@ export default defineConfig({
     '**/coedit-synced-mutations.spec.ts',
     '**/coedit-conditional-formatting.spec.ts',
     '**/coedit-data-validation.spec.ts',
+    '**/coedit-workbook-metadata.spec.ts',
+    '**/coedit-drawings.spec.ts',
   ],
   use: {
     baseURL: 'http://127.0.0.1:5273',
