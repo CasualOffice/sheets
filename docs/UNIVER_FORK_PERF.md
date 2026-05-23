@@ -73,16 +73,32 @@ of O(N). Targeted at ~5-10% frame-time reduction on merge-heavy
 sheets. 12 unit tests in `span-mode.spec.ts` (2 new: brute-force
 equivalence across mixed range types, cache-shape contract).
 
-### 3. Selection-set hash for row/column header hit-test — SMALL payoff
-**Files**: `vendor/univer/packages/sheets-ui/src/services/selection/selection-render.service.ts:102, 121`
+### 3. Selection-set hash for row/column header hit-test — SMALL payoff  ✅ shipped
+**Files**: `vendor/univer/packages/sheets-ui/src/controllers/utils/selections-tools.ts`
+(the call sites in `selection-render.service.ts:102, 121` and
+`mobile-selection-render.service.ts:174, 188` are unchanged — they
+still call `isThisRowSelected` / `isThisColSelected`, which now hit
+the indexed path).
 
-`isThisRowSelected()` / `isThisColSelected()` walk every range in the
-current selection. With 50+ selections (Ctrl-click pattern) this is
-O(N) per header click.
+`matchedSelectionByRowColIndex` used `Array.prototype.find` to walk
+every range in the current selection. With 50+ ctrl-click selections
+each header click paid an O(N) scan.
 
-**Fix**: maintain a Set of selected row/column indices, kept in sync
-when selections change. O(1) lookup. **Payoff**: small unless 100+
-selections. **Risk**: low — UI layer only.
+**Shipped (fork commit `abef289ba`)**: WeakMap-keyed memo of
+`(selections-array → {rowIndex, colIndex})` Maps. First call expands
+ROW / COLUMN-type ranges into per-index entries (ALL / NORMAL are
+skipped to match the original filter); later calls are constant-time
+`Map.get`. First-wins ordering preserved via `if (!map.has(i))` so
+the returned object reference is identical to what `.find()`
+returned — locked in by a new ordering test, since the existing
+spec uses `.toBe()` identity assertions. WeakMap key means a
+selections array replaced by `SheetsSelectionsService` is GC'd
+along with its index entry — no manual invalidation.
+
+**Result**: header-click hit-test goes from O(N) walk to O(1)
+lookup (plus an O(K) one-time build on the first call against a
+given selections array). Payoff is small unless N ≥ 50; risk is
+trivial since output is reference-equal to the old path.
 
 ### 4. Decouple selection layer from spreadsheet redraw — SMALL payoff
 **Files**: `vendor/univer/packages/sheets-ui/src/services/selection/selection-render.service.ts:66-73`
