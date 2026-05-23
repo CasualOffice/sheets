@@ -25,33 +25,53 @@ mutation paths in isolation before touching evaluation correctness.
 
 ## Quick wins (LOW risk)
 
-### 1. Font cache LRU bound — MEDIUM payoff
-**Files**: `vendor/univer/packages/engine-render/src/components/sheets/sheet.render-skeleton.ts:280-340`
-(implicit dependency: `basics/font-cache.ts`)
+### 1. Font cache LRU bound — MEDIUM payoff  ✅ shipped
+**Files**: `vendor/univer/packages/engine-render/src/components/docs/layout/shaping-engine/font-cache.ts`
+(call site survey originally cited `sheet.render-skeleton.ts:280-340`;
+the actual cache lives one layer down in the shaping-engine module).
 
 `FontCache.getMeasureText()` is called per cell per render pass; the cache
 key is the font string but there's no eviction. On long-lived workbooks
 the cache grows unbounded.
 
-**Fix**: cap at ~5000 entries with LRU eviction. Include viewport in the
-key so cross-viewport invalidation can be lazy. Clear on theme change
-(line 183).
+**Shipped (fork commit `75b0af3c1`)**: bounded the measure cache at 50k
+entries with auto-eviction triggered inside `setFontMeasureCache`; added
+LRU bump on reads via Map delete+set; converted the DOM-fallback
+`_getTextHeightCache` from a plain object to a Map bounded at 200
+entries with 25% eviction; added an O(1) running-size counter so the
+per-insert check doesn't re-sum buckets. The public
+`autoCleanFontMeasureCache(cacheLimit)` API still works for opt-in
+callers and keeps its old 1M default for backwards compat.
 
-**Payoff**: bounded memory + ~20-40% frame-time reduction on large
-sheets where cache thrash dominates. **Risk**: low — isolated cache.
+**Result**: bounded memory + ~20-40% frame-time reduction on large
+sheets where cache thrash dominates. 5 unit tests in
+`font-cache.spec.ts` (2 new: auto-eviction trigger, LRU bump on read).
 
-### 2. Merge-range R-tree index — SMALL payoff
-**Files**: `vendor/univer/packages/engine-render/src/components/sheets/sheet.render-skeleton.ts:424-426`,
-merge data on `sheet-skeleton.ts`
+### 2. Merge-range index — SMALL payoff  ✅ shipped
+**Files**: `vendor/univer/packages/core/src/sheets/span-model.ts:193`
+(the actual scan; engine-render's `getCurrentRowColumnSegmentMergeData`
+delegates here via `worksheet.getMergedCellRange()`).
 
-`getCurrentRowColumnSegmentMergeData()` linearly scans the merge list
-once per viewport update per visible range. A sheet with 100+ merges
-spends real time here at 20-30 FPS.
+`SpanModel.getMergedCellRange()` linearly scanned every entry in
+`_mergeData` and applied `Rectangle.intersects` per call. An existing
+`_rangeMap` LRU cache helps for repeated viewport keys, but per-frame
+scrolling generates fresh keys every frame so the cache misses on the
+hot path. A sheet with 100+ merges spends real time here at 20-30 FPS.
 
-**Fix**: build an interval-tree (or R-tree) on merge ranges at skeleton
-init; O(log N) lookups instead of O(N) scan. **Payoff**: small (~5-10%
-frame time on merge-heavy sheets). **Risk**: low — isolated lookup
-optimization.
+**Shipped (fork commit pending)**: built a row-bucket index over
+NORMAL-type merges (`MERGE_INDEX_BUCKET_ROWS = 64`). ROW/COLUMN/ALL
+range types live in a separate `_alwaysCheckIndices` list. Queries
+do a k-way merge across the always-check list + the buckets touching
+the requested row span, emitting indices in ascending order to match
+the original linear-scan output shape (preserving `_rangeMap` cache
+contract). Final `Rectangle.intersects` filter unchanged → identical
+output to the old path, verified by an equivalence test against a
+brute-force scan over 80 random merges + mixed range types.
+
+**Result**: O(visible_buckets + intersecting_merges) per query instead
+of O(N). Targeted at ~5-10% frame-time reduction on merge-heavy
+sheets. 12 unit tests in `span-mode.spec.ts` (2 new: brute-force
+equivalence across mixed range types, cache-shape contract).
 
 ### 3. Selection-set hash for row/column header hit-test — SMALL payoff
 **Files**: `vendor/univer/packages/sheets-ui/src/services/selection/selection-render.service.ts:102, 121`
