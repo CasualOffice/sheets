@@ -99,7 +99,11 @@ export function initials(name: string): string {
  *   s: subUnitId (sheet id) — peer's selection only renders when the
  *      local active sheet matches.
  *   r: bounding rect {sr, er, sc, ec} of the primary selection range.
- *      Skipping multi-select for v1 — render only the first range.
+ *   rs: optional array of ALL ranges in a multi-range (Ctrl-click)
+ *      selection. Includes the primary at index 0 by convention so
+ *      the presence layer can iterate `rs` when present and fall back
+ *      to `r` for legacy peers. Older clients ignore `rs` and keep
+ *      seeing just the primary — backwards compatible.
  */
 export type PeerAwareness = {
   name: string;
@@ -108,6 +112,7 @@ export type PeerAwareness = {
     u: string;
     s: string;
     r: { sr: number; er: number; sc: number; ec: number };
+    rs?: Array<{ sr: number; er: number; sc: number; ec: number }>;
   };
   /** In-progress cell edit. Cleared on SheetEditEnded. Used to render a
    *  "ghost" overlay so peers see the value appearing character-by-

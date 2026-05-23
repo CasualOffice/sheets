@@ -24,6 +24,7 @@ import { InsertCellsDialog } from './InsertCellsDialog';
 import { PasteSpecialDialog } from './PasteSpecialDialog';
 import { NameManagerDialog } from './NameManagerDialog';
 import { flashFill } from './flash-fill';
+import { selectDependents, selectPrecedents } from './formula-refs';
 import { openBugReport } from './report-bug';
 import { useCollab } from '../collab/collab-context';
 import { useLoading } from '../loading-context';
@@ -686,6 +687,19 @@ export function MenuBar() {
         e.preventDefault();
         if (api) flashFill(api);
       }
+      // ── Precedent / dependent navigation: Ctrl+[ / Ctrl+] ──────
+      // Excel's "trace precedents / dependents" via selection. The
+      // brackets show up as `[` / `]` in the key field. See
+      // `formula-refs.ts` for the regex-based ref extractor.
+      if (mod && !e.altKey && !e.shiftKey && e.key === '[') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) selectPrecedents(api);
+      } else if (mod && !e.altKey && !e.shiftKey && e.key === ']') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) selectDependents(api);
+      }
       // ── Outline border: Ctrl+Shift+& (US) / Ctrl+Shift+7 ────────
       // Both map to Excel's "outside border". US keyboards report
       // Shift+7 as `&`; Digit7 is the layout-stable signal.
@@ -923,6 +937,25 @@ export function MenuBar() {
         },
         { kind: 'separator', id: 'sep-print' },
         { kind: 'item', id: 'print', label: 'Print…', icon: 'print', shortcut: 'Ctrl+P', onClick: () => setShowPageSetup(true) },
+        {
+          kind: 'item',
+          id: 'set-print-area',
+          label: 'Set Print Area to selection',
+          icon: 'crop_free',
+          onClick: () => {
+            if (!api) return;
+            const sel = getActiveSelectionRange(api);
+            if (!sel) return;
+            savePrintOptions({ ...loadPrintOptions(), printArea: rangeToA1(sel) });
+          },
+        },
+        {
+          kind: 'item',
+          id: 'clear-print-area',
+          label: 'Clear Print Area',
+          icon: 'border_clear',
+          onClick: () => savePrintOptions({ ...loadPrintOptions(), printArea: null }),
+        },
         { kind: 'separator', id: 'sep-coedit' },
         ...(collab.roomId
           ? ([

@@ -47,6 +47,7 @@ export function FormatChartDialog({ model, onCancel, onConfirm }: Props) {
   const [gridlines, setGridlines] = useState(merged.gridlines);
   const [dataLabels, setDataLabels] = useState(merged.dataLabels);
   const [palette, setPalette] = useState<ChartPalette>(merged.palette);
+  const [trendline, setTrendline] = useState(merged.trendline);
 
   const confirm = () => {
     onConfirm({
@@ -57,6 +58,7 @@ export function FormatChartDialog({ model, onCancel, onConfirm }: Props) {
       gridlines,
       dataLabels,
       palette,
+      trendline,
       // Title text is part of the chart's identity (`ChartModel.title`)
       // not its format. The caller reads the trimmed title via the
       // form input below and applies it alongside the format patch.
@@ -192,6 +194,22 @@ export function FormatChartDialog({ model, onCancel, onConfirm }: Props) {
             <span>Show values on each point</span>
           </label>
         </Section>
+
+        {/* Trendline only meaningful for axis-based charts. Pie /
+            doughnut have no time axis, so the toggle is hidden. */}
+        {isAxisFamily && (
+          <Section legend="Trendline">
+            <label className="format-chart__checkbox">
+              <input
+                type="checkbox"
+                checked={trendline}
+                data-testid="format-chart-trendline"
+                onChange={(e) => setTrendline(e.target.checked)}
+              />
+              <span>Overlay linear-regression trendline on each series</span>
+            </label>
+          </Section>
+        )}
 
         <Section legend="Colors">
           <div className="format-chart__palettes" role="radiogroup" aria-label="Color palette">

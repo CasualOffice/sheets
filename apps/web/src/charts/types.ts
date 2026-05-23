@@ -112,6 +112,11 @@ export type ChartFormat = {
   /** Color palette applied to the series. Mirrors Excel's "Change
    *  Colors" picker — pick the first N from the chosen palette. */
   palette?: ChartPalette;
+  /** Overlay a linear-regression trendline on every numeric series.
+   *  Only meaningful for line / scatter / area / bar / column charts;
+   *  ignored for pie. ECharts renders this via `markLine` from the
+   *  computed regression endpoints. */
+  trendline?: boolean;
 };
 
 export type ChartPalette = 'office' | 'mono' | 'vivid' | 'pastel';
@@ -130,6 +135,7 @@ export function defaultFormat(model: Pick<ChartModel, 'title'>): ResolvedChartFo
     gridlines: true,
     dataLabels: false,
     palette: 'office',
+    trendline: false,
   };
 }
 
@@ -144,6 +150,7 @@ export function mergeFormat(
     gridlines: f.gridlines ?? base.gridlines,
     dataLabels: f.dataLabels ?? base.dataLabels,
     palette: f.palette ?? base.palette,
+    trendline: f.trendline ?? base.trendline,
     xAxisTitle: f.xAxisTitle,
     yAxisTitle: f.yAxisTitle,
   };

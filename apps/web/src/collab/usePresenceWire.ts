@@ -111,24 +111,45 @@ export function usePresenceWire(
         const raw = primary.getRange();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sheetId = (ws as any).getSheetId?.() ?? (ws as any).getId?.() ?? '';
+        // Read every range in the current selection so multi-range
+        // (Ctrl-click / Shift+F8) selections propagate fully. The
+        // facade's `getSelection().getActiveRangeList()` returns
+        // FRanges including the primary at index 0; fall back to
+        // [primary] if the facade method is missing on older builds.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const wsAny = ws as any;
+        let allRects: Array<{ sr: number; er: number; sc: number; ec: number }>;
+        try {
+          const sel = wsAny.getSelection?.();
+          const list = sel?.getActiveRangeList?.() as
+            | Array<{ getRange: () => { startRow: number; endRow: number; startColumn: number; endColumn: number } }>
+            | undefined;
+          if (list && list.length > 0) {
+            allRects = list.map((r) => {
+              const g = r.getRange();
+              return { sr: g.startRow, er: g.endRow, sc: g.startColumn, ec: g.endColumn };
+            });
+          } else {
+            allRects = [{ sr: raw.startRow, er: raw.endRow, sc: raw.startColumn, ec: raw.endColumn }];
+          }
+        } catch {
+          allRects = [{ sr: raw.startRow, er: raw.endRow, sc: raw.startColumn, ec: raw.endColumn }];
+        }
         const next: PeerAwareness['sel'] = {
           u: wb.getId(),
           s: sheetId,
-          r: {
-            sr: raw.startRow,
-            er: raw.endRow,
-            sc: raw.startColumn,
-            ec: raw.endColumn,
-          },
+          // Primary kept for legacy peers that don't read `rs`.
+          r: allRects[0],
+          // Only ship `rs` when there's more than one range — keeps
+          // single-range awareness payloads the same size as before.
+          rs: allRects.length > 1 ? allRects : undefined,
         };
         if (
           prev.sel &&
           prev.sel.u === next.u &&
           prev.sel.s === next.s &&
-          prev.sel.r.sr === next.r.sr &&
-          prev.sel.r.er === next.r.er &&
-          prev.sel.r.sc === next.r.sc &&
-          prev.sel.r.ec === next.r.ec
+          rectsEqual(prev.sel.r, next.r) &&
+          rectListsEqual(prev.sel.rs, next.rs)
         ) {
           return;
         }
@@ -136,6 +157,22 @@ export function usePresenceWire(
       } catch (err) {
         console.warn('[presence] failed to read active selection', err);
       }
+    };
+    const rectsEqual = (
+      a: { sr: number; er: number; sc: number; ec: number },
+      b: { sr: number; er: number; sc: number; ec: number },
+    ) => a.sr === b.sr && a.er === b.er && a.sc === b.sc && a.ec === b.ec;
+    const rectListsEqual = (
+      a?: Array<{ sr: number; er: number; sc: number; ec: number }>,
+      b?: Array<{ sr: number; er: number; sc: number; ec: number }>,
+    ) => {
+      if (!a && !b) return true;
+      if (!a || !b) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i += 1) {
+        if (!rectsEqual(a[i], b[i])) return false;
+      }
+      return true;
     };
 
     writeIfChanged();

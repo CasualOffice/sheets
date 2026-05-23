@@ -47,6 +47,11 @@ type Rect = {
    *  on-screen position is changing (e.g. user scrolling), so we
    *  paint instantly without a transition. */
   anchorKey: string;
+  /** True for the non-primary ranges in a multi-range (Ctrl-click)
+   *  selection. We omit the name label + live-edit ghost on these so
+   *  the chrome doesn't multiply, and render them with a lighter fill
+   *  so the primary still reads as "where the peer is right now". */
+  isExtra?: boolean;
 };
 
 const LABEL_HEIGHT = 18;
@@ -229,89 +234,81 @@ export function PresenceLayer() {
       }
 
       const next: Rect[] = [];
+      const ws = wb.getActiveSheet();
+      if (!ws) {
+        if (rectsRef.current.length) setRects([]);
+        return;
+      }
       for (const peer of peers) {
         // Mismatched unit ids are normal — every browser gets a random
         // unitId on workbook creation. We render any peer whose sheet id
         // matches the local active sheet (sheet ids ARE deterministic).
-        // Prefer the live-edit cell when present (during typing) so the
-        // ghost overlay sits exactly on the cell being typed into,
-        // independent of where their selection has wandered.
-        let sr: number, er: number, sc: number, ec: number;
-        let sheetId: string;
+        // Prefer the live-edit cell when present so the ghost overlay
+        // sits exactly on the cell being typed into.
         let liveText: string | undefined;
+        let ranges: Array<{ sr: number; er: number; sc: number; ec: number }> = [];
         if (peer.liveEdit && peer.liveEdit.s === activeSheetId) {
-          sheetId = peer.liveEdit.s;
-          sr = er = peer.liveEdit.row;
-          sc = ec = peer.liveEdit.col;
+          ranges = [{
+            sr: peer.liveEdit.row,
+            er: peer.liveEdit.row,
+            sc: peer.liveEdit.col,
+            ec: peer.liveEdit.col,
+          }];
           liveText = peer.liveEdit.text;
         } else if (peer.selection && peer.selection.s === activeSheetId) {
-          sheetId = peer.selection.s;
-          sr = peer.selection.r.sr;
-          er = peer.selection.r.er;
-          sc = peer.selection.r.sc;
-          ec = peer.selection.r.ec;
+          // Multi-range (Ctrl-click) selections ride on `sel.rs`;
+          // single-range stays on `sel.r` for backwards-compat. Render
+          // every range — name label + ghost only on the primary
+          // (index 0) so the chrome doesn't multiply.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const selAny = peer.selection as any;
+          if (Array.isArray(selAny.rs) && selAny.rs.length > 0) {
+            ranges = selAny.rs;
+          } else {
+            ranges = [peer.selection.r];
+          }
         } else {
           continue;
         }
-        void sheetId;
-        try {
-          const ws = wb.getActiveSheet();
-          if (!ws) continue;
-          const tl = ws.getRange(sr, sc).getCellRect();
-          const br2 = ws.getRange(er, ec).getCellRect();
-          if (!tl || !br2) continue;
-          // `getCellRect` returns cell positions in the canvas's *content*
-          // space — i.e. pre-scroll AND pre-header-gutter. Subtract the
-          // current scroll offset to land in the visible-canvas frame,
-          // add the header gutter to shift past the row/column labels,
-          // then add the canvas-vs-host offset to translate into the
-          // portal's coord system.
-          //
-          // Frozen panes: a cell with row < freezeRow stays pinned at
-          // the top (the scrolling viewport reveals different
-          // non-frozen rows beneath but the frozen row stays put), so
-          // we DON'T subtract sy for it. Same logic for freezeCol on
-          // the X axis. We test the START row/column so the rect of a
-          // multi-cell selection straddling the freeze line lines up
-          // with the dominant (start) side — partial-frozen selections
-          // are a rare edge case in collab UX.
-          const inFrozenRow = sr < freezeRow;
-          const inFrozenCol = sc < freezeCol;
-          const ySub = inFrozenRow ? 0 : sy;
-          const xSub = inFrozenCol ? 0 : sx;
-          // Logical (content-space) → screen-pixel transform:
-          //   screen = (content - scroll) * zoom + canvasOffset + headerGutter
-          // The gutter and canvasOffset are already in screen pixels
-          // (DOM bounding-rect numbers), so they're added AFTER the
-          // zoom multiply. Without the zoom factor, peer cursors
-          // drift proportional to the zoom delta from 100%.
-          const left = (Math.min(tl.left, br2.left) - xSub) * zoom + dx + gutter.rowHeaderWidth;
-          const top = (Math.min(tl.top, br2.top) - ySub) * zoom + dy + gutter.columnHeaderHeight;
-          const right = (Math.max(tl.right, br2.right) - xSub) * zoom + dx + gutter.rowHeaderWidth;
-          const bottom = (Math.max(tl.bottom, br2.bottom) - ySub) * zoom + dy + gutter.columnHeaderHeight;
-          // Clip to the canvas area so cursors don't paint over headers
-          // or float into the column-label gutter.
-          if (right < dx || bottom < dy) continue;
-          if (left > dx + canvasRect.width || top > dy + canvasRect.height) continue;
-          next.push({
-            clientId: peer.clientId,
-            name: peer.name,
-            color: peer.color,
-            left,
-            top,
-            width: right - left,
-            height: bottom - top,
-            liveText,
-            labelTop: LABEL_BASE_TOP,
-            // Anchor key changes when the peer's selection moves to a
-            // different cell. Position-only changes (scroll, zoom) leave
-            // it the same — that's our signal to disable the CSS
-            // transition for those frames so the cursor doesn't lerp
-            // 80 ms behind the canvas.
-            anchorKey: `${wb.getId()}:${activeSheetId}:${sr}:${sc}:${er}:${ec}`,
-          });
-        } catch {
-          /* getCellRect can throw mid-resize — drop this frame for that peer */
+        for (let idx = 0; idx < ranges.length; idx += 1) {
+          const { sr, er, sc, ec } = ranges[idx];
+          try {
+            const tl = ws.getRange(sr, sc).getCellRect();
+            const br2 = ws.getRange(er, ec).getCellRect();
+            if (!tl || !br2) continue;
+            // Frozen-pane handling on the range's START row/col — see
+            // the comment block from the earlier single-range pass.
+            const inFrozenRow = sr < freezeRow;
+            const inFrozenCol = sc < freezeCol;
+            const ySub = inFrozenRow ? 0 : sy;
+            const xSub = inFrozenCol ? 0 : sx;
+            const left = (Math.min(tl.left, br2.left) - xSub) * zoom + dx + gutter.rowHeaderWidth;
+            const top = (Math.min(tl.top, br2.top) - ySub) * zoom + dy + gutter.columnHeaderHeight;
+            const right = (Math.max(tl.right, br2.right) - xSub) * zoom + dx + gutter.rowHeaderWidth;
+            const bottom = (Math.max(tl.bottom, br2.bottom) - ySub) * zoom + dy + gutter.columnHeaderHeight;
+            // Clip per-range so off-screen extras don't ghost into the
+            // headers.
+            if (right < dx || bottom < dy) continue;
+            if (left > dx + canvasRect.width || top > dy + canvasRect.height) continue;
+            const isPrimary = idx === 0;
+            next.push({
+              clientId: peer.clientId,
+              name: peer.name,
+              color: peer.color,
+              left,
+              top,
+              width: right - left,
+              height: bottom - top,
+              // Only the primary range carries the live-edit ghost +
+              // name label. Extras render as bare highlighted rects.
+              liveText: isPrimary ? liveText : undefined,
+              labelTop: LABEL_BASE_TOP,
+              isExtra: !isPrimary,
+              anchorKey: `${wb.getId()}:${activeSheetId}:${sr}:${sc}:${er}:${ec}:${idx}`,
+            });
+          } catch {
+            /* getCellRect can throw mid-resize — drop this frame for that range */
+          }
         }
       }
 
@@ -359,16 +356,18 @@ export function PresenceLayer() {
       data-testid="presence-layer"
       aria-hidden="true"
     >
-      {rects.map((r) => {
+      {rects.map((r, idx) => {
         const classes = ['presence-cursor'];
         if (r.liveText !== undefined) classes.push('presence-cursor--editing');
         if (animating.has(r.clientId)) classes.push('presence-cursor--moving');
+        if (r.isExtra) classes.push('presence-cursor--extra');
         return (
           <div
-            key={r.clientId}
+            key={`${r.clientId}-${idx}`}
             className={classes.join(' ')}
             data-testid="presence-cursor"
             data-live={r.liveText !== undefined ? '1' : '0'}
+            data-extra={r.isExtra ? '1' : '0'}
             style={
               {
                 left: `${r.left}px`,
@@ -379,12 +378,14 @@ export function PresenceLayer() {
               } as React.CSSProperties
             }
           >
-            <span
-              className="presence-cursor__label"
-              style={{ top: `${r.labelTop}px` }}
-            >
-              {r.name}
-            </span>
+            {!r.isExtra && (
+              <span
+                className="presence-cursor__label"
+                style={{ top: `${r.labelTop}px` }}
+              >
+                {r.name}
+              </span>
+            )}
             {r.liveText !== undefined && r.liveText.length > 0 && (
               <span className="presence-cursor__ghost" data-testid="presence-cursor-ghost">
                 {r.liveText}
@@ -413,7 +414,8 @@ function rectsEqual(a: Rect[], b: Rect[]): boolean {
       x.color !== y.color ||
       x.liveText !== y.liveText ||
       x.labelTop !== y.labelTop ||
-      x.anchorKey !== y.anchorKey
+      x.anchorKey !== y.anchorKey ||
+      (x.isExtra ?? false) !== (y.isExtra ?? false)
     ) {
       return false;
     }
@@ -440,6 +442,8 @@ function assignLabelSlots(rects: Rect[]): void {
     .sort((a, b) => rects[a].top - rects[b].top);
   for (const idx of order) {
     const r = rects[idx];
+    // Extras don't carry a name label, so they don't need a slot.
+    if (r.isExtra) continue;
     const labelLeft = r.left - 2;
     const labelRight = labelLeft + Math.ceil(r.name.length * LABEL_CHAR_WIDTH) + LABEL_PAD;
     let slot = 0;

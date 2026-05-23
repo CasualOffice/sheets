@@ -17,6 +17,7 @@ import { setZoom } from './tab-actions';
 import { Icon } from './Icon';
 import { Tooltip } from './Tooltip';
 import { CollabIndicator } from './CollabIndicator';
+import { STAT_LABELS, useStatPrefs, type StatKey } from './use-statbar-prefs';
 
 const NUM = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 const ZOOM_STEPS = [25, 50, 75, 100, 125, 150, 200, 300, 400];
@@ -163,28 +164,7 @@ export function SheetTabs() {
         ))}
       </div>
 
-      {stats && stats.cellCount > 0 && (
-        <div className="sheet-tabs__stats" data-testid="sheet-tabs-stats">
-          {/* Excel order: Average, Count, Numerical Count, Min, Max, Sum.
-              We show Avg / Min / Max only when at least one numeric value
-              participated; Count / Numerical Count / Sum always render
-              when any cell is selected. */}
-          {stats.avg !== null && (
-            <span data-testid="stat-avg">Average: {NUM.format(stats.avg)}</span>
-          )}
-          <span data-testid="stat-count">Count: {stats.cellCount}</span>
-          {stats.count !== stats.cellCount && (
-            <span data-testid="stat-num-count">Numerical Count: {stats.count}</span>
-          )}
-          {stats.min !== null && (
-            <span data-testid="stat-min">Min: {NUM.format(stats.min)}</span>
-          )}
-          {stats.max !== null && (
-            <span data-testid="stat-max">Max: {NUM.format(stats.max)}</span>
-          )}
-          <span data-testid="stat-sum">Sum: {NUM.format(stats.sum)}</span>
-        </div>
-      )}
+      {stats && stats.cellCount > 0 && <SheetTabsStats stats={stats} />}
 
       <div className="sheet-tabs__right">
         <CollabIndicator />
@@ -594,6 +574,89 @@ function SheetTabItem({
             </button>
           </Tooltip>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Status-bar selection stats with Excel-style right-click
+ * customisation. Each enabled stat renders in canonical Excel order;
+ * right-click on the strip pops a small checklist letting the user
+ * hide / show each item. Preferences persist via `useStatPrefs`.
+ */
+function SheetTabsStats({
+  stats,
+}: {
+  stats: NonNullable<ReturnType<typeof useActiveCellState>['stats']>;
+}) {
+  const { prefs, toggle } = useStatPrefs();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!stripRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [menuOpen]);
+
+  // Each stat has a render guard (the data must be present) AND a
+  // pref guard (the user hasn't hidden it).
+  const items: Array<{ key: StatKey; node: React.ReactNode }> = [];
+  if (prefs.avg && stats.avg !== null) {
+    items.push({ key: 'avg', node: <span data-testid="stat-avg">Average: {NUM.format(stats.avg)}</span> });
+  }
+  if (prefs.count) {
+    items.push({ key: 'count', node: <span data-testid="stat-count">Count: {stats.cellCount}</span> });
+  }
+  if (prefs.numCount && stats.count !== stats.cellCount) {
+    items.push({ key: 'numCount', node: <span data-testid="stat-num-count">Numerical Count: {stats.count}</span> });
+  }
+  if (prefs.min && stats.min !== null) {
+    items.push({ key: 'min', node: <span data-testid="stat-min">Min: {NUM.format(stats.min)}</span> });
+  }
+  if (prefs.max && stats.max !== null) {
+    items.push({ key: 'max', node: <span data-testid="stat-max">Max: {NUM.format(stats.max)}</span> });
+  }
+  if (prefs.sum) {
+    items.push({ key: 'sum', node: <span data-testid="stat-sum">Sum: {NUM.format(stats.sum)}</span> });
+  }
+
+  return (
+    <div
+      ref={stripRef}
+      className="sheet-tabs__stats"
+      data-testid="sheet-tabs-stats"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuOpen((v) => !v);
+      }}
+      title="Right-click to choose which stats appear"
+    >
+      {items.map((it) => (
+        <span key={it.key}>{it.node}</span>
+      ))}
+      {menuOpen && (
+        <div className="statbar-customise" role="menu" data-testid="statbar-customise">
+          <div className="statbar-customise__heading">Customise Status Bar</div>
+          {(Object.keys(STAT_LABELS) as StatKey[]).map((key) => (
+            <label
+              key={key}
+              className="statbar-customise__item"
+              data-testid={`statbar-customise-${key}`}
+            >
+              <input
+                type="checkbox"
+                checked={prefs[key]}
+                onChange={() => toggle(key)}
+              />
+              <span>{STAT_LABELS[key]}</span>
+            </label>
+          ))}
+        </div>
       )}
     </div>
   );

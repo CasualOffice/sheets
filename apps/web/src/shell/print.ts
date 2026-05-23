@@ -6,11 +6,16 @@ export type PrintMarginPreset = 'narrow' | 'normal' | 'wide';
 export type PrintOptions = {
   orientation: PrintOrientation;
   margins: PrintMarginPreset;
+  /** A1-notation range to restrict the print to. Null / undefined =
+   *  whole used range. Excel calls this "Print area". Persists with
+   *  the other print preferences. */
+  printArea?: string | null;
 };
 
 export const DEFAULT_PRINT_OPTIONS: PrintOptions = {
   orientation: 'portrait',
   margins: 'normal',
+  printArea: null,
 };
 
 const MARGIN_MM: Record<PrintMarginPreset, number> = {
@@ -34,7 +39,10 @@ export function loadPrintOptions(): PrintOptions {
       parsed.orientation === 'landscape' ? 'landscape' : 'portrait';
     const margins: PrintMarginPreset =
       parsed.margins === 'narrow' || parsed.margins === 'wide' ? parsed.margins : 'normal';
-    return { orientation, margins };
+    const printArea = typeof parsed.printArea === 'string' && parsed.printArea.trim()
+      ? parsed.printArea.trim()
+      : null;
+    return { orientation, margins, printArea };
   } catch {
     return DEFAULT_PRINT_OPTIONS;
   }
@@ -71,18 +79,34 @@ export function printActiveSheet(
   if (!fws) return;
   const ws = fws.getSheet();
 
-  // Find the used range so we don't print 1024 empty rows.
-  const lastRow = ws.getLastRowWithContent?.() ?? 0;
-  const lastCol = ws.getLastColumnWithContent?.() ?? 0;
+  // Either the user's explicit Print Area (Excel "Set print area")
+  // or the auto-detected used range. The print-area string is in
+  // A1 notation (e.g. "A1:D20"); a parse failure falls back to the
+  // used range with a console warning rather than printing nothing.
+  let startRow = 0;
+  let startCol = 0;
+  let lastRow = ws.getLastRowWithContent?.() ?? 0;
+  let lastCol = ws.getLastColumnWithContent?.() ?? 0;
+  if (options.printArea) {
+    const parsed = parsePrintArea(options.printArea);
+    if (parsed) {
+      startRow = parsed.startRow;
+      startCol = parsed.startCol;
+      lastRow = parsed.endRow;
+      lastCol = parsed.endCol;
+    } else {
+      console.warn('[print] could not parse Print Area "%s" — falling back to used range', options.printArea);
+    }
+  }
   if (lastRow < 0 || lastCol < 0) return;
 
   const sheetName: string = fws.getSheetName?.() ?? 'Sheet';
   const workbookName: string = (wb as { getName?: () => string }).getName?.() ?? 'Workbook';
 
   const rows: string[] = [];
-  for (let r = 0; r <= lastRow; r++) {
+  for (let r = startRow; r <= lastRow; r++) {
     const cells: string[] = [];
-    for (let c = 0; c <= lastCol; c++) {
+    for (let c = startCol; c <= lastCol; c++) {
       const cell = ws.getCell(r, c);
       const raw: unknown = cell?.v;
       const text =
@@ -100,7 +124,7 @@ export function printActiveSheet(
   // narrow columns. ExcelJS-style units don't matter here — relative
   // proportions are what carry through to print.
   const colWidths: string[] = [];
-  for (let c = 0; c <= lastCol; c++) {
+  for (let c = startCol; c <= lastCol; c++) {
     const w = ws.getColumnWidth?.(c) ?? 88;
     colWidths.push(`<col style="width:${Math.round(w)}px" />`);
   }
@@ -174,3 +198,37 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/** Parse a "Print Area" A1 range string. Accepts `A1:D20` or a single
+ *  cell `A1`. Returns null for malformed input. */
+export function parsePrintArea(s: string): {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+} | null {
+  const trimmed = s.trim().toUpperCase();
+  if (!trimmed) return null;
+  const m = /^(\$?)([A-Z]+)(\$?)(\d+)(?::(\$?)([A-Z]+)(\$?)(\d+))?$/.exec(trimmed);
+  if (!m) return null;
+  const col1 = colLettersToIndex(m[2]);
+  const row1 = parseInt(m[4], 10) - 1;
+  const col2 = m[6] ? colLettersToIndex(m[6]) : col1;
+  const row2 = m[8] ? parseInt(m[8], 10) - 1 : row1;
+  if (Number.isNaN(row1) || Number.isNaN(row2)) return null;
+  return {
+    startRow: Math.min(row1, row2),
+    endRow: Math.max(row1, row2),
+    startCol: Math.min(col1, col2),
+    endCol: Math.max(col1, col2),
+  };
+}
+
+function colLettersToIndex(letters: string): number {
+  let n = 0;
+  for (let i = 0; i < letters.length; i += 1) {
+    n = n * 26 + (letters.charCodeAt(i) - 64);
+  }
+  return n - 1;
+}
+

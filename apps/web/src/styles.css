@@ -869,6 +869,57 @@ button {
   border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
+/* Editable display-name pill — visible only while in a co-edit room.
+   Colour dot mirrors the user's awareness colour so what they see in
+   their own avatar matches what peers see for them. Hover reveals
+   the edit-pencil; clicking swaps to an inline input. */
+.titlebar__namepill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--weight-medium, 500);
+  border: 1px solid var(--color-divider);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+.titlebar__namepill:hover { background: var(--color-hover); }
+.titlebar__namepill .icon {
+  font-size: 14px;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+.titlebar__namepill:hover .icon { opacity: 1; }
+.titlebar__namepill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--name-color, var(--color-accent));
+  display: inline-block;
+}
+.titlebar__namepill-text {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.titlebar__namepill-input {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-text);
+  width: 160px;
+  outline: none;
+}
+
 /* Title-bar icon-only action button (theme toggle today, room for more
    later). Square hit area, no padding-baked text — relies on the icon
    itself for sizing. */
@@ -2236,6 +2287,7 @@ button {
 }
 
 .sheet-tabs__stats {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-5);
@@ -2244,6 +2296,44 @@ button {
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  cursor: context-menu;
+}
+
+/* Excel-style right-click customise popover for the status-bar
+   stats. Anchored above the strip; click outside to dismiss. */
+.statbar-customise {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  padding: 6px 4px;
+  min-width: 200px;
+  z-index: 30;
+  font-size: 12px;
+}
+.statbar-customise__heading {
+  padding: 4px 10px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-medium, 500);
+}
+.statbar-customise__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+.statbar-customise__item:hover { background: var(--color-hover); }
+.statbar-customise__item input[type='checkbox'] {
+  accent-color: var(--color-accent);
 }
 
 .sheet-tabs__right {
@@ -3891,6 +3981,7 @@ button {
   border: 2px solid var(--presence-color, #1a73e8);
   background: color-mix(in srgb, var(--presence-color, #1a73e8) 12%, transparent);
   border-radius: 2px;
+  pointer-events: none;
   /* Intentionally NO transition on top/left/width/height. Univer's grid
      scrolls by repainting the canvas — the DOM canvas element itself
      doesn't move, so the cursor's absolute coords need to update every
@@ -3908,6 +3999,15 @@ button {
    cell, so the rectangle eases between cells instead of teleporting.
    PresenceLayer toggles this class on cells whose anchor (sr,sc,er,ec)
    differs from the previous frame. */
+/* Non-primary ranges in a multi-range (Ctrl-click) selection. Painted
+   with a thinner border + lower fill opacity so the primary range
+   (with the name label + live-edit ghost) still reads as the
+   "current" cursor location. */
+.presence-cursor--extra {
+  border-width: 1px;
+  background: color-mix(in srgb, var(--presence-color, #1a73e8) 8%, transparent);
+}
+
 .presence-cursor--moving {
   transition: top 120ms ease-out, left 120ms ease-out,
     width 120ms ease-out, height 120ms ease-out;

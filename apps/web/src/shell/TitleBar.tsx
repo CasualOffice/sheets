@@ -8,6 +8,7 @@ import { useTheme } from '../theme';
 import { Icon } from './Icon';
 import { BusyPill } from './BusyPill';
 import { MenuBar } from './MenuBar';
+import { NamePill } from './NamePill';
 
 /**
  * Title bar — Google-Docs-style two-row chrome.
@@ -134,6 +135,7 @@ export function TitleBar() {
       <div className="titlebar__actions" data-testid="titlebar-actions">
         <BusyPill />
         <AvatarStack />
+        {collab.roomId && <NamePill />}
         {collab.roomId ? (
           <span
             className="titlebar__roompill"

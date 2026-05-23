@@ -27,8 +27,14 @@ const MARGIN_LABELS: Record<PrintMarginPreset, string> = {
 export function PageSetupDialog({ initial, onCancel, onPrint }: Props) {
   const [orientation, setOrientation] = useState<PrintOrientation>(initial.orientation);
   const [margins, setMargins] = useState<PrintMarginPreset>(initial.margins);
+  const [printArea, setPrintArea] = useState<string>(initial.printArea ?? '');
 
-  const confirm = () => onPrint({ orientation, margins });
+  const confirm = () =>
+    onPrint({
+      orientation,
+      margins,
+      printArea: printArea.trim() || null,
+    });
 
   return (
     <Dialog
@@ -103,6 +109,19 @@ export function PageSetupDialog({ initial, onCancel, onPrint }: Props) {
               </option>
             ))}
           </select>
+        </fieldset>
+
+        <fieldset className="page-setup__group">
+          <legend className="page-setup__legend">Print area</legend>
+          <input
+            type="text"
+            className="page-setup__input"
+            data-testid="page-setup-print-area"
+            value={printArea}
+            placeholder="e.g. A1:D20 — leave blank to print the used range"
+            onChange={(e) => setPrintArea(e.target.value)}
+            spellCheck={false}
+          />
         </fieldset>
 
         <p className="page-setup__note">

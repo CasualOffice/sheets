@@ -178,6 +178,13 @@ function buildOptionForType(
     const data = is100 && sumPerCat
       ? raw.map((v, i) => (typeof v === 'number' ? (v / sumPerCat[i]) * 100 : null))
       : raw;
+    // Linear-regression trendline overlay. We compute the regression
+    // line endpoints in data space and emit a `markLine` from start to
+    // end, dashed + slightly transparent so it doesn't compete with
+    // the primary series.
+    const trendlineMark = format.trendline
+      ? buildTrendlineMark(data as Array<number | null>)
+      : undefined;
     return {
       name,
       type: echartsType,
@@ -185,6 +192,7 @@ function buildOptionForType(
       ...(isStacked ? { stack: 'all' as const } : {}),
       ...(isArea ? { areaStyle: {} } : {}),
       ...(isLine ? { smooth: false, symbol: 'circle' as const, symbolSize: 4 } : {}),
+      ...(trendlineMark ? { markLine: trendlineMark } : {}),
       label: dataLabelConfig(format, isHorizontalBar, isLine || isArea),
     };
   });
@@ -286,4 +294,45 @@ function dataLabelConfig(
   if (isLineOrArea) return { show: true, position: 'top' };
   if (isHorizontalBar) return { show: true, position: 'right' };
   return { show: true, position: 'top' };
+}
+
+/**
+ * Linear regression trendline. Computes the best-fit line via simple
+ * ordinary-least-squares on the series data points, then encodes it
+ * as an ECharts `markLine` from (x_min, y_pred(x_min)) to (x_max,
+ * y_pred(x_max)). Returns `undefined` if fewer than two valid
+ * numeric points exist (a single point has no slope).
+ */
+function buildTrendlineMark(data: Array<number | null>): Record<string, unknown> | undefined {
+  const points: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < data.length; i += 1) {
+    const v = data[i];
+    if (typeof v === "number" && !Number.isNaN(v)) points.push({ x: i, y: v });
+  }
+  if (points.length < 2) return undefined;
+  const n = points.length;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+  for (const p of points) {
+    sumX += p.x;
+    sumY += p.y;
+    sumXY += p.x * p.y;
+    sumXX += p.x * p.x;
+  }
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return undefined;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const xMin = points[0].x;
+  const xMax = points[points.length - 1].x;
+  const yAtMin = slope * xMin + intercept;
+  const yAtMax = slope * xMax + intercept;
+  return {
+    silent: true,
+    symbol: "none",
+    lineStyle: { type: "dashed", width: 2, opacity: 0.75 },
+    data: [[{ xAxis: xMin, yAxis: yAtMin }, { xAxis: xMax, yAxis: yAtMax }]],
+  };
 }
