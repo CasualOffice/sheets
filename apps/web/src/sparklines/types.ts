@@ -12,11 +12,10 @@
  *   - **win-loss**: tri-state bars (+ / − / 0) — used for binary
  *     up/down indicators.
  *
- * v1 stores sparklines in a React context (in-memory). They don't yet
- * round-trip through xlsx — adding the workbook resource is a
- * follow-up gated on demand. Surviving an autosave + restore is
- * handled by the existing autosave / version-history snapshots
- * because they include the workbook's resources matrix.
+ * Persistence: sparklines round-trip through
+ * `IWorkbookData.resources['__casual_sheets_sparklines__']`, same
+ * pattern as charts and pivots. The resource sheet stays hidden in
+ * xlsx output and is rehydrated on workbook reload.
  */
 
 export type SparklineType = 'line' | 'column' | 'win-loss';
@@ -37,4 +36,14 @@ export type SparklineModel = {
   color?: string;
   /** Optional negative-bar colour for column / win-loss. */
   negativeColor?: string;
+};
+
+/** Plugin-resource name for stashing sparkline models in
+ *  `IWorkbookData.resources`. Mirrors `PIVOTS_RESOURCE_NAME` — survives
+ *  xlsx via the hidden `__casual_sheets_resources__` sheet. */
+export const SPARKLINES_RESOURCE_NAME = '__casual_sheets_sparklines__';
+
+export type SparklinesResourceV1 = {
+  v: 1;
+  sparklines: SparklineModel[];
 };

@@ -145,6 +145,8 @@ export type SaveOptions = {
   outline?: OutlineState;
   /** Chart models to fold into the xlsx — see ExportExtras.charts. */
   charts?: ChartModel[];
+  /** Sparkline models to fold into the xlsx — see ExportExtras.sparklines. */
+  sparklines?: import('../sparklines/types').SparklineModel[];
   /** Pivot models to fold into the xlsx — see ExportExtras.pivots. */
   pivots?: PivotModel[];
 };
@@ -167,6 +169,7 @@ export async function saveAsXlsx(
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
     ...(chartImages.length > 0 ? { chartImages } : {}),
     ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
+    ...(options.sparklines && options.sparklines.length > 0 ? { sparklines: options.sparklines } : {}),
   };
   const blob = await workbookDataToXlsx(snapshot, extras);
   const finalName = ensureExt(filename, 'xlsx');
@@ -197,6 +200,7 @@ export async function exportCurrentWorkbookAsXlsxBlob(
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
     ...(chartImages.length > 0 ? { chartImages } : {}),
     ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
+    ...(options.sparklines && options.sparklines.length > 0 ? { sparklines: options.sparklines } : {}),
   };
   return workbookDataToXlsx(snapshot, extras);
 }

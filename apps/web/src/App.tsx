@@ -35,6 +35,7 @@ import { PreviewBanner } from './shell/PreviewBanner';
 import { PreviewDriver } from './shell/PreviewDriver';
 import { ThemeBridge } from './shell/ThemeBridge';
 import { RecentFilesLanding } from './shell/RecentFilesLanding';
+import { ShowFormulasLayer } from './shell/ShowFormulasLayer';
 import { PivotsProvider } from './pivots/pivots-context';
 import { SparklinesProvider } from './sparklines/sparklines-context';
 import { SparklineLayer } from './sparklines/SparklineLayer';
@@ -64,6 +65,7 @@ export function App() {
   const [chartsPanelVisible, setChartsPanelVisible] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const [shareRoomOpen, setShareRoomOpen] = useState(false);
+  const [showFormulas, setShowFormulas] = useState(false);
   const [loading, setLoading] = useState<LoadingState | null>(null);
 
   // Version-history preview state. `preview` is the visible shape;
@@ -261,9 +263,11 @@ export function App() {
         setChartsPanelVisible(false);
         setHistoryPanelVisible(false);
       },
+      showFormulas,
+      toggleShowFormulas: () => setShowFormulas((v) => !v),
       openShareRoom: () => setShareRoomOpen(true),
     }),
-    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible, historyPanelVisible],
+    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible, historyPanelVisible, showFormulas],
   );
 
   return (
@@ -313,6 +317,7 @@ export function App() {
             <LoadingOverlay />
             <ChartLayer />
             <SparklineLayer />
+            <ShowFormulasLayer />
           </OutlineProvider>
         </SparklinesProvider>
         </PivotsProvider>

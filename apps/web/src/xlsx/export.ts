@@ -2,6 +2,7 @@ import type { IWorkbookData } from '@univerjs/core';
 import type { OutlineState } from '../outline/types';
 import type { ChartModel } from '../charts/types';
 import type { PivotModel } from '../pivots/types';
+import type { SparklineModel } from '../sparklines/types';
 import { timeItAsync } from '../perf';
 import { serializeXlsxInWorker } from './serialize-in-worker';
 
@@ -50,6 +51,11 @@ export type ExportExtras = {
    *  / change-source action can re-run apply without the user
    *  reconfiguring. */
   pivots?: PivotModel[];
+  /** Sparkline models stashed under `__casual_sheets_sparklines__`.
+   *  Same pattern as charts/pivots — survives our round-trip, lost in
+   *  foreign xlsx readers (Excel renders the underlying source cells
+   *  but not the mini-chart overlay). */
+  sparklines?: SparklineModel[];
 };
 
 /**

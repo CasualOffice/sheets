@@ -693,6 +693,15 @@ export function MenuBar() {
         e.preventDefault();
         if (api) flashFill(api);
       }
+      // ── Show Formulas toggle: Ctrl+` ────────────────────────────
+      // Excel's `Ctrl+grave-accent` flip. The `e.key` for that key is
+      // a literal backtick on US/UK layouts; `e.code` is `Backquote`
+      // for layout-stable matching.
+      if (mod && !e.altKey && !e.shiftKey && (e.key === '`' || e.code === 'Backquote')) {
+        if (inTextInput) return;
+        e.preventDefault();
+        ui.toggleShowFormulas();
+      }
       // ── Precedent / dependent navigation: Ctrl+[ / Ctrl+] ──────
       // Excel's "trace precedents / dependents" via selection. The
       // brackets show up as `[` / `]` in the key field. See
@@ -889,6 +898,7 @@ export function MenuBar() {
           outline: outline.state,
           charts: charts.charts,
           pivots: pivots.pivots,
+          sparklines: sparklinesCtx.sparklines,
         });
     }
   };
@@ -899,6 +909,7 @@ export function MenuBar() {
       outline: outline.state,
       charts: charts.charts,
       pivots: pivots.pivots,
+      sparklines: sparklinesCtx.sparklines,
     });
 
   // Keep the keyboard-listener's handlers in sync with the latest
@@ -1050,6 +1061,7 @@ export function MenuBar() {
       label: 'View',
       items: [
         { kind: 'item', id: 'toggle-formula-bar', label: ui.formulaBarVisible ? 'Hide formula bar' : 'Show formula bar', icon: 'functions', onClick: ui.toggleFormulaBar },
+        { kind: 'item', id: 'show-formulas', label: ui.showFormulas ? '✓ Show formulas' : 'Show formulas', icon: 'description', shortcut: 'Ctrl+`', onClick: ui.toggleShowFormulas },
         { kind: 'item', id: 'toggle-gridlines', label: 'Gridlines', icon: 'grid_on', onClick: () => api && toggleGridlines(api, true) },
         { kind: 'separator', id: 'sep-freeze' },
         { kind: 'item', id: 'freeze-row', label: 'Freeze top row', icon: 'border_horizontal', run: freezeFirstRow },

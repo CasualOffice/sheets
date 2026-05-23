@@ -3702,6 +3702,35 @@ button {
   height: 100%;
 }
 
+/* ── Show Formulas overlay ─────────────────────────────────────
+   Every cell carrying a formula gets an opaque text panel sitting
+   over its rect with the formula source painted in. Non-destructive —
+   toggling off makes the overlay disappear. */
+.show-formulas-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.show-formulas-cell {
+  position: absolute;
+  pointer-events: none;
+  background: #fff7e6;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font: 11px/1.2 var(--font-mono, 'JetBrains Mono', SFMono-Regular, Consolas, monospace);
+  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+[data-theme="dark"] .show-formulas-cell {
+  background: #3a2a14;
+  border-color: #d97706;
+  color: #fde68a;
+}
+
 .insert-sparkline {
   display: flex;
   flex-direction: column;

@@ -4,6 +4,7 @@ import { univerStyleToExcel } from './style-mapping';
 import { writeOutlineIntoSnapshot } from '../outline/resources';
 import { writeChartsIntoSnapshot } from '../charts/resources';
 import { writePivotsIntoSnapshot } from '../pivots/resources';
+import { writeSparklinesIntoSnapshot } from '../sparklines/resources';
 import { RESOURCES_SHEET } from './constants';
 import type { ExportExtras } from './export';
 
@@ -217,6 +218,9 @@ export async function workbookDataToXlsxImpl(
 
   if (extras.pivots && extras.pivots.length > 0) {
     writePivotsIntoSnapshot(data, extras.pivots);
+  }
+  if (extras.sparklines && extras.sparklines.length > 0) {
+    writeSparklinesIntoSnapshot(data, extras.sparklines);
   }
 
   // Lift Univer's defined-name resource into xlsx-native `<definedName>`

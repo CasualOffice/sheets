@@ -2,18 +2,22 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
+import { useUniverAPI } from '../use-univer';
+import { useWorkbook } from '../use-workbook';
+import { readSparklinesFromSnapshot } from './resources';
 import type { SparklineModel } from './types';
 
 /**
- * In-memory store for the active workbook's sparklines. Mirrors
- * `charts-context` in shape. v1 keeps sparklines local-only — they
- * vanish on workbook swap (re-add after Open) and don't round-trip
- * through xlsx yet. The autosave snapshot stream picks them up
- * indirectly via the React state tree's IDB capture.
+ * Store for the active workbook's sparklines. Mirrors `charts-context`
+ * and `pivots-context` — hydrates from `IWorkbookData.resources` on
+ * workbook swap, mirrors mutations back via the snapshot picked up by
+ * autosave / xlsx export.
  */
 
 type Ctx = {
@@ -27,7 +31,30 @@ type Ctx = {
 const SparklinesCtx = createContext<Ctx | null>(null);
 
 export function SparklinesProvider({ children }: { children: ReactNode }) {
-  const [sparklines, setSparklines] = useState<SparklineModel[]>([]);
+  const api = useUniverAPI();
+  const { meta, snapshotRef } = useWorkbook();
+  const [sparklines, setSparklines] = useState<SparklineModel[]>(() =>
+    snapshotRef.current ? readSparklinesFromSnapshot(snapshotRef.current) : [],
+  );
+
+  // Re-hydrate on workbook swap. The snapshot ref is cleared shortly
+  // after replaceWorkbook so we may need to fall back to wb.save().
+  const lastRevisionRef = useRef(meta.revision);
+  useEffect(() => {
+    if (lastRevisionRef.current === meta.revision) return;
+    lastRevisionRef.current = meta.revision;
+    const snap = snapshotRef.current;
+    if (!snap) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb = api?.getActiveWorkbook?.() as any;
+      const fresh = wb?.save?.();
+      setSparklines(fresh ? readSparklinesFromSnapshot(fresh) : []);
+      return;
+    }
+    setSparklines(readSparklinesFromSnapshot(snap));
+    // snapshotRef is a stable ref object — safe to exclude from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta.revision, api]);
 
   const add = useCallback((model: Omit<SparklineModel, 'id'>): string => {
     const id = `spark-${Math.random().toString(36).slice(2, 10)}`;
