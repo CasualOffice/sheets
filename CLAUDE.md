@@ -26,12 +26,13 @@ A web-based **Excel-equivalent** with real-time collaborative editing, built on 
 
 ## Hard rules
 
-### `vendor/univer/` is read-only reference
+### `vendor/univer/` is our fork — modifiable, not yet wired into the build
 
-- It is a `git clone --depth 1` of `dream-num/univer` at v0.22.x for source-level study.
-- **Never modify files under `vendor/univer/`.**
-- **Never include it in our build or workspace.** When we add `package.json`, do not list it as a workspace.
-- Read it freely. Cite file paths and line numbers when explaining Univer internals.
+- It is a full clone of [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp), our long-term fork of `dream-num/univer` (currently at v0.24.0).
+- **You may modify files under `vendor/univer/`** — commits land in the fork.
+- **Still not included in our build or workspace.** The app consumes `@univerjs/*` from npm (pinned, see `apps/web/package.json`). Until/unless we wire the fork via pnpm overrides or a republished scope, modifications here are upstream work, not local runtime changes.
+- Read it freely. Cite file paths and line numbers when explaining Univer internals; `vendor/univer/packages/.../file.ts:LINE` format still applies.
+- Active perf plan lives at [`docs/UNIVER_FORK_PERF.md`](./docs/UNIVER_FORK_PERF.md).
 
 ### Pin Univer version
 

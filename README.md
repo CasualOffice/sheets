@@ -218,17 +218,17 @@ Then open `http://127.0.0.1:5273/r/<any-room-id>` in two tabs.
 │   ├── CO-EDITING.md            # op-log + presence design
 │   ├── LARGE_FILE_PIPELINE.md   # staged perf plan
 │   └── RESEARCH.md              # Univer technical brief
-├── vendor/univer/               # read-only Univer 0.22.1 source clone (gitignored)
+├── vendor/univer/               # our univer-revamp fork (v0.24.0, gitignored, full clone for source-level edits)
 ├── Dockerfile                   # multi-stage build (deps → build-web → runtime)
 ├── docker-compose.yml           # app + Redis
 ├── PLAN.md                      # phased build plan
 └── CLAUDE.md                    # project guardrails for AI-assisted development
 ```
 
-Bootstrap the vendor clone on a fresh checkout:
+Bootstrap the fork on a fresh checkout (full clone — depth-1 won't carry the history needed for fork commits):
 
 ```sh
-git clone --depth 1 https://github.com/dream-num/univer.git vendor/univer
+git clone git@github.com:schnsrw/univer-revamp.git vendor/univer
 ```
 
 ---
@@ -264,4 +264,4 @@ git clone --depth 1 https://github.com/dream-num/univer.git vendor/univer
 
 Apache-2.0. See [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
 
-Vendored Univer source (`vendor/univer/`) retains its upstream Apache-2.0 license. It is read-only reference and is not part of this project's build.
+Our fork of Univer (`vendor/univer/` → [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp)) retains its upstream Apache-2.0 license. It is gitignored from this repo and is not part of this project's build today; modifications land in the fork repo independently. See [`docs/UNIVER_FORK_PERF.md`](./docs/UNIVER_FORK_PERF.md) for the active perf-improvement plan.

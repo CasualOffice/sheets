@@ -1,6 +1,6 @@
-# Vendor — read-only Univer source clone, kept locally for research.
-# Bootstrap on a fresh checkout:
-#   git clone --depth 1 https://github.com/dream-num/univer.git vendor/univer
+# Vendor — our univer-revamp fork, kept locally for source-level edits.
+# Bootstrap on a fresh checkout (full clone, not depth-1, so fork commits work):
+#   git clone git@github.com:schnsrw/univer-revamp.git vendor/univer
 vendor/
 
 # Dependencies
