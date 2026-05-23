@@ -3435,6 +3435,186 @@ button {
   color: #b91c1c;
 }
 
+/* ── Goal Seek dialog ──────────────────────────────────────────── */
+.goal-seek {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.goal-seek__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.goal-seek__field input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.goal-seek__field input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+.goal-seek__error {
+  color: #b91c1c;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: #fef2f2;
+  border-radius: var(--radius-sm);
+}
+.goal-seek__result {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+.goal-seek__result--ok {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.goal-seek__result--fail {
+  background: #fef3c7;
+  color: #92400e;
+}
+.goal-seek__result code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* ── Recent files landing ──────────────────────────────────────────
+   Mounted inside `.grid-host` as an overlay; shown only on a blank
+   `Untitled` workbook. Univer's canvas paints underneath but the
+   landing covers it so the empty grid doesn't show through. */
+.recent-files-landing {
+  position: absolute;
+  inset: 24px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  max-width: 720px;
+  margin: 0 auto;
+  align-self: flex-start;
+}
+.recent-files-landing__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface-alt);
+}
+.recent-files-landing__header .icon {
+  font-size: 24px;
+  color: var(--color-accent);
+}
+.recent-files-landing__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: var(--weight-semibold, 600);
+  color: var(--color-text);
+}
+.recent-files-landing__list {
+  margin: 0;
+  padding: 8px 8px 0;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.recent-files-landing__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+}
+.recent-files-landing__row:hover { background: var(--color-hover); }
+.recent-files-landing__open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  min-width: 0;
+}
+.recent-files-landing__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+.recent-files-landing__icon .icon { font-size: 22px; }
+.recent-files-landing__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.recent-files-landing__name {
+  font-size: 14px;
+  font-weight: var(--weight-medium, 500);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-files-landing__meta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.recent-files-landing__delete {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+  margin-right: 10px;
+}
+.recent-files-landing__row:hover .recent-files-landing__delete { opacity: 1; }
+.recent-files-landing__delete:hover {
+  background: var(--color-pressed);
+  color: #b91c1c;
+}
+.recent-files-landing__hint {
+  margin: 0;
+  padding: 14px 24px;
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-surface-alt);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
 .page-setup__note {
   margin: 0;
   padding: 10px 12px;

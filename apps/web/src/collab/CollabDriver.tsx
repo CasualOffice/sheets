@@ -278,7 +278,16 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     // the same name in the query string so the server's upgrade handler
     // can validate the password against the right room BEFORE the
     // protocol handshake completes.
-    const url = `${baseWs}${sep}room=${encodeURIComponent(id)}${password ? `&p=${encodeURIComponent(password)}` : ''}`;
+    //
+    // `role` rides on the URL too so the server's `onAuthenticate`
+    // hook can flip the Connection to read-only for view joiners.
+    // The client-side `applyViewOnlyMode` still does its thing for
+    // immediate-UI feedback; the server-side flag is the real gate
+    // against a crafted client that bypasses Univer's permission check.
+    const url =
+      `${baseWs}${sep}room=${encodeURIComponent(id)}` +
+      `${password ? `&p=${encodeURIComponent(password)}` : ''}` +
+      `&role=${encodeURIComponent(joinRole)}`;
 
     const doc = new Y.Doc();
     // Drop messageReconnectTimeout from the default 30 s to 10 s so a

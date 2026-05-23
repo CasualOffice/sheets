@@ -50,6 +50,30 @@ export function attachHocuspocus(
       if (persisted) Y.applyUpdate(document, persisted);
       return document;
     },
+    /**
+     * Server-side view-only enforcement. Until this hook landed, only
+     * the client's `applyViewOnlyMode` + Univer's permission gate
+     * stopped a view-role joiner from mutating the room — easily
+     * bypassed by a crafted client.
+     *
+     * Hocuspocus's `ConnectionConfiguration.readOnly` flag, when set
+     * in `onAuthenticate`, makes the underlying message receiver
+     * reject any incoming sync update for that socket. Setting it
+     * here is the only authoritative gate we control.
+     *
+     * Auth otherwise stays open — the password gate runs in the
+     * upgrade handler (HTTP-level), and Hocuspocus's own auth flow is
+     * effectively a no-op for anonymous rooms.
+     */
+    async onAuthenticate({ requestParameters, connection }) {
+      const role = requestParameters.get('role');
+      if (role === 'view') {
+        connection.readOnly = true;
+      }
+      // Returned object becomes `context` on later hooks. Surface the
+      // role so logs / metrics can attribute writes correctly.
+      return { role: role === 'view' ? 'view' : 'write' };
+    },
     async onChange({ documentName, document }) {
       queueSave(documentName, document as Y.Doc);
     },

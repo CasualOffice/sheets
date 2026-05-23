@@ -8,6 +8,7 @@ import type { ExportExtras } from '../xlsx/export';
 import type { OutlineState } from '../outline/types';
 import type { ChartModel } from '../charts/types';
 import { renderChartToPng, pixelsForChart } from '../charts/render-to-png';
+import { recordRecentFile } from '../recent-files/store';
 import type { PivotModel } from '../pivots/types';
 import { discardAutosaveAfterExplicitSave } from '../autosave/useAutosave';
 import {
@@ -126,6 +127,17 @@ export async function loadSpreadsheetFile(
   // parse-impl.ts `buildHyperlinkBody`). The previous side-channel
   // (`data.__pendingHyperlinks`) + per-link AddHyperLinkCommand replay
   // is gone — that was O(N) awaited round-trips per open.
+
+  // Capture into the recent-files list so the landing screen can
+  // surface this file next visit. Fire-and-forget — IDB failures are
+  // non-fatal for the open path.
+  void recordRecentFile({
+    name: file.name,
+    sourceFormat: format,
+    data,
+    size: file.size,
+    openedAt: Date.now(),
+  }).catch((err) => console.warn('[recent-files] capture failed', err));
 }
 
 export type SaveOptions = {

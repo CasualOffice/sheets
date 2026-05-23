@@ -23,6 +23,7 @@ import { PageSetupDialog } from './PageSetupDialog';
 import { InsertCellsDialog } from './InsertCellsDialog';
 import { PasteSpecialDialog } from './PasteSpecialDialog';
 import { NameManagerDialog } from './NameManagerDialog';
+import { GoalSeekDialog } from './GoalSeekDialog';
 import { flashFill } from './flash-fill';
 import { selectDependents, selectPrecedents } from './formula-refs';
 import { openBugReport } from './report-bug';
@@ -371,6 +372,7 @@ export function MenuBar() {
   const [cellsOp, setCellsOp] = useState<'insert' | 'delete' | null>(null);
   const [showPasteSpecial, setShowPasteSpecial] = useState(false);
   const [showNameManager, setShowNameManager] = useState(false);
+  const [showGoalSeek, setShowGoalSeek] = useState(false);
 
   const onClose = () => setOpen(null);
 
@@ -1204,6 +1206,7 @@ export function MenuBar() {
         { kind: 'item', id: 'sort-custom', label: 'Sort range…', icon: 'sort', run: openCustomSort },
         { kind: 'item', id: 'data-validation', label: 'Data validation…', icon: 'rule', run: openDataValidation },
         { kind: 'item', id: 'name-manager', label: 'Name Manager…', icon: 'bookmark_add', shortcut: 'Ctrl+F3', onClick: () => setShowNameManager(true) },
+        { kind: 'item', id: 'goal-seek', label: 'Goal Seek…', icon: 'analytics', onClick: () => setShowGoalSeek(true) },
         { kind: 'item', id: 'flash-fill', label: 'Flash Fill', icon: 'auto_awesome', shortcut: 'Ctrl+E', run: flashFill },
         { kind: 'separator', id: 'sep-clean' },
         { kind: 'item', id: 'text-to-columns', label: 'Text to Columns', icon: 'splitscreen', run: splitTextToColumns },
@@ -1391,6 +1394,13 @@ export function MenuBar() {
         <NameManagerDialog
           api={api}
           onClose={() => setShowNameManager(false)}
+        />
+      )}
+
+      {showGoalSeek && api && (
+        <GoalSeekDialog
+          api={api}
+          onClose={() => setShowGoalSeek(false)}
         />
       )}
 
