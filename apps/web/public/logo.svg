@@ -1,24 +1,26 @@
-<!-- Full wordmark — brand mark + 'Casual Sheets'. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" fill="none">
-  <rect x="4" y="4" width="64" height="64" rx="14" fill="#217346"/>
-  <g fill="#ffffff" transform="translate(4 4)">
-    <rect x="11" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="26" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="41" y="11" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="11" y="26" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="26" y="26" width="12" height="12" rx="2.5"/>
-    <rect x="41" y="26" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="11" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="26" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
-    <rect x="41" y="41" width="12" height="12" rx="2.5" fill-opacity="0.35"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Casual Sheets">
+  <title>Casual Sheets</title>
+  <!-- Same rounded-tile + tilted-document shape language as
+       docx-editor's brand (uniform suite), recoloured Excel green and
+       with a grid inside instead of text lines so the icon signals
+       "spreadsheet". -->
+  <rect width="64" height="64" rx="14" fill="#217346"/>
+  <g transform="rotate(-6 32 32)">
+    <!-- Page body with folded corner -->
+    <path d="M16 14 H42 L48 20 V50 H16 Z" fill="#ffffff"/>
+    <!-- Folded triangle in a slightly darker tint of the page colour -->
+    <path d="M42 14 L48 20 H42 Z" fill="#e6f0eb"/>
+    <!-- Filled header row in deep green -->
+    <rect x="20" y="24" width="22" height="4" rx="0.5" fill="#217346" opacity="0.85"/>
+    <!-- Horizontal rules — 3 rows -->
+    <rect x="20" y="32" width="22" height="0.6" fill="#217346" opacity="0.45"/>
+    <rect x="20" y="38" width="22" height="0.6" fill="#217346" opacity="0.45"/>
+    <rect x="20" y="44" width="22" height="0.6" fill="#217346" opacity="0.45"/>
+    <!-- Vertical rules — split the body into 4 columns -->
+    <rect x="25.5" y="28" width="0.6" height="16.6" fill="#217346" opacity="0.45"/>
+    <rect x="31" y="28" width="0.6" height="16.6" fill="#217346" opacity="0.45"/>
+    <rect x="36.5" y="28" width="0.6" height="16.6" fill="#217346" opacity="0.45"/>
+    <!-- One accent cell — the "active selection" callout -->
+    <rect x="31.4" y="32.4" width="5.1" height="5.2" fill="#217346" opacity="0.75"/>
   </g>
-
-  <text x="86" y="46" font-family="Inter, -apple-system, system-ui, sans-serif"
-        font-size="28" font-weight="600" fill="#201f1e" letter-spacing="-0.02em">
-    Casual
-  </text>
-  <text x="186" y="46" font-family="Inter, -apple-system, system-ui, sans-serif"
-        font-size="28" font-weight="400" fill="#605e5c" letter-spacing="-0.01em">
-    Sheets
-  </text>
 </svg>

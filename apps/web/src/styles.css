@@ -725,16 +725,39 @@ button {
   background: transparent;
   border-bottom: 0;
   padding: 0;
+  margin: 0;
   height: auto;
   flex: 1;
-  margin-left: -6px; /* nudge first menu label flush with filename left edge */
 }
 /* Make individual menu items a touch denser so the second row reads
-   like a sub-line of the title bar, not a separate strip. */
+   like a sub-line of the title bar, not a separate strip. Horizontal
+   padding matches the filename button's so the two rows share a
+   vertical baseline on the left. */
 .titlebar__center-bottom .menubar__item {
   height: 24px;
   margin: 1px 0;
-  padding: 0 8px;
+  padding: 0 var(--space-3);
+}
+/* First menu item drops its left padding so its text aligns with the
+   filename's text — both anchor to `var(--space-3)` from the centre
+   column's left edge via the filename button's own padding. Without
+   this, "File" sat var(--space-3) px to the right of "Untitled". */
+.titlebar__center-bottom .menubar__item:first-child {
+  padding-left: 0;
+  margin-left: 0;
+}
+/* Match the filename button's own padding to the menu's first-item
+   indent so the text on both rows starts at the same X. */
+.titlebar__center-top .titlebar__filename,
+.titlebar__center-top .titlebar__filename-input {
+  margin-left: 0;
+}
+.titlebar__center-top .titlebar__filename {
+  padding-left: 0;
+}
+.titlebar__center-top .titlebar__filename-input {
+  padding-left: var(--space-2);
+  margin-left: -2px; /* offset the input's internal padding so the text aligns */
 }
 
 .titlebar__brand {
