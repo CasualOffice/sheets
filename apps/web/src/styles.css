@@ -668,20 +668,23 @@ button {
 
 /* Title bar — zone 0 (white). Bigger brand for stronger top-of-page identity. */
 /* Title bar — Google-Docs-style two-row layout, mirroring docx-editor.
-   Outer flex with `align-items: stretch` so the logo + actions span
-   full height naturally. Center column is a vertical flex that
-   centers the two rows in the available height — no rigid grid rows,
-   so the filename input can flex without breaking the menus row.    */
+   Outer flex with `align-items: stretch`. Three columns:
+     • brand: fixed-width logo, vertically centered, full height
+     • center: filename row stacked above menu row, vertically centered
+     • actions: action buttons, vertically centered, full height
+   The single source of truth for "left edge of text rows" is the
+   `--titlebar-row-pad` token — both the filename hover bg and the
+   first menu item inherit it, so the two rows line up perfectly.
+*/
 .titlebar {
+  --titlebar-row-pad: 6px;
   display: flex;
   align-items: stretch;
-  gap: var(--space-4);
+  gap: 12px;
   height: var(--titlebar-h);
-  padding: 0 var(--space-5);
+  padding: 0 16px;
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: var(--text-md);
-  font-weight: var(--weight-medium);
   user-select: none;
   letter-spacing: 0;
   z-index: 4;
@@ -700,70 +703,74 @@ button {
   justify-content: center;
   flex: 1;
   min-width: 0;
-  padding: 0;
-  gap: 0;
+  padding: 4px 0;
+  gap: 1px;
 }
 .titlebar__center-top {
   display: flex;
   align-items: center;
   min-width: 0;
-  /* Filename gets its own line height proportional to the text size —
-     `1.6` keeps the gap above/below comparable to the menu row, so the
-     two rows read like a single block instead of floating elements
-     with extra negative space. */
-  min-height: 30px;
+  height: 26px;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1;
 }
 .titlebar__center-bottom {
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 28px;
+  height: 26px;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1;
 }
+
 /* MenuBar mounts inline inside the title bar — strip the standalone
-   strip's bg/border treatment so it visually belongs to the title bar
-   rather than competing as a separate chrome layer. Also drop the
-   strip's height + padding so it sits flush with center-bottom. */
+   strip's bg/border treatment so it visually belongs to the title bar. */
 .titlebar__center-bottom > .menubar {
   background: transparent;
   border-bottom: 0;
   padding: 0;
   margin: 0;
-  height: auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
   flex: 1;
 }
-/* Make individual menu items a touch denser so the second row reads
-   like a sub-line of the title bar, not a separate strip. Horizontal
-   padding matches the filename button's so the two rows share a
-   vertical baseline on the left. */
+/* Menu items: same horizontal padding as filename so both rows share
+   a vertical baseline on the left. Height matches the row exactly so
+   no extra margins push them around. */
 .titlebar__center-bottom .menubar__item {
-  height: 24px;
-  margin: 1px 0;
-  padding: 0 var(--space-3);
+  height: 22px;
+  margin: 0;
+  padding: 0 var(--titlebar-row-pad);
+  font-size: inherit;
+  line-height: 1;
 }
-/* First menu item drops its left padding so its text aligns with the
-   filename's text — both anchor to `var(--space-3)` from the centre
-   column's left edge via the filename button's own padding. Without
-   this, "File" sat var(--space-3) px to the right of "Untitled". */
-.titlebar__center-bottom .menubar__item:first-child {
-  padding-left: 0;
-  margin-left: 0;
-}
-/* Match the filename button's own padding to the menu's first-item
-   indent so the text on both rows starts at the same X. */
-.titlebar__center-top .titlebar__filename,
-.titlebar__center-top .titlebar__filename-input {
-  margin-left: 0;
-}
+
+/* Filename row — text starts at the same X as the first menu item so
+   the two rows visually align. Hover background reads as a pill that
+   shares the same horizontal padding. */
 .titlebar__center-top .titlebar__filename {
-  padding-left: 0;
+  padding: 0 var(--titlebar-row-pad);
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  font-size: inherit;
+  line-height: 1;
 }
 .titlebar__center-top .titlebar__filename-input {
-  padding-left: var(--space-2);
-  margin-left: -2px; /* offset the input's internal padding so the text aligns */
+  padding: 0 var(--titlebar-row-pad);
+  height: 22px;
+  font-size: inherit;
+  line-height: 1;
+}
+/* Both filename + first menu item shift LEFT by the shared padding
+   so their text starts flush with the centre column's left edge.
+   This is what makes "Untitled" and "File" land on the same vertical
+   line instead of File sitting `var(--space-3)` to the right. */
+.titlebar__center-top .titlebar__filename,
+.titlebar__center-top .titlebar__filename-input,
+.titlebar__center-bottom .menubar__item:first-child {
+  margin-left: calc(var(--titlebar-row-pad) * -1);
 }
 
 .titlebar__brand {
@@ -781,8 +788,8 @@ button {
 }
 
 .titlebar__brand-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 36px;
   display: inline-block;
   flex-shrink: 0;
 }

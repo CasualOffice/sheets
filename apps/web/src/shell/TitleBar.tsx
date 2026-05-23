@@ -96,8 +96,8 @@ export function TitleBar() {
           src={`${import.meta.env.BASE_URL}brand.svg`}
           alt="Casual Sheets"
           className="titlebar__brand-icon"
-          width={32}
-          height={32}
+          width={28}
+          height={36}
         />
       </a>
       <div className="titlebar__center">
