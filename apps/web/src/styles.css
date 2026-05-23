@@ -87,12 +87,14 @@
   --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
 
-  /* Layout */
-  --titlebar-h: 40px;
-  --menubar-h: 28px;
+  /* Layout — title bar now hosts the menu bar inline (Google Docs
+     pattern), so the two strips collapse into one 64 px chrome layer:
+     ~36 px for filename + actions on top, 28 px for menu items below.
+     `--menubar-h` is intentionally not declared anymore — kept as a
+     comment so a future search for it finds the explanation here. */
+  --titlebar-h: 64px;
   /* Single-row 2-row-group toolbar — 28 px button row × 2 + 2 px gap +
-     8 px padding = 66 px. Group labels are hidden in the toolbar so we
-     don't need room for them. */
+     8 px padding = 66 px. */
   --toolbar-h: 66px;
   --formula-bar-h: 26px;
   --sheet-tabs-h: 28px;
@@ -290,14 +292,12 @@ button {
      regardless of which siblings are present. */
   grid-template-rows:
     var(--titlebar-h)
-    var(--menubar-h)
     var(--toolbar-h)
     var(--formula-bar-h)
     minmax(0, 1fr)
     var(--sheet-tabs-h);
   grid-template-areas:
     'titlebar'
-    'menubar'
     'toolbar'
     'formulabar'
     'gridrow'
@@ -311,21 +311,18 @@ button {
 .app--no-formula-bar {
   grid-template-rows:
     var(--titlebar-h)
-    var(--menubar-h)
     var(--toolbar-h)
     minmax(0, 1fr)
     var(--sheet-tabs-h);
   grid-template-areas:
     'titlebar'
-    'menubar'
     'toolbar'
     'gridrow'
     'sheettabs';
 }
 
 
-.app > .title-bar  { grid-area: titlebar; }
-.app > .menubar    { grid-area: menubar; }
+.app > .titlebar   { grid-area: titlebar; }
 .app > .toolbar    { grid-area: toolbar; }
 .app > .formula-bar { grid-area: formulabar; }
 .app > .grid-row   { grid-area: gridrow; }
@@ -670,10 +667,19 @@ button {
 }
 
 /* Title bar — zone 0 (white). Bigger brand for stronger top-of-page identity. */
+/* Title bar — Google-Docs-style two-row layout. Logo spans both rows
+   on the left, actions span both rows on the right, centre column
+   stacks filename above the MenuBar. CSS Grid keeps each piece pinned
+   to its slot regardless of content width. */
 .titlebar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: 36px 28px;
+  grid-template-areas:
+    'brand center actions'
+    'brand center actions';
   align-items: center;
-  gap: var(--space-5);
+  column-gap: var(--space-5);
   height: var(--titlebar-h);
   padding: 0 var(--space-6);
   background: var(--color-surface);
@@ -683,6 +689,37 @@ button {
   user-select: none;
   letter-spacing: 0;
   z-index: 4;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.titlebar > .titlebar__brand { grid-area: brand; }
+.titlebar > .titlebar__center { grid-area: center; }
+.titlebar > .titlebar__actions { grid-area: actions; }
+
+.titlebar__center {
+  display: grid;
+  grid-template-rows: 36px 28px;
+  min-width: 0;
+}
+.titlebar__center-top {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.titlebar__center-bottom {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* MenuBar mounts inline inside the title bar — strip the standalone
+   strip's bg/border treatment so it visually belongs to the title bar
+   rather than competing as a separate chrome layer. */
+.titlebar__center-bottom > .menubar {
+  background: transparent;
+  border-bottom: 0;
+  padding: 0;
+  height: 28px;
+  margin-left: -6px; /* align first item left of its padded interior */
 }
 
 .titlebar__brand {
@@ -700,14 +737,10 @@ button {
 }
 
 .titlebar__brand-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: inline-block;
   flex-shrink: 0;
-}
-
-.titlebar__brand-name {
-  letter-spacing: -0.01em;
 }
 
 .titlebar__divider {

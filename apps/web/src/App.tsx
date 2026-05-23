@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { IWorkbookData } from '@univerjs/core';
 import { TitleBar } from './shell/TitleBar';
-import { MenuBar } from './shell/MenuBar';
 import { Toolbar } from './shell/Toolbar';
 import { FormulaBar } from './shell/FormulaBar';
 import { SheetTabs } from './shell/SheetTabs';
@@ -285,7 +284,6 @@ export function App() {
                 data-testid="app-shell"
               >
                 <TitleBar />
-                <MenuBar />
                 <Toolbar />
                 <AutosaveRestoreBanner />
                 <PreviewBanner />

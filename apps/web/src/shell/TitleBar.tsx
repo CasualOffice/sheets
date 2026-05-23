@@ -7,11 +7,29 @@ import { AvatarStack } from '../collab/AvatarStack';
 import { useTheme } from '../theme';
 import { Icon } from './Icon';
 import { BusyPill } from './BusyPill';
+import { MenuBar } from './MenuBar';
 
 /**
- * Title bar — brand on the left, editable filename in the middle. Click the
- * filename to rename inline (Google-Sheets pattern); Enter commits, Escape
- * reverts, blur commits the current draft.
+ * Title bar — Google-Docs-style two-row chrome.
+ *
+ *   ┌──────────┬────────────────────────────┬──────────────────┐
+ *   │          │  Document Name             │                  │
+ *   │  Logo    │                            │  Right Actions   │
+ *   │          │  File  Edit  View  Insert  │                  │
+ *   └──────────┴────────────────────────────┴──────────────────┘
+ *
+ * Logo spans both rows on the left, actions span both rows on the
+ * right, and the centre column stacks the editable filename above
+ * the classic dropdown menus. This collapses the previously-separate
+ * menu-bar strip into one chrome layer — fixes the "two competing
+ * nav strips" perception we had before.
+ *
+ * MenuBar is rendered inline here (not as a sibling in App's grid)
+ * so the visual reads as one block. Its keydown effects keep firing
+ * because the component is still mounted, just located differently.
+ *
+ * Click the filename to rename inline; Enter commits, Escape reverts,
+ * blur commits the current draft.
  */
 export function TitleBar() {
   const { meta, renameWorkbook } = useWorkbook();
@@ -71,45 +89,48 @@ export function TitleBar() {
 
   return (
     <header className="titlebar" data-testid="titlebar" role="banner">
-      <a className="titlebar__brand" href="/" aria-label="Casual Sheets — home">
+      <a className="titlebar__brand" href="/" aria-label="Casual Sheets — home" title="Casual Sheets">
         <img
           // Prefix with Vite's BASE_URL so the path resolves under
           // /sheets/ on GitHub Pages and stays at / in local dev.
           src={`${import.meta.env.BASE_URL}brand.svg`}
-          alt=""
+          alt="Casual Sheets"
           className="titlebar__brand-icon"
-          width={28}
-          height={28}
+          width={32}
+          height={32}
         />
-        <span className="titlebar__brand-name">Casual Sheets</span>
       </a>
-      <span className="titlebar__divider" aria-hidden="true" />
-      {editing ? (
-        <input
-          ref={inputRef}
-          type="text"
-          className="titlebar__filename-input"
-          data-testid="titlebar-filename-input"
-          value={draft}
-          maxLength={120}
-          aria-label="Rename file"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={onKeyDown}
-        />
-      ) : (
-        <button
-          type="button"
-          className="titlebar__filename"
-          data-testid="titlebar-filename"
-          title="Rename"
-          onClick={() => setEditing(true)}
-        >
-          {filename}
-        </button>
-      )}
-      <span className="titlebar__spacer" />
-
+      <div className="titlebar__center">
+        <div className="titlebar__center-top">
+          {editing ? (
+            <input
+              ref={inputRef}
+              type="text"
+              className="titlebar__filename-input"
+              data-testid="titlebar-filename-input"
+              value={draft}
+              maxLength={120}
+              aria-label="Rename file"
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={onKeyDown}
+            />
+          ) : (
+            <button
+              type="button"
+              className="titlebar__filename"
+              data-testid="titlebar-filename"
+              title="Rename"
+              onClick={() => setEditing(true)}
+            >
+              {filename}
+            </button>
+          )}
+        </div>
+        <div className="titlebar__center-bottom">
+          <MenuBar />
+        </div>
+      </div>
       <div className="titlebar__actions" data-testid="titlebar-actions">
         <BusyPill />
         <AvatarStack />
