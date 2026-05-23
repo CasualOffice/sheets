@@ -4,25 +4,41 @@ import { useUniverAPI } from '../use-univer';
 import { useTheme } from '../theme';
 
 /**
- * Mirrors our React-side theme state into Univer's own ThemeService so
- * the canvas chrome (column/row headers, gridlines, selection handles,
- * sidebar, popovers Univer owns) flips with the title-bar toggle.
+ * Mirror the React-side theme state into Univer's UI:
  *
- * Univer 0.22 exposes `ThemeService.setDarkMode(boolean)` and a
- * `darkMode$` observable; flipping the flag is enough — Univer's render
- * pipeline re-paints with its dark palette. Without this bridge the
- * chrome around the grid is dark while the grid itself stays bright
- * white, which is the exact "we have themes but no themes" mismatch
- * the user flagged.
+ *   1. Toggle the `univer-dark` class on `<html>`. Univer's compiled
+ *      CSS (`@univerjs/ui/lib/index.css`, `@univerjs/sheets-ui/lib/index.css`)
+ *      ships dozens of `.univer-dark .univer-…` rules — they're the
+ *      ONLY thing that flips column/row headers, gridlines, sidebar
+ *      chrome, popovers, etc. to dark. Without this class on `<html>`
+ *      Univer stays bright even if the React shell is dark.
  *
- * `applyViewOnlyMode`-style pattern: read the injector off FUniver,
- * resolve the service, call the method. Re-runs when api or theme
- * changes.
+ *   2. Also flip `ThemeService.setDarkMode(true)`. Some Univer
+ *      internals subscribe to `darkMode$` directly (notifications,
+ *      message containers, mobile workbench) and skip the class-based
+ *      path. We register both for belt-and-braces; the BehaviorSubject
+ *      is idempotent on identical values.
+ *
+ * `Workbench.tsx` does this class toggle inside its own effect, but it
+ * only runs when Univer renders its full UI. We configure
+ * `UniverUIPlugin` with header/toolbar/footer disabled, so the root
+ * Workbench DOES mount but a few of its layout effects can race our
+ * theme change. Applying the class ourselves guarantees the dark CSS
+ * wins regardless of which effect ran first.
  */
 export function ThemeBridge() {
   const api = useUniverAPI();
   const { theme } = useTheme();
 
+  // Class toggle — independent of api availability so the chrome is
+  // dark from the first paint, before Univer mounts.
+  useEffect(() => {
+    const want = theme === 'dark';
+    document.documentElement.classList.toggle('univer-dark', want);
+  }, [theme]);
+
+  // Univer-service flip — runs once api becomes available, and again
+  // whenever the user toggles.
   useEffect(() => {
     if (!api) return;
     try {
