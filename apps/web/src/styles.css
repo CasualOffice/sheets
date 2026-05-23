@@ -3246,6 +3246,105 @@ button {
   opacity: 0.8;
 }
 
+/* ── Name Manager dialog ────────────────────────────────────────── */
+.name-manager__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.name-manager__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.name-manager__field input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.name-manager__field input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+.name-manager__error {
+  color: #b91c1c;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: #fef2f2;
+  border-radius: var(--radius-sm);
+}
+.name-manager__empty {
+  padding: 16px 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.name-manager__empty code {
+  background: var(--color-surface-alt);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.name-manager__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.name-manager__table th {
+  text-align: left;
+  font-weight: var(--weight-medium, 500);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.name-manager__table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle;
+}
+.name-manager__table tr:last-child td {
+  border-bottom: 0;
+}
+.name-manager__name {
+  font-weight: var(--weight-medium, 500);
+}
+.name-manager__ref code {
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-secondary);
+}
+.name-manager__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
+.name-manager__action {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.name-manager__action:hover {
+  background: var(--color-pressed);
+  color: var(--color-text);
+}
+.name-manager__action--danger:hover {
+  color: #b91c1c;
+}
+
 .page-setup__note {
   margin: 0;
   padding: 10px 12px;

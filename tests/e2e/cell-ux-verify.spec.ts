@@ -20,6 +20,10 @@ const EXPECTED_CELL_ACTIONS = [
   'Copy',
   'Cut',
   'Paste',
+  // Paste Special is added by our `context-menu-extensions.ts` —
+  // verifies the custom command + menu-factory wiring actually
+  // surfaces in Univer's QUICK group alongside Cut / Copy / Paste.
+  'Paste Special',
   'Clear',
   'Merge cells',
   'Unmerge',

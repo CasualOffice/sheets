@@ -832,8 +832,36 @@ test.describe('Calculating', () => {
     expect(formula).toBe('=SUM(A1:A3)');
   });
 
-  test.fixme('Ctrl+E — Flash fill', async ({ page }) => {
+  test('Ctrl+E — Flash Fill (token at index)', async ({ page }) => {
     await setup(page);
+    // Column A: full names. Column B: first name (example) for the
+    // first two rows; Flash Fill should fill the rest with the same
+    // split-by-space pattern.
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 'Ada Lovelace' });
+      ws.getRange('A2').setValue({ v: 'Grace Hopper' });
+      ws.getRange('A3').setValue({ v: 'Linus Torvalds' });
+      ws.getRange('A4').setValue({ v: 'Margaret Hamilton' });
+      ws.getRange('B1').setValue({ v: 'Ada' });
+      ws.getRange('B2').setValue({ v: 'Grace' });
+      ws.getRange('B1:B4').activate();
+    });
     await page.keyboard.press('Control+e');
+    await page.waitForTimeout(150);
+    const values = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      return [
+        ws.getRange('B1').getCellData()?.v,
+        ws.getRange('B2').getCellData()?.v,
+        ws.getRange('B3').getCellData()?.v,
+        ws.getRange('B4').getCellData()?.v,
+      ];
+    });
+    expect(values).toEqual(['Ada', 'Grace', 'Linus', 'Margaret']);
   });
 });

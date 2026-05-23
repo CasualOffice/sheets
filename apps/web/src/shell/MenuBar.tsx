@@ -22,6 +22,8 @@ import { loadPrintOptions, printActiveSheet, savePrintOptions } from './print';
 import { PageSetupDialog } from './PageSetupDialog';
 import { InsertCellsDialog } from './InsertCellsDialog';
 import { PasteSpecialDialog } from './PasteSpecialDialog';
+import { NameManagerDialog } from './NameManagerDialog';
+import { flashFill } from './flash-fill';
 import { openBugReport } from './report-bug';
 import { useCollab } from '../collab/collab-context';
 import { useLoading } from '../loading-context';
@@ -367,6 +369,7 @@ export function MenuBar() {
   // when closed; `'insert'` / `'delete'` when open.
   const [cellsOp, setCellsOp] = useState<'insert' | 'delete' | null>(null);
   const [showPasteSpecial, setShowPasteSpecial] = useState(false);
+  const [showNameManager, setShowNameManager] = useState(false);
 
   const onClose = () => setOpen(null);
 
@@ -516,6 +519,11 @@ export function MenuBar() {
         if (inTextInput) return;
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('casual-open-insert-function'));
+      } else if (e.key === 'F3' && mod && !e.shiftKey && !e.altKey) {
+        // Ctrl+F3 — Name Manager (Excel canonical).
+        if (inTextInput) return;
+        e.preventDefault();
+        setShowNameManager(true);
       } else if (e.key === 'F8' && e.shiftKey && !mod && !e.altKey) {
         // Shift+F8 — Excel's sticky "Add to Selection" mode.
         e.preventDefault();
@@ -665,6 +673,18 @@ export function MenuBar() {
         if (inTextInput) return;
         e.preventDefault();
         setShowPasteSpecial(true);
+      }
+      // ── Flash Fill: Ctrl+E ──────────────────────────────────────
+      // Excel's heuristic pattern-fill — reads examples typed in the
+      // current column, infers a transform from the column to its
+      // left, and fills the blanks. See `flash-fill.ts` for the
+      // algorithm + supported patterns. No-op when no pattern can be
+      // inferred (we don't beep at the user; the silent no-op matches
+      // Excel's behaviour for unclear cases).
+      if (mod && !e.altKey && !e.shiftKey && k === 'e') {
+        if (inTextInput) return;
+        e.preventDefault();
+        if (api) flashFill(api);
       }
       // ── Outline border: Ctrl+Shift+& (US) / Ctrl+Shift+7 ────────
       // Both map to Excel's "outside border". US keyboards report
@@ -1150,6 +1170,8 @@ export function MenuBar() {
       items: [
         { kind: 'item', id: 'sort-custom', label: 'Sort range…', icon: 'sort', run: openCustomSort },
         { kind: 'item', id: 'data-validation', label: 'Data validation…', icon: 'rule', run: openDataValidation },
+        { kind: 'item', id: 'name-manager', label: 'Name Manager…', icon: 'bookmark_add', shortcut: 'Ctrl+F3', onClick: () => setShowNameManager(true) },
+        { kind: 'item', id: 'flash-fill', label: 'Flash Fill', icon: 'auto_awesome', shortcut: 'Ctrl+E', run: flashFill },
         { kind: 'separator', id: 'sep-clean' },
         { kind: 'item', id: 'text-to-columns', label: 'Text to Columns', icon: 'splitscreen', run: splitTextToColumns },
         { kind: 'item', id: 'remove-duplicates', label: 'Remove Duplicates', icon: 'filter_list_off', run: removeDuplicates },
@@ -1329,6 +1351,13 @@ export function MenuBar() {
             setShowPasteSpecial(false);
             if (api) pasteSpecial(api, mode);
           }}
+        />
+      )}
+
+      {showNameManager && api && (
+        <NameManagerDialog
+          api={api}
+          onClose={() => setShowNameManager(false)}
         />
       )}
 
