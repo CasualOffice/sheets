@@ -3731,6 +3731,46 @@ button {
   color: #fde68a;
 }
 
+/* ── Drill-down dialog table ──────────────────────────────────── */
+.drill-down { display: flex; flex-direction: column; min-height: 200px; }
+.drill-down__empty {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 20px 12px;
+}
+.drill-down__scroller {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+}
+.drill-down__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.drill-down__table th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-alt);
+  text-align: left;
+  font-weight: var(--weight-medium, 500);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-divider);
+  white-space: nowrap;
+}
+.drill-down__table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-divider);
+  color: var(--color-text);
+}
+.drill-down__table tr:last-child td { border-bottom: 0; }
+
 .insert-sparkline {
   display: flex;
   flex-direction: column;

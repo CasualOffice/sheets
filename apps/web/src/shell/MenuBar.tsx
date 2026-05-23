@@ -43,6 +43,8 @@ import { usePivots } from '../pivots/pivots-context';
 import { InsertPivotDialog } from '../pivots/InsertPivotDialog';
 import { applyPivot, refreshPivot } from '../pivots/apply';
 import { newPivotId } from '../pivots/types';
+import { computeDrillDown, findPivotAtCell, type DrillDownResult } from '../pivots/drill-down';
+import { DrillDownDialog } from '../pivots/DrillDownDialog';
 import { useOutlineActions } from '../outline/use-outline-actions';
 import { useOutline } from '../outline/outline-context';
 import {
@@ -377,6 +379,7 @@ export function MenuBar() {
   const [showGoalSeek, setShowGoalSeek] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
+  const [drillDownResult, setDrillDownResult] = useState<DrillDownResult | null>(null);
 
   const onClose = () => setOpen(null);
 
@@ -391,6 +394,7 @@ export function MenuBar() {
     save: async () => {},
     new: () => {},
     open: async () => {},
+    drillDown: () => {},
   });
 
   // Intercept Ctrl/Cmd+P globally — the default would print the whole web
@@ -693,6 +697,18 @@ export function MenuBar() {
         e.preventDefault();
         if (api) flashFill(api);
       }
+      // ── Pivot drill-down: Ctrl+Shift+D ─────────────────────────
+      // Pops the source rows that contributed to the selected pivot
+      // cell. Silent no-op when the selection isn't inside a pivot's
+      // recorded output extent (matches Excel's "Show Details" silent
+      // miss on non-pivot cells). Routed through `handlersRef` so
+      // a freshly inserted pivot is visible to the shortcut without
+      // re-binding the keydown listener.
+      if (mod && e.shiftKey && !e.altKey && k === 'd') {
+        if (inTextInput) return;
+        e.preventDefault();
+        handlersRef.current.drillDown();
+      }
       // ── Show Formulas toggle: Ctrl+` ────────────────────────────
       // Excel's `Ctrl+grave-accent` flip. The `e.key` for that key is
       // a literal backtick on US/UK layouts; `e.code` is `Backquote`
@@ -877,6 +893,28 @@ export function MenuBar() {
     }
   };
 
+  // Pivot drill-down: examine the active selection, find the pivot
+  // whose output rectangle contains it, and pop the contributing rows.
+  // No-op when the selection isn't inside a known pivot extent.
+  const runDrillDown = () => {
+    if (!api) return;
+    const wb = api.getActiveWorkbook();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws = wb?.getActiveSheet() as any;
+    const range = ws?.getActiveRange?.();
+    if (!wb || !ws || !range) return;
+    const sheetId = ws.getSheetId?.();
+    const row = range.getRow();
+    const col = range.getColumn();
+    const pivot = findPivotAtCell(pivots.pivots, sheetId, row, col);
+    if (!pivot) {
+      console.debug('[drill-down] no pivot at', { sheetId, row, col });
+      return;
+    }
+    const result = computeDrillDown(api, pivot, row, col);
+    if (result) setDrillDownResult(result);
+  };
+
   // Save writes back in whatever format the file was opened from, falling
   // back to xlsx for a fresh / empty workbook. Mirrors Excel & LibreOffice.
   const handleSave = async () => {
@@ -921,6 +959,7 @@ export function MenuBar() {
       handleNew();
     },
     open: handleOpen,
+    drillDown: runDrillDown,
   };
   const handleExportOds = async () => api && saveAsOds(api, workbook.meta.name || 'workbook');
   const handleExportCsv = async () => api && saveAsCsv(api, workbook.meta.name || 'workbook');
@@ -1244,6 +1283,14 @@ export function MenuBar() {
             }
           },
         },
+        {
+          kind: 'item',
+          id: 'drill-down',
+          label: 'Drill down (selected pivot cell)',
+          icon: 'open_in_new',
+          shortcut: 'Ctrl+Shift+D',
+          onClick: () => api && runDrillDown(),
+        },
         { kind: 'separator', id: 'sep-clean' },
         { kind: 'item', id: 'text-to-columns', label: 'Text to Columns', icon: 'splitscreen', run: splitTextToColumns },
         { kind: 'item', id: 'remove-duplicates', label: 'Remove Duplicates', icon: 'filter_list_off', run: removeDuplicates },
@@ -1440,6 +1487,13 @@ export function MenuBar() {
         <GoalSeekDialog
           api={api}
           onClose={() => setShowGoalSeek(false)}
+        />
+      )}
+
+      {drillDownResult && (
+        <DrillDownDialog
+          result={drillDownResult}
+          onClose={() => setDrillDownResult(null)}
         />
       )}
 
