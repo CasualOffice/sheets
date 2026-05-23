@@ -41,7 +41,7 @@ import { InsertChartDialog } from '../charts/InsertChartDialog';
 import { nextChartName } from '../charts/naming';
 import { usePivots } from '../pivots/pivots-context';
 import { InsertPivotDialog } from '../pivots/InsertPivotDialog';
-import { applyPivot } from '../pivots/apply';
+import { applyPivot, refreshPivot } from '../pivots/apply';
 import { newPivotId } from '../pivots/types';
 import { useOutlineActions } from '../outline/use-outline-actions';
 import { useOutline } from '../outline/outline-context';
@@ -1219,6 +1219,19 @@ export function MenuBar() {
         { kind: 'item', id: 'name-manager', label: 'Name Manager…', icon: 'bookmark_add', shortcut: 'Ctrl+F3', onClick: () => setShowNameManager(true) },
         { kind: 'item', id: 'goal-seek', label: 'Goal Seek…', icon: 'analytics', onClick: () => setShowGoalSeek(true) },
         { kind: 'item', id: 'flash-fill', label: 'Flash Fill', icon: 'auto_awesome', shortcut: 'Ctrl+E', run: flashFill },
+        {
+          kind: 'item',
+          id: 'refresh-pivots',
+          label: 'Refresh PivotTables',
+          icon: 'autorenew',
+          onClick: () => {
+            if (!api) return;
+            for (const p of pivots.pivots) {
+              const extent = refreshPivot(api, p);
+              if (extent) pivots.update(p.id, { lastOutputExtent: extent });
+            }
+          },
+        },
         { kind: 'separator', id: 'sep-clean' },
         { kind: 'item', id: 'text-to-columns', label: 'Text to Columns', icon: 'splitscreen', run: splitTextToColumns },
         { kind: 'item', id: 'remove-duplicates', label: 'Remove Duplicates', icon: 'filter_list_off', run: removeDuplicates },
@@ -1335,7 +1348,7 @@ export function MenuBar() {
           api={api}
           defaultSourceA1={insertPivotDefault}
           onCancel={() => setShowInsertPivot(false)}
-          onConfirm={({ source, target, rowFieldColumn, valueFieldColumn, aggregation }) => {
+          onConfirm={({ source, target, rowFieldColumn, valueFieldColumn, aggregation, filters }) => {
             const wb = api.getActiveWorkbook();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ws = wb?.getActiveSheet() as any;
@@ -1357,10 +1370,13 @@ export function MenuBar() {
               rows: [{ column: rowFieldColumn }],
               cols: [],
               values: [{ column: valueFieldColumn, agg: aggregation }],
+              filters,
               title: `PivotTable ${pivots.pivots.length + 1}`,
             };
-            pivots.insert(model);
-            applyPivot(api, model);
+            const extent = applyPivot(api, model);
+            // Persist the extent on the model so a later refresh can
+            // clear the previous output before writing the new one.
+            pivots.insert(extent ? { ...model, lastOutputExtent: extent } : model);
             setShowInsertPivot(false);
           }}
         />

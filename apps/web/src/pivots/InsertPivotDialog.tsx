@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '../shell/Dialog';
 import type { FUniver } from '@univerjs/core/facade';
-import { PIVOT_AGG_LABELS, type PivotAggregation } from './types';
+import { PIVOT_AGG_LABELS, type PivotAggregation, type PivotFilter } from './types';
 
 type Props = {
   api: FUniver;
@@ -14,6 +14,7 @@ type Props = {
     rowFieldColumn: number;
     valueFieldColumn: number;
     aggregation: PivotAggregation;
+    filters: PivotFilter[];
   }) => void;
 };
 
@@ -39,6 +40,12 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
   const [rowField, setRowField] = useState<number>(0);
   const [valueField, setValueField] = useState<number>(1);
   const [aggregation, setAggregation] = useState<PivotAggregation>('sum');
+  // P1 — filter field. -1 means "no filter".
+  const [filterField, setFilterField] = useState<number>(-1);
+  // Set of currently-allowed values for the filter field. Empty = none
+  // selected = nothing passes; defaults to "all values" when a filter
+  // field is first chosen.
+  const [filterAllowed, setFilterAllowed] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +67,33 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
     }
     return out;
   }, [activeSheet, sourceA1]);
+
+  // Distinct values for the chosen filter field. Recomputed when the
+  // filter column or source range changes. Kept as a sorted string
+  // list so the checklist order is deterministic.
+  const filterValues = useMemo<string[]>(() => {
+    if (filterField < 0) return [];
+    const range = parseRange(activeSheet, sourceA1);
+    if (!range || !activeSheet) return [];
+    const col = range.startColumn + filterField;
+    const seen = new Set<string>();
+    for (let r = range.startRow + 1; r <= range.endRow; r += 1) {
+      const v = activeSheet.getRange(r, col).getValue();
+      const key = v == null ? '' : String(v);
+      seen.add(key);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [activeSheet, sourceA1, filterField]);
+
+  // Default to "all values allowed" whenever the filter field changes
+  // or the source range produces a new set of distinct values.
+  useEffect(() => {
+    if (filterField < 0) {
+      setFilterAllowed(new Set());
+      return;
+    }
+    setFilterAllowed(new Set(filterValues));
+  }, [filterField, filterValues]);
 
   const confirm = () => {
     const source = parseRange(activeSheet, sourceA1.trim());
@@ -87,7 +121,24 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
       setError('Pick a value field from the source columns.');
       return;
     }
-    onConfirm({ source, target, rowFieldColumn: rowField, valueFieldColumn: valueField, aggregation });
+    // Only ship a filter when the user picked a column AND restricted
+    // values — leaving every value checked is equivalent to "no
+    // filter" and avoids storing redundant state on the model.
+    const filters: PivotFilter[] = [];
+    if (filterField >= 0 && filterAllowed.size > 0 && filterAllowed.size < filterValues.length) {
+      filters.push({
+        column: filterField,
+        allowedValues: [...filterAllowed],
+      });
+    }
+    onConfirm({
+      source,
+      target,
+      rowFieldColumn: rowField,
+      valueFieldColumn: valueField,
+      aggregation,
+      filters,
+    });
   };
 
   return (
@@ -207,6 +258,50 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
             </select>
           </label>
         </div>
+
+        <fieldset className="insert-pivot__group">
+          <legend className="insert-pivot__legend">Filter (optional)</legend>
+          <label className="insert-pivot__field">
+            <span className="insert-pivot__field-label">Filter field</span>
+            <select
+              className="insert-pivot__select"
+              data-testid="insert-pivot-filter-field"
+              value={filterField}
+              onChange={(e) => setFilterField(Number(e.target.value))}
+              disabled={headers.length === 0}
+            >
+              <option value={-1}>— None —</option>
+              {headers.map((h, i) => (
+                <option key={i} value={i}>
+                  {h}
+                </option>
+              ))}
+            </select>
+          </label>
+          {filterField >= 0 && filterValues.length > 0 && (
+            <div
+              className="insert-pivot__filter-values"
+              data-testid="insert-pivot-filter-values"
+            >
+              {filterValues.map((v) => (
+                <label key={v} className="insert-pivot__filter-value">
+                  <input
+                    type="checkbox"
+                    data-testid={`insert-pivot-filter-${v || 'blank'}`}
+                    checked={filterAllowed.has(v)}
+                    onChange={(e) => {
+                      const next = new Set(filterAllowed);
+                      if (e.target.checked) next.add(v);
+                      else next.delete(v);
+                      setFilterAllowed(next);
+                    }}
+                  />
+                  <span>{v === '' ? '(blank)' : v}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </fieldset>
 
         {error && (
           <div className="insert-pivot__error" data-testid="insert-pivot-error">

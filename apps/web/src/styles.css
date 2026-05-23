@@ -2959,6 +2959,34 @@ button {
   outline: none;
   border-color: var(--color-accent);
 }
+/* P1 — filter-field value checklist. Capped height with scroll so a
+   high-cardinality filter column (hundreds of distinct values) doesn't
+   blow up the dialog. */
+.insert-pivot__filter-values {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  background: var(--color-surface);
+}
+.insert-pivot__filter-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.insert-pivot__filter-value:hover { background: var(--color-hover); }
+.insert-pivot__filter-value input[type='checkbox'] { accent-color: var(--color-accent); }
+
 .insert-pivot__hint {
   margin: 6px 0 0;
   font-size: 12px;

@@ -47,10 +47,28 @@ export function computePivot(source: SourceMatrix, model: PivotModel): PivotGrid
   const rowFieldCol = model.rows[0]?.column;
   const hasRowField = typeof rowFieldCol === 'number';
 
+  // P1 — apply filter fields BEFORE bucketing. Each filter restricts
+  // records to those whose value in `column` is one of `allowedValues`
+  // (string-compared). Empty allowedValues excludes everything; the
+  // dialog UI never produces that shape (uses remove-filter), but
+  // compute defends against it.
+  const filters = model.filters ?? [];
+  const passesFilters = (rec: PivotCell[]): boolean => {
+    for (const f of filters) {
+      const allowed = new Set(f.allowedValues);
+      const v = rec[f.column];
+      const key = v == null ? '' : String(v);
+      if (!allowed.has(key)) return false;
+    }
+    return true;
+  };
+  const filteredRecords =
+    filters.length > 0 ? source.records.filter(passesFilters) : source.records;
+
   // Bucket records by row key — when no row field is configured we
   // collapse everything into one anonymous bucket (Grand-Total-only).
   const buckets = new Map<string, PivotCell[][]>();
-  for (const rec of source.records) {
+  for (const rec of filteredRecords) {
     const key = hasRowField ? String(rec[rowFieldCol!] ?? '') : '';
     let bucket = buckets.get(key);
     if (!bucket) {
@@ -86,11 +104,12 @@ export function computePivot(source: SourceMatrix, model: PivotModel): PivotGrid
   }
 
   // Grand total — even when there's no row field this provides the
-  // single aggregated cell row.
+  // single aggregated cell row. Aggregates the FILTERED records so the
+  // total matches the visible rows above it.
   const total: PivotCell[] = [];
   if (hasRowField) total.push('Grand Total');
   for (const v of model.values) {
-    total.push(aggregate(source.records.map((r) => r[v.column]), v.agg));
+    total.push(aggregate(filteredRecords.map((r) => r[v.column]), v.agg));
   }
   grid.push(total);
 

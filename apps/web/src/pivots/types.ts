@@ -39,6 +39,15 @@ export type PivotValueField = {
   agg: PivotAggregation;
 };
 
+/** P1 — a filter field. Source records are kept only when the value
+ *  in `column` is one of `allowedValues` (compared as strings). An
+ *  empty `allowedValues` excludes everything; absent entry means no
+ *  restriction. */
+export type PivotFilter = {
+  column: number;
+  allowedValues: string[];
+};
+
 export type PivotModel = {
   id: string;
   /** Sheet the SOURCE data lives on. */
@@ -60,6 +69,14 @@ export type PivotModel = {
   cols: PivotFieldRef[];
   /** Value fields. Each one produces its own column in the output. */
   values: PivotValueField[];
+  /** P1 — filter fields. Optional for backwards-compat; an absent or
+   *  empty array means no filtering. */
+  filters?: PivotFilter[];
+  /** Last written output extent so `Refresh` can clear the previous
+   *  output rectangle before writing the new one. Absent on freshly-
+   *  loaded pivots from pre-P1 workbooks — refresh in that case just
+   *  overwrites the new extent and leaves any residual rows. */
+  lastOutputExtent?: { rows: number; cols: number };
   /** Display name. Auto-generated "PivotTable N" on insert; renameable
    *  via the Pivots panel. */
   title?: string;

@@ -8,12 +8,15 @@ import type { PivotModel } from './types';
  * write is one `setRangeValues` call so it lands as a single Univer
  * mutation — collab and undo both treat it atomically.
  *
- * The caller is responsible for clearing any previous pivot output
- * before calling apply again. P0 always writes a fresh pivot on
- * insert (no prior state to clear); P1's refresh path will clear
- * the previous output region first.
+ * If `prevExtent` is supplied (refresh path), the previous output
+ * rectangle is cleared first so a shrunk pivot doesn't leave residual
+ * rows from the prior write. Insert paths pass null.
  */
-export function applyPivot(api: FUniver, model: PivotModel): { rows: number; cols: number } | null {
+export function applyPivot(
+  api: FUniver,
+  model: PivotModel,
+  prevExtent?: { rows: number; cols: number } | null,
+): { rows: number; cols: number } | null {
   const wb = api.getActiveWorkbook();
   if (!wb) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,8 +31,24 @@ export function applyPivot(api: FUniver, model: PivotModel): { rows: number; col
   const grid = computePivot(matrix, model);
   if (grid.length === 0) return null;
 
+  // Clear the previous extent first if we have one — keeps stale rows
+  // from leaking through when the new grid is smaller (e.g. a filter
+  // narrowed the row keys, or the source range shrank).
+  if (prevExtent && (prevExtent.rows > grid.length || prevExtent.cols > (grid[0]?.length ?? 0))) {
+    clearGridArea(targetWs, model.target, prevExtent);
+  }
+
   writeGridToSheet(targetWs, model.target, grid);
   return { rows: grid.length, cols: grid[0]?.length ?? 0 };
+}
+
+/**
+ * P1 — re-read source data and re-apply the pivot. Refreshing is what
+ * makes pivots track upstream edits; without it the output frozen at
+ * insert time goes stale. Returns the new extent (or null on failure).
+ */
+export function refreshPivot(api: FUniver, model: PivotModel): { rows: number; cols: number } | null {
+  return applyPivot(api, model, model.lastOutputExtent ?? null);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,6 +83,26 @@ function readSourceMatrix(ws: any, src: PivotModel['source']): SourceMatrix {
     if (anyValue) records.push(row);
   }
   return { headers, records };
+}
+
+/** Blank an arbitrary rectangle on the sheet — used by refresh to
+ *  reset the previous output before writing the new grid. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clearGridArea(
+  ws: any,
+  target: { row: number; column: number },
+  extent: { rows: number; cols: number },
+): void {
+  const blank: Array<Array<{ v: null }>> = [];
+  for (let r = 0; r < extent.rows; r += 1) {
+    const row: Array<{ v: null }> = [];
+    for (let c = 0; c < extent.cols; c += 1) {
+      row.push({ v: null });
+    }
+    blank.push(row);
+  }
+  const range = ws.getRange(target.row, target.column, extent.rows, extent.cols);
+  range.setValues(blank);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
