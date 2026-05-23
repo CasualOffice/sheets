@@ -26,6 +26,10 @@ import {
   mergeTablesIntoResources,
   readTablesFromXlsx,
 } from './tables-resource';
+import {
+  capturePassthroughFromBuffer,
+  mergePassthroughIntoResources,
+} from './passthrough-resource';
 import type { ImportedWorkbook } from './import';
 
 /**
@@ -149,6 +153,12 @@ function lettersToCol(letters: string): number {
 }
 
 export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<ImportedWorkbook> {
+  // Capture raw OOXML parts ExcelJS drops (today: xl/vbaProject.bin) before
+  // it consumes the buffer. Reads the same bytes twice — once as zip here,
+  // once as ExcelJS below — but the second JSZip pass is ~tens of ms even
+  // for big files and means we don't lose macros on round-trip.
+  const passthrough = await capturePassthroughFromBuffer(buffer);
+
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
 
@@ -213,6 +223,11 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
   // though Univer can't render the table chrome yet.
   const xlsxTables = readTablesFromXlsx(wb, (excelId) => `sheet-${excelId}`);
   resources = mergeTablesIntoResources(resources, xlsxTables);
+
+  // Raw OOXML parts we captured up top — stash them on the snapshot so
+  // the exporter can re-inject them and the file round-trips as .xlsm
+  // when it carried macros.
+  resources = mergePassthroughIntoResources(resources, passthrough);
 
   for (const ws of wb.worksheets) {
     if (ws.name === RESOURCES_SHEET) continue;

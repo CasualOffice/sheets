@@ -6,7 +6,7 @@ the result with ExcelJS, and compare feature-by-feature.
 
 Legend: `✅` survived · `⚠️` partial (present but shape differs) · `❌` dropped
 
-**Totals**: 41 ✅ · 0 ⚠️ · 0 ❌ (of 41 probes)
+**Totals**: 46 ✅ · 0 ⚠️ · 0 ❌ (of 46 probes)
 
 ## Sheets
 
@@ -138,3 +138,13 @@ Legend: `✅` survived · `⚠️` partial (present but shape differs) · `❌` 
 | Probe | Reference | Actual | Status |
 | --- | --- | --- | --- |
 | creator | `"casual-sheets audit"` | `"casual-sheets audit"` | ✅ |
+
+## Macros (VBA passthrough)
+
+| Probe | Reference | Actual | Status |
+| --- | --- | --- | --- |
+| xl/vbaProject.bin survives round-trip | `"1024 bytes"` | `"1024 bytes"` | ✅ |
+| xl/vbaProject.bin byte-equal to original | `"byte-identical"` | `"byte-identical"` | ✅ |
+| [Content_Types].xml has vbaProject Override | `"present"` | `"present"` | ✅ |
+| xl/_rels/workbook.xml.rels has vbaProject relationship | `"present"` | `"present"` | ✅ |
+| export blob MIME → macroEnabled.12 | `"application/vnd.ms-excel.sheet.macroEnabled.12"` | `"application/vnd.ms-excel.sheet.macroenabled.12"` | ✅ |

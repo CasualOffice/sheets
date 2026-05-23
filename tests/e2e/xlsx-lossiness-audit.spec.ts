@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { waitForUniver } from './_helpers';
@@ -167,6 +168,59 @@ async function buildReferenceXlsx(): Promise<Buffer> {
 
   const arr = await wb.xlsx.writeBuffer();
   return Buffer.from(arr);
+}
+
+/**
+ * Build a minimal .xlsm fixture for the macros byte-passthrough probe.
+ * Starts from an ExcelJS-generated xlsx (so the file is structurally
+ * valid), then JSZip-injects a deterministic 1 KB `vbaProject.bin` plus
+ * the Content_Types Override and workbook rel that make Excel treat the
+ * file as macro-enabled. We never actually run the VBA — the audit just
+ * checks the bytes survive a round-trip through our parser/exporter.
+ */
+async function buildReferenceXlsm(): Promise<{ bytes: Buffer; vbaBytes: Uint8Array }> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Macros');
+  ws.getCell('A1').value = 'macro-enabled fixture';
+  const baseBuf = await wb.xlsx.writeBuffer();
+
+  const vbaBytes = new Uint8Array(1024);
+  // Deterministic, non-zero, byte-recognisable filler so byte-equality
+  // failures show up clearly in test output.
+  for (let i = 0; i < vbaBytes.length; i++) vbaBytes[i] = (i * 37 + 11) & 0xff;
+
+  const zip = await JSZip.loadAsync(baseBuf);
+  zip.file('xl/vbaProject.bin', vbaBytes);
+
+  // Content_Types — Override for the VBA part.
+  const ctEntry = zip.file('[Content_Types].xml');
+  if (ctEntry) {
+    let ct = await ctEntry.async('string');
+    if (!/PartName="\/xl\/vbaProject\.bin"/i.test(ct)) {
+      ct = ct.replace(
+        '</Types>',
+        '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/></Types>',
+      );
+      zip.file('[Content_Types].xml', ct);
+    }
+  }
+
+  // Workbook rels — declare the vbaProject relationship.
+  const relsPath = 'xl/_rels/workbook.xml.rels';
+  const relsEntry = zip.file(relsPath);
+  if (relsEntry) {
+    let rels = await relsEntry.async('string');
+    const used = new Set<number>();
+    for (const m of rels.matchAll(/Id="rId(\d+)"/g)) used.add(Number(m[1]));
+    let next = 1;
+    while (used.has(next)) next++;
+    const rel = `<Relationship Id="rId${next}" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>`;
+    rels = rels.replace('</Relationships>', `${rel}</Relationships>`);
+    zip.file(relsPath, rels);
+  }
+
+  const out = await zip.generateAsync({ type: 'nodebuffer' });
+  return { bytes: out, vbaBytes };
 }
 
 type Probe = {
@@ -490,6 +544,71 @@ test.describe('xlsx round-trip lossiness audit', () => {
     await gotWb.xlsx.load(Buffer.from(roundTripped));
 
     const probes = compareWorkbooks(referenceWb, gotWb);
+
+    // Macros byte-passthrough probes. ExcelJS doesn't surface VBA so we
+    // round-trip a separate .xlsm fixture and JSZip-inspect the result.
+    const { bytes: xlsmBytes, vbaBytes } = await buildReferenceXlsm();
+    const xlsmRoundTripped = await page.evaluate(async (bytesArr) => {
+      const buf = new Uint8Array(bytesArr).buffer;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const snapshot: any = await window.__xlsx!.xlsxToWorkbookData(buf);
+      const blob = await window.__xlsx!.workbookDataToXlsx(snapshot);
+      const out = new Uint8Array(await blob.arrayBuffer());
+      return { bytes: Array.from(out), mime: blob.type };
+    }, Array.from(xlsmBytes));
+
+    const xlsmZip = await JSZip.loadAsync(Buffer.from(xlsmRoundTripped.bytes));
+    const vbaEntry = xlsmZip.file('xl/vbaProject.bin');
+    const vbaActual = vbaEntry ? new Uint8Array(await vbaEntry.async('uint8array')) : null;
+    const bytesEqual = (a: Uint8Array | null, b: Uint8Array) => {
+      if (!a || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      return true;
+    };
+    const ctXml = (await xlsmZip.file('[Content_Types].xml')?.async('string')) ?? '';
+    const wbRels = (await xlsmZip.file('xl/_rels/workbook.xml.rels')?.async('string')) ?? '';
+
+    probes.push({
+      category: 'Macros (VBA passthrough)',
+      what: 'xl/vbaProject.bin survives round-trip',
+      reference: `${vbaBytes.length} bytes`,
+      actual: vbaActual ? `${vbaActual.length} bytes` : 'missing',
+      result: vbaActual?.length === vbaBytes.length,
+    });
+    probes.push({
+      category: 'Macros (VBA passthrough)',
+      what: 'xl/vbaProject.bin byte-equal to original',
+      reference: 'byte-identical',
+      actual: bytesEqual(vbaActual, vbaBytes) ? 'byte-identical' : 'differs',
+      result: bytesEqual(vbaActual, vbaBytes),
+    });
+    probes.push({
+      category: 'Macros (VBA passthrough)',
+      what: '[Content_Types].xml has vbaProject Override',
+      reference: 'present',
+      actual: /PartName="\/xl\/vbaProject\.bin"/i.test(ctXml) ? 'present' : 'missing',
+      result: /PartName="\/xl\/vbaProject\.bin"/i.test(ctXml),
+    });
+    probes.push({
+      category: 'Macros (VBA passthrough)',
+      what: 'xl/_rels/workbook.xml.rels has vbaProject relationship',
+      reference: 'present',
+      actual: /Type="[^"]*vbaProject"/i.test(wbRels) ? 'present' : 'missing',
+      result: /Type="[^"]*vbaProject"/i.test(wbRels),
+    });
+    probes.push({
+      category: 'Macros (VBA passthrough)',
+      what: 'export blob MIME → macroEnabled.12',
+      reference: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+      actual: xlsmRoundTripped.mime,
+      // Chromium normalises Blob MIMEs to lowercase, so compare case-
+      // insensitively. Real Excel cares about file extension + the
+      // Content_Types Override, not this MIME.
+      result:
+        xlsmRoundTripped.mime.toLowerCase() ===
+        'application/vnd.ms-excel.sheet.macroenabled.12',
+    });
+
     const report = buildReport(probes);
 
     // Always write the latest report so the doc reflects the build's actual state.
@@ -514,6 +633,11 @@ test.describe('xlsx round-trip lossiness audit', () => {
     lock('Sheet props', 'frozen columns');
     lock('Sheet props', 'hidden sheet survives');
     lock('Defined names', 'RevenueRange');
+    lock('Macros (VBA passthrough)', 'xl/vbaProject.bin survives round-trip');
+    lock('Macros (VBA passthrough)', 'xl/vbaProject.bin byte-equal to original');
+    lock('Macros (VBA passthrough)', '[Content_Types].xml has vbaProject Override');
+    lock('Macros (VBA passthrough)', 'xl/_rels/workbook.xml.rels has vbaProject relationship');
+    lock('Macros (VBA passthrough)', 'export blob MIME → macroEnabled.12');
     // Note: hyperlinks ARE preserved by our pipeline, but the encoding
     // lives in `cell.p.body.customRanges` (per xlsx-hyperlinks.spec.ts),
     // not in the `cell.value.hyperlink` shape ExcelJS exposes after the

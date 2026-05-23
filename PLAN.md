@@ -97,8 +97,18 @@ All three technical risks proved out:
 | Area | What's needed |
 | --- | --- |
 | Pivots | ~~Multi-row-field with Excel's compact layout~~ ✅ (P1.5 — outer subtotals + indented inner rows + grand total; sub-row dropdown on Insert dialog; drill-down follows the full composite key path) |
-| xlsx round-trip | Complex pivot cache, VBA stub passthrough; numfmt long tail ✅ (lossiness audit now 41/41) |
+| xlsx round-trip | VBA stub passthrough ✅ (lossiness audit now 46/46 — .xlsm files round-trip macros byte-equal). Complex pivot cache deferred to **P6.1** (rel renumbering + workbook.xml surgery); numfmt long tail ✅ |
 | UX | ~~Display-name edit surface post-join~~ ✅ (join prompt now carries a "Joining as" field so users can override their stored name BEFORE peers see them; NamePill stays the post-join surface) |
+
+### P6.1 — Complex pivot cache passthrough (deferred)
+
+xlsx files authored with pivot tables currently lose the `xl/pivotCaches/**`
+and `xl/pivotTables/**` parts on round-trip. The clean fix is the same
+byte-passthrough pattern shipped for VBA, but pivots need extra OOXML
+surgery: rel renumbering across `xl/_rels/workbook.xml.rels` +
+`xl/worksheets/_rels/sheet*.xml.rels` and injection of `<pivotCaches>`
+into the ExcelJS-regenerated `xl/workbook.xml`. Estimated 2 days. Slot
+in alongside the home/templates work as a side track.
 
 ### P7 — WOPI host integration (deferred)
 
@@ -117,7 +127,7 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full diagram and da
 
 | Concern | Pick |
 | --- | --- |
-| Grid + formula engine | Univer OSS 0.22.x |
+| Grid + formula engine | Univer OSS 0.24.x |
 | Frontend | React 18 + Vite + TypeScript strict |
 | Collab | Yjs + Hocuspocus over WebSocket |
 | xlsx I/O | ExcelJS in Web Workers |

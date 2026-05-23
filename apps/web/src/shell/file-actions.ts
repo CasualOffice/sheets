@@ -87,7 +87,7 @@ export async function openSpreadsheetFile(
   else if (lower.endsWith('.tsv') || lower.endsWith('.tab')) data = await tsvToWorkbookData(buf);
   else data = await xlsxToWorkbookData(buf);
   console.info('[open] parsed', { id: data.id, sheets: Object.keys(data.sheets ?? {}).length });
-  data.name = file.name.replace(/\.(xlsx|ods|csv|tsv|tab)$/i, '');
+  data.name = file.name.replace(/\.(xlsx|xlsm|ods|csv|tsv|tab)$/i, '');
   return data;
 }
 
@@ -172,7 +172,11 @@ export async function saveAsXlsx(
     ...(options.sparklines && options.sparklines.length > 0 ? { sparklines: options.sparklines } : {}),
   };
   const blob = await workbookDataToXlsx(snapshot, extras);
-  const finalName = ensureExt(filename, 'xlsx');
+  // If the workbook carried macros (VBA stub passthrough sidecar), the
+  // exporter returns an xlsm-MIME blob — switch the file extension so
+  // Windows treats it as macro-enabled and Excel offers to enable them.
+  const isXlsm = blob.type === 'application/vnd.ms-excel.sheet.macroEnabled.12';
+  const finalName = ensureExt(filename, isXlsm ? 'xlsm' : 'xlsx');
   triggerDownload(blob, finalName);
   toast(api, `Saved as ${finalName}`);
   // The on-disk file now supersedes the autosave slot — drop it so a
@@ -351,7 +355,7 @@ export async function saveAsTsv(api: FUniver, filename = 'workbook.tsv') {
 
 function ensureExt(name: string, ext: string): string {
   const re = new RegExp(`\\.${ext}$`, 'i');
-  return re.test(name) ? name : `${name.replace(/\.(xlsx|ods)$/i, '')}.${ext}`;
+  return re.test(name) ? name : `${name.replace(/\.(xlsx|xlsm|ods)$/i, '')}.${ext}`;
 }
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -372,7 +376,7 @@ export function pickXlsxFile(): Promise<File | null> {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept =
-      '.xlsx,.ods,.csv,.tsv,.tab,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv,text/tab-separated-values';
+      '.xlsx,.xlsm,.ods,.csv,.tsv,.tab,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.oasis.opendocument.spreadsheet,text/csv,text/tab-separated-values';
     input.style.display = 'none';
 
     let settled = false;

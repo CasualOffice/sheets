@@ -23,6 +23,11 @@ import {
   applyTablesToXlsxWorksheet,
   readTablesFromSnapshot,
 } from './tables-resource';
+import {
+  applyPassthroughToXlsxBuffer,
+  mimeForPassthrough,
+  readPassthroughFromSnapshot,
+} from './passthrough-resource';
 import type { ExportExtras } from './export';
 
 /**
@@ -337,9 +342,14 @@ export async function workbookDataToXlsxImpl(
   }
 
   const buf = await wb.xlsx.writeBuffer();
-  return new Blob([buf], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+
+  // Re-inject raw OOXML parts captured at parse time (today: VBA macros).
+  // No-op when the snapshot has no passthrough sidecar; ExcelJS-written
+  // buffer is returned as-is in that path.
+  const passthrough = readPassthroughFromSnapshot(data);
+  const patched = await applyPassthroughToXlsxBuffer(buf as ArrayBuffer, passthrough);
+
+  return new Blob([patched], { type: mimeForPassthrough(passthrough) });
 }
 
 const DEFINED_NAMES_RESOURCE = 'SHEET_DEFINED_NAME_PLUGIN';
