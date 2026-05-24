@@ -42,6 +42,7 @@ import { SparklineLayer } from './sparklines/SparklineLayer';
 import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
 import { useVersionHistoryCapture } from './version-history/useVersionHistoryCapture';
+import { useTouchPan } from './touch/useTouchPan';
 
 export function App() {
   // Snapshot lives in a ref, NOT React state — see workbook-context.tsx.
@@ -284,6 +285,7 @@ export function App() {
             <GrowthDriver />
             <FileDropDriver />
             <AutosaveDriver />
+            <TouchPanDriver />
             <VersionHistoryDriver />
             <PreviewDriver />
             <ThemeBridge />
@@ -343,6 +345,14 @@ function GrowthDriver(): ReactNode {
 /** Effect-only — drives the IDB autosave loop. No-op in collab rooms. */
 function AutosaveDriver(): ReactNode {
   useAutosave();
+  return null;
+}
+
+/** Effect-only — translates touch-drag on the Univer canvas into wheel
+ *  events so the grid scrolls on mobile. Univer 0.24 doesn't ship native
+ *  touch-pan; drop this once it does. */
+function TouchPanDriver(): ReactNode {
+  useTouchPan();
   return null;
 }
 

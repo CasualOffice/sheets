@@ -4958,110 +4958,93 @@ button {
 .version-history__activity .side-panel__header { display: none; }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Responsive shell — keep the app usable on a phone-sized viewport.
-   The Univer canvas grid already handles touch (pinch-zoom, drag-scroll,
+   Responsive shell — viewer + light-editor lane (CLAUDE.md scope).
+   Univer's canvas owns its own touch gestures (pinch-zoom, drag-scroll,
    long-press selection). The chrome around it is what breaks: a 7-tab
-   menu bar + a wide ribbon both want >600 px horizontal. Below ~720 px
-   we let the menu bar and the toolbar scroll horizontally instead of
-   wrapping, drop the title-bar's auxiliary fields, and shrink the chrome
-   heights so more pixels go to the grid.
+   menu bar + a wide ribbon both want >600 px horizontal.
 
-   Co-edit on mobile works today; the bridge does not care about viewport.
-   Editing comfort is a future polish — Phase 3 ships a proper touch UX.
+   Below ~720 px:
+   - chrome strips compress noticeably so more pixels go to the grid
+   - menu bar + toolbar scroll horizontally with a right-edge fade hint
+   - formula bar input gets a discoverable underline + ≥16 px font
+     (iOS Safari auto-zooms inputs under 16 px on focus)
+   Below ~480 px:
+   - toolbar drops to a single-row scrollable strip with icon-only big
+     buttons (light formatting stays one tap away)
+   - titlebar collapses to ~48 px (was 64), brand icon to 24×24
+
+   IMPORTANT — the title-bar uses the className `.titlebar` (single
+   word). Previous mobile rules used `.title-bar` and `--title-bar-h`
+   which silently never matched any element. Fixed below.
    ───────────────────────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
   :root {
-    --title-bar-h: 40px;
-    /* --toolbar-h stays at the desktop 66 px — the 2-row ribbon needs
-       both rows visible even on narrow viewports. Pulling it down to
-       40 px clipped row 2 entirely and hid every secondary icon. */
+    /* Tighter chrome — total chrome height drops from ~184 px (desktop
+       sum of titlebar + toolbar + formula + sheet-tabs) to ~160 px,
+       reclaiming roughly an extra row of grid on a phone-sized viewport. */
+    --titlebar-h: 56px;
+    --formula-bar-h: 32px;
     --sheet-tabs-h: 36px;
   }
 
-  /* Menu bar: items can ride a single scroll strip. Don't wrap them onto
-     two rows — that eats grid real estate every time the user opens the app. */
+  /* Title bar — shrink the brand icon and tighten the two rows so the
+     filename and menu strip both stay legible without claiming a third
+     of the viewport. */
+  .titlebar { padding: 0 12px; gap: 8px; }
+  .titlebar__brand-icon { width: 24px; height: 24px; }
+  .titlebar__center-top { height: 22px; font-size: 13px; }
+  .titlebar__center-bottom { height: 26px; font-size: 13px; }
+  .titlebar__center { padding: 3px 0; }
+  .titlebar__filename, .titlebar__filename-input { height: 22px; }
+  .titlebar__center-bottom .menubar__item { height: 24px; }
+
+  /* Title bar actions strip (Share, kebab) — hide on mobile; everything
+     it carries is also in the File menu. Drives a chunk of horizontal
+     real estate back into the centre column. */
+  .titlebar__actions { display: none; }
+
+  /* Menu bar — single-row horizontal scroll with a right-edge fade so
+     the scroll affordance is visible. The fade is the only hint users
+     get that `Help` lives further right; without it the scroll reads
+     as "nothing's clipped, this is all there is." */
   .menubar {
     overflow-x: auto;
     overflow-y: hidden;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
+            mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
   }
   .menubar::-webkit-scrollbar { display: none; }
-  .menubar__item { flex: 0 0 auto; }
+  .menubar__item {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0 10px;
+  }
 
-  /* Toolbar: same trick. The buttons stay full-size for tap targets. */
+  /* Toolbar — same scroll + fade pattern. Buttons stay tap-friendly. */
   .toolbar {
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+            mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
   }
   .toolbar::-webkit-scrollbar { display: none; }
   .toolbar__inner { padding: 0 8px; }
-
-  /* Ribbon groups pack tighter. */
   .ribbon__group { padding: 0 4px; }
   .ribbon__group-label { display: none; }
 
-  /* Title bar: hide the auxiliary metadata buttons; keep just the brand
-     + workbook name editor. */
-  .title-bar__meta,
-  .title-bar__actions { display: none; }
-
-  /* Formula bar: name box stays at 64 px (still legible). */
+  /* Formula bar — compact name box, discoverable underline on the
+     input, font-size pinned to 16 px (iOS focus-zoom guard). */
   .formula-bar__name-box {
     min-width: 64px;
     width: 64px;
     padding: 0 8px;
     font-size: 12px;
   }
-
-  /* Sheet tabs strip: smaller paddings, scroll horizontally as usual.
-     Drop the zoom slider on phones — pinch-zoom on the canvas covers it. */
-  .sheet-tabs { padding: 0 6px; gap: 4px; }
-  .sheet-tabs__zoom-slider { display: none; }
-  .sheet-tabs__sep { display: none; }
-  .sheet-tabs__stats { display: none; }
-
-  /* Tighter dialog padding so phone-width modals don't lose chrome to gutters. */
-  .dialog__body { padding: 14px 16px; }
-  .dialog__footer { padding: 12px 16px; }
-
-  /* Side panels (Tables, Outline) replace the grid on phones rather than
-     squeezing it — full-width overlay feels more native than a 40 % strip. */
-  .tables-panel,
-  .outline-panel {
-    position: fixed;
-    inset: var(--title-bar-h) 0 var(--sheet-tabs-h) 0;
-    width: auto;
-    flex: none;
-    z-index: 100;
-    border-left: 0;
-  }
-
-  /* Save / message toast stays out of the way of the sheet-tab strip. */
-  .collab-banner { bottom: 72px; max-width: calc(100vw - 16px); }
-}
-
-@media (max-width: 720px) {
-  /* Mobile polish layered on top of the existing 720px rules.
-     CLAUDE.md flipped mobile from out-of-scope to "viewer + light editor"
-     — these tighten chrome behaviour for touch + on-screen-keyboard use. */
-
-  /* Menu-bar overflow affordance — the horizontal scroll is silent without
-     a hint. Fade the right edge so the user knows there's more. */
-  .menubar {
-    -webkit-mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
-            mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
-  }
-  .menubar__item { min-height: 36px; padding: 0 12px; }
-
-  /* Formula-bar input gets a discoverable underline + a comfortable hit
-     area. The empty input was invisible on phone (no border, no
-     placeholder) — easy to miss as a tap target.
-     Font size MUST be ≥ 16 px because iOS Safari auto-zooms text inputs
-     under 16 px on focus, which throws the whole page off. */
   .formula-bar__input {
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
@@ -5073,47 +5056,71 @@ button {
     border-bottom: 2px solid var(--color-accent);
   }
 
-  /* Touch tap-target minimums on every chrome button. The Univer canvas
-     handles its own gestures; this is the outer chrome only. */
-  .title-bar .btn,
+  /* Touch tap-target minimums on every chrome button. */
+  .titlebar .btn,
   .toolbar .btn,
   .formula-bar .formula-bar__action,
-  .formula-bar .formula-bar__fx { min-height: 36px; min-width: 36px; }
+  .formula-bar .formula-bar__fx { min-height: 32px; min-width: 32px; }
 
-  /* Sheet-tabs strip: same fade as the menu bar so the trailing pills
-     (Solo / Save / actions) feel reachable rather than clipped. */
+  /* Sheet tabs — compact paddings + scroll-end fade. Drop the zoom
+     slider + multi-cell stats + section dividers (pinch-zoom on the
+     canvas covers zoom; the stats land on the formula bar). */
   .sheet-tabs {
+    padding: 0 6px;
+    gap: 4px;
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
             mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
   }
+  .sheet-tabs__zoom-slider,
+  .sheet-tabs__sep,
+  .sheet-tabs__stats { display: none; }
+
+  /* Tighter dialog padding so phone-width modals don't lose chrome to gutters. */
+  .dialog__body { padding: 14px 16px; }
+  .dialog__footer { padding: 12px 16px; }
+
+  /* Side panels replace the grid rather than squeezing it. */
+  .tables-panel,
+  .outline-panel {
+    position: fixed;
+    inset: var(--titlebar-h) 0 var(--sheet-tabs-h) 0;
+    width: auto;
+    flex: none;
+    z-index: 100;
+    border-left: 0;
+  }
+
+  /* Save / message toast stays out of the way of the sheet-tab strip. */
+  .collab-banner { bottom: 72px; max-width: calc(100vw - 16px); }
 }
 
 @media (max-width: 480px) {
-  /* Very narrow phones — pre-mobile-pass behaviour hid the toolbar
-     entirely so the menus carried every command. After the mobile flip,
-     light formatting (B/I/U + currency/percent/comma) needs to be one
-     tap away too, so we keep the toolbar visible but compact it into a
-     single-row scrollable strip.
-     Row 2 of every ribbon group is hidden, labels collapse to icons,
-     overflow goes horizontal with the same fade affordance as the
-     menu bar. */
-  :root { --toolbar-h: 48px; }
-  .toolbar {
-    display: block;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
-            mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+  /* Very narrow phones — toolbar collapses to a single-row icon-only
+     scrollable strip with row 2 of every ribbon group hidden. Light
+     formatting (B/I/U + currency/percent/comma + font picker) stays
+     one tap away — but each button drops to icon-only. */
+  :root {
+    --titlebar-h: 48px;
+    --toolbar-h: 40px;
+    --sheet-tabs-h: 32px;
   }
-  .toolbar::-webkit-scrollbar { display: none; }
-  /* Hide row 2 of every ribbon group (keeps the primary buttons up top). */
+
+  /* Even tighter titlebar — drop brand label, keep just the icon. */
+  .titlebar { padding: 0 8px; gap: 6px; }
+  .titlebar__center-top { height: 20px; font-size: 12.5px; }
+  .titlebar__center-bottom { height: 22px; font-size: 12.5px; }
+  .titlebar__brand-icon { width: 22px; height: 22px; }
+  .titlebar__divider { display: none; }
+
+  /* Toolbar: row 2 hidden, big-button labels + chevrons off, ~36 px
+     square hit targets. */
   .toolbar .ribbon__group-row[data-row='2'] { display: none; }
-  /* Big-button labels off; chevrons off — icon-only, ~36 px square. */
   .toolbar .btn__big-label,
   .toolbar .btn__big-chevron { display: none; }
-  .toolbar .btn--big { padding: 0 8px; min-width: 40px; }
-  .toolbar .btn--big .icon { font-size: 20px; }
-  /* Hide the group-lead "more" chevrons too at this width. */
+  .toolbar .btn--big { padding: 0 8px; min-width: 36px; height: 32px; }
+  .toolbar .btn--big .icon { font-size: 18px; }
   .toolbar .ribbon__group-lead { display: none; }
+
+  /* Sheet tabs even tighter. */
+  .sheet-tabs__tab { min-height: 28px; padding: 0 10px; }
 }

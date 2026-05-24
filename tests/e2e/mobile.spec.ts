@@ -85,6 +85,97 @@ test.describe('Mobile shell (375 × 667)', () => {
     // the whole layout shifts on focus and editing becomes unusable.
     expect(fontSize, `formula-bar input font-size was ${fontSize}px`).toBeGreaterThanOrEqual(16);
   });
+
+  test('touch-drag on the canvas dispatches wheel events (TouchPanDriver wired)', async ({ page }) => {
+    // Univer 0.24 has no native touch-pan — we synthesize wheel events
+    // from touchmove deltas in `useTouchPan`. Dismiss the home overlay,
+    // instrument the canvas to count wheel events, simulate a single-
+    // finger upward swipe, and assert the wheel counter went up. That
+    // proves the touch→wheel translation works without depending on
+    // Univer's scroll-state being observable from the DOM.
+    await dismissHome(page);
+
+    // Wait for the visible render-canvas. Univer mounts two canvases —
+    // a visible main one + a 0×0 print one — so filter to the main.
+    await page.waitForFunction(
+      () => {
+        const all = Array.from(document.querySelectorAll('canvas[data-u-comp="render-canvas"]'));
+        return all.some((c) => (c as HTMLCanvasElement).width > 0);
+      },
+      { timeout: 10_000 },
+    );
+
+    // Instrument the canvas: count wheel events. Listen on the
+    // visible canvas (the print one is 0×0).
+    await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll('canvas[data-u-comp="render-canvas"]'));
+      const c = all.find((el) => (el as HTMLCanvasElement).width > 0) as HTMLCanvasElement | undefined;
+      if (!c) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__wheelCount = 0;
+      c.addEventListener(
+        'wheel',
+        () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__wheelCount = ((window as any).__wheelCount ?? 0) + 1;
+        },
+        true,
+      );
+    });
+
+    const box = await page.locator('[data-testid="univer-host"]').boundingBox();
+    expect(box, 'univer-host bbox').not.toBeNull();
+    if (!box) return;
+
+    const cx = box.x + box.width / 2;
+    const startY = box.y + box.height - 60;
+    const endY = box.y + 80;
+
+    // Drive raw TouchEvents — Playwright's touchscreen API only does
+    // tap/discrete, not drag. Capture-phase listener in useTouchPan
+    // picks these up and re-dispatches as wheel events.
+    for (let step = 0; step <= 4; step++) {
+      const y = startY - ((startY - endY) * (step / 4));
+      await page.evaluate(
+        ({ x, y, step }) => {
+          const targetEl = document.elementFromPoint(x, y) ?? document.body;
+          const type = step === 0 ? 'touchstart' : step === 4 ? 'touchend' : 'touchmove';
+          const touch = new Touch({
+            identifier: 1,
+            target: targetEl,
+            clientX: x,
+            clientY: y,
+            pageX: x,
+            pageY: y,
+            radiusX: 5,
+            radiusY: 5,
+            rotationAngle: 0,
+            force: 1,
+          });
+          const ev = new TouchEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            touches: type === 'touchend' ? [] : [touch],
+            targetTouches: type === 'touchend' ? [] : [touch],
+            changedTouches: [touch],
+          });
+          targetEl.dispatchEvent(ev);
+        },
+        { x: cx, y, step },
+      );
+      await page.waitForTimeout(40);
+    }
+
+    // useTouchPan dispatches one wheel per touchmove past the threshold —
+    // we ran 3 moves, so we expect at least 2 wheels (the first move
+    // crosses the threshold; the rest each fire one).
+    const wheelCount = await page.evaluate(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__wheelCount as number | undefined,
+    );
+    expect(wheelCount ?? 0, 'touch-drag should have dispatched wheel events on the canvas')
+      .toBeGreaterThanOrEqual(2);
+  });
 });
 
 test.describe('Collab indicator', () => {
