@@ -3,11 +3,128 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Casual Sheets</title>
+    <title>Casual Sheets — Excel-flavored web spreadsheet · Open source</title>
+    <meta
+      name="description"
+      content="Open-source web spreadsheet with .xlsx round-trip, real-time co-editing, pivot tables, 8 chart types, sparklines, version history, and a self-hosted Docker image. Looks and behaves like Microsoft Excel. Apache-2.0."
+    />
+    <meta name="author" content="Sachin Sarwa" />
     <meta name="theme-color" content="#217346" />
-    <meta name="description" content="Casual Sheets — a web spreadsheet" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Casual Sheets" />
+    <meta property="og:title" content="Casual Sheets — Excel-flavored web spreadsheet" />
+    <meta
+      property="og:description"
+      content="Open .xlsx in the browser, edit like the web, save back. Real-time co-editing. Self-host via Docker. Open source (Apache-2.0)."
+    />
+    <meta property="og:url" content="https://sheet.schnsrw.live/" />
+    <meta property="og:image" content="https://sheet.schnsrw.live/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Casual Sheets — Excel-flavored web spreadsheet by Sachin Sarwa" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Casual Sheets — Excel-flavored web spreadsheet" />
+    <meta
+      name="twitter:description"
+      content="Open .xlsx in the browser, edit like the web, save back. Real-time co-editing. Self-host via Docker. Open source."
+    />
+    <meta name="twitter:image" content="https://sheet.schnsrw.live/og.png" />
+    <meta name="twitter:image:alt" content="Casual Sheets — Excel-flavored web spreadsheet" />
+
+    <!-- Discoverability — explicit AI-crawler opt-in lives in /robots.txt -->
+    <meta
+      name="robots"
+      content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta
+      name="keywords"
+      content="web spreadsheet, Excel for the web, xlsx editor, ods editor, csv editor, open-source spreadsheet, self-hosted spreadsheet, real-time spreadsheet, collaborative spreadsheet, Univer OSS, Yjs, Hocuspocus, Docker spreadsheet, pivot tables, charts, sparklines, VBA macros, Apache-2.0, Casual Sheets, Sachin Sarwa"
+    />
+
+    <link rel="canonical" href="https://sheet.schnsrw.live/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!--
+      JSON-LD: SoftwareApplication + Person + WebSite.
+      Google's rich-results indexer + LLM crawlers (Perplexity, ChatGPT
+      web search, Claude web search) preferentially absorb structured
+      data. Keep `softwareVersion`, `featureList`, and `screenshot` fresh.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://sheet.schnsrw.live/#app",
+            "name": "Casual Sheets",
+            "alternateName": "casual-sheets",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "SpreadsheetApplication",
+            "operatingSystem": "Web Browser, Docker (Linux/amd64, Linux/arm64)",
+            "url": "https://sheet.schnsrw.live/",
+            "downloadUrl": "https://hub.docker.com/r/schnsrw/casual-sheets",
+            "codeRepository": "https://github.com/schnsrw/sheets",
+            "softwareVersion": "0.0.6",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "description": "Open-source, self-hostable web spreadsheet that opens and saves native .xlsx (plus .ods, .csv, .tsv) with real-time multi-user co-editing. Behaves like Microsoft Excel — ribbon, formula bar, file-centric workflow. Includes pivot tables with drill-down, 8 chart types with trendlines, sparklines (line/column/win-loss), version history with auto-snapshots, conditional formatting, data validation, and .xlsm macro passthrough that round-trips byte-equal.",
+            "image": "https://sheet.schnsrw.live/og.png",
+            "screenshot": "https://sheet.schnsrw.live/og.png",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            "author": { "@id": "https://schnsrw.live/#person" },
+            "creator": { "@id": "https://schnsrw.live/#person" },
+            "publisher": { "@id": "https://schnsrw.live/#person" },
+            "featureList": [
+              "Open and save native .xlsx, .ods, .csv, .tsv files",
+              "Real-time multi-user co-editing via Yjs and Hocuspocus",
+              "Pivot tables with multi-row compact layout and drill-down (Ctrl+Shift+D)",
+              "8 chart types with trendlines, date-axis detection, per-series colour overrides",
+              "Sparklines: line, column, and win-loss",
+              "Version history with auto-snapshots and one-click restore",
+              "Conditional formatting and data validation",
+              ".xlsm macro passthrough — vbaProject.bin round-trips byte-equal",
+              "Self-hostable Docker image (single port, embedded WebSocket gateway)",
+              "Dark mode bridged into Univer's canvas chrome",
+              "Anonymous room URLs with optional password-protected co-edit",
+              "11-template home gallery (Personal / Work / Finance / Education)"
+            ],
+            "softwareRequirements": "Modern desktop browser (Chrome, Firefox, Safari, Edge). Docker 20+ for self-hosting.",
+            "isAccessibleForFree": true,
+            "keywords": "spreadsheet, xlsx editor, open source, real-time, co-editing, self-hosted, Docker, Univer OSS, Yjs, pivot tables, charts"
+          },
+          {
+            "@type": "Person",
+            "@id": "https://schnsrw.live/#person",
+            "name": "Sachin Sarwa",
+            "url": "https://schnsrw.live/",
+            "sameAs": [
+              "https://github.com/schnsrw",
+              "https://hub.docker.com/u/schnsrw"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://sheet.schnsrw.live/#website",
+            "url": "https://sheet.schnsrw.live/",
+            "name": "Casual Sheets",
+            "publisher": { "@id": "https://schnsrw.live/#person" }
+          }
+        ]
+      }
+    </script>
 
     <!-- Google Fonts (Inter for UI) + Material Symbols Outlined (icons).
          preconnect cuts ~100ms off the first font request. -->

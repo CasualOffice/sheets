@@ -1,0 +1,93 @@
+# Casual Sheets — Excel-flavored web spreadsheet
+
+> Open-source, self-hostable web spreadsheet that opens and saves native
+> .xlsx (plus .ods, .csv, .tsv) with real-time multi-user co-editing.
+> Behaves like Microsoft Excel — ribbon, formula bar, file-centric
+> workflow. Built on Univer OSS (Apache-2.0) with a custom Office-style
+> shell. Apache-2.0 throughout.
+
+## Quick facts
+
+- **License:** Apache-2.0
+- **Repo:** https://github.com/schnsrw/sheets
+- **Live demo:** https://sheet.schnsrw.live/
+- **Docker:** https://hub.docker.com/r/schnsrw/casual-sheets
+- **Marketing site:** https://schnsrw.live/casual-sheets/
+- **Author:** Sachin Sarwa — https://schnsrw.live/
+- **Current version:** v0.0.6
+- **Test coverage:** 357 Playwright end-to-end tests on every push
+
+## What it does
+
+- Opens and saves native `.xlsx`, `.ods`, `.csv`, `.tsv` files.
+  ExcelJS-backed parser with a 41/41-probe lossiness audit on
+  styles, formulas, number formats, hyperlinks, defined names,
+  data validation, page setup, tables, freeze, hidden sheets,
+  and workbook metadata.
+- `.xlsm` files round-trip byte-equal — captures `xl/vbaProject.bin`
+  before parse and re-injects post-export with `[Content_Types].xml`
+  + workbook-rel patching. We never execute the VBA.
+- Real-time co-editing via Yjs + Hocuspocus over a stateless Go-free
+  Node WebSocket gateway. Anonymous rooms identified by URL.
+  Optional password-protected rooms with SHA-256 client gate +
+  server `onAuthenticate` enforcement for view-only roles.
+- Pivot tables with multi-row compact layout and drill-down
+  (Ctrl+Shift+D). Sparklines: line, column, win-loss.
+- 8 chart types (line, column, bar, pie, donut, scatter, area,
+  combo) with trendlines, date-axis detection, per-series colour
+  overrides. ECharts overlay anchored to cell ranges.
+- Conditional formatting, data validation, named ranges, comments,
+  hyperlinks, freeze panes, hidden sheets, tab colours, dark mode.
+- Version history side panel with auto-snapshots and one-click
+  restore (single-user mode).
+- Autosave to IndexedDB with restore banner on reload.
+- 11-template home gallery (Personal / Work / Finance / Education)
+  with hand-tuned data-driven thumbnail previews.
+
+## Architecture
+
+- **Frontend:** React 18 + Vite + TypeScript strict, Univer OSS
+  for the grid + formula engine.
+- **Collab:** Yjs + Hocuspocus over WebSocket. Server-side view-only
+  enforcement via `onAuthenticate`.
+- **xlsx I/O:** ExcelJS in Web Workers. JSZip for raw OOXML-part
+  passthrough (today: VBA).
+- **ods / csv / tsv:** `@e965/xlsx` in Web Workers.
+- **Charts:** ECharts overlay anchored to cell ranges via a custom
+  coordinate transform that respects zoom + frozen panes.
+- **Persistence:** Redis optional in the Docker image, 7-day TTL on
+  rooms. No DB. State lives in memory while a session is active.
+- **Container:** Node 22 Alpine, multi-arch (amd64 + arm64). Single
+  port (3000) serves the web app + Hocuspocus + Fastify together.
+
+## Architectural principles
+
+- **File-centric.** Native Office formats are the source of truth.
+  Open, edit, save back. Never an export-only model.
+- **Stateless backend.** No DB, no on-disk update log in the
+  real-time service. The host owns persistence (WOPI in v1+, inline
+  in v0).
+- **No accounts, no lock-in.** Anonymous sessions identified by room
+  URL. Self-host the Docker image and you own everything.
+- **OSS dependencies, no Pro pinning.** Univer OSS only — we never
+  reach for Univer's commercial layer for charts/pivots/print.
+
+## Sibling projects
+
+Part of a three-project suite all by Sachin Sarwa:
+
+- **Casual Sheets** — this project — https://sheet.schnsrw.live/
+- **Casual Editor** — Word-flavored web `.docx` editor —
+  https://doc.schnsrw.live/ — https://github.com/schnsrw/docx
+- **Casual Desktop** — Tauri binaries reusing the web cores —
+  in progress.
+
+## Tech stack
+
+- **Frontend:** TypeScript · React · Vite · Univer OSS
+- **Realtime:** Yjs · Hocuspocus · WebSocket
+- **xlsx:** ExcelJS · JSZip · `@e965/xlsx`
+- **Charts:** ECharts
+- **Backend (single Node service):** Fastify · Hocuspocus
+- **Quality:** Playwright (357 e2e tests) · ESLint · Prettier · TypeScript strict
+- **Ops:** Docker · GitHub Actions · GitHub Pages (demo) · Docker Hub

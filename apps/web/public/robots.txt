@@ -1,0 +1,49 @@
+# sheet.schnsrw.live — open to search engines + AI crawlers.
+# The app is the live demo for Casual Sheets, an open-source web
+# spreadsheet. Indexing helps users + assistants discover it.
+# Matches the policy declared on the canonical landing site
+# (https://schnsrw.live/robots.txt).
+
+User-agent: *
+Allow: /
+
+# Explicit opt-in for major AI crawlers. Some respect these tokens
+# even when `*` already allows; listed individually so intent is
+# unambiguous.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://sheet.schnsrw.live/sitemap.xml
