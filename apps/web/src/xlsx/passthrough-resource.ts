@@ -1,18 +1,33 @@
 import JSZip from 'jszip';
 import type { IWorkbookData } from '@univerjs/core';
+import {
+  applyPivotsToZip,
+  capturePivotsFromBuffer,
+  type PivotPassthroughPayload,
+} from './pivot-passthrough';
 
 /**
  * Sidecar resource that carries raw OOXML parts ExcelJS silently drops.
- * Today: xl/vbaProject.bin only (macros). Files round-trip as .xlsm so
- * the macros still run when re-opened in real Excel — we never execute
- * the VBA, just preserve the bytes. Complex pivot cache passthrough is
- * deferred to P6.1 (rel renumbering + workbook.xml surgery).
+ *
+ * Today we passthrough:
+ *  - `xl/vbaProject.bin` — `.xlsm` macros round-trip byte-equal.
+ *  - `xl/pivotCaches/**` + `xl/pivotTables/**` — pivot definitions
+ *    survive a round-trip so Excel still sees the file as having
+ *    pivot tables (the materialised cells already survive via the
+ *    normal cell pipeline; this re-instates the metadata Excel
+ *    needs to render filter dropdowns, refresh, etc).
+ *
+ * We never execute VBA. The pivot OOXML is treated as opaque bytes —
+ * Univer doesn't render pivots from the OOXML, only the cells; this
+ * preserves the metadata for Excel's benefit.
  */
 export const XLSX_PASSTHROUGH_RESOURCE = '__casual_sheets_xlsx_passthrough__';
 
 export type XlsxPassthroughPayload = {
   /** base64-encoded contents of xl/vbaProject.bin */
   vba?: { binBase64: string };
+  /** raw OOXML pivot machinery — see pivot-passthrough.ts */
+  pivots?: PivotPassthroughPayload;
 };
 
 const VBA_REL_TYPE =
@@ -38,16 +53,26 @@ export function extensionForPassthrough(
 export async function capturePassthroughFromBuffer(
   buffer: ArrayBuffer,
 ): Promise<XlsxPassthroughPayload | undefined> {
-  let zip: JSZip;
+  // VBA — single binary part. Cheap probe; bail early if neither
+  // VBA nor pivots are present.
+  let vba: XlsxPassthroughPayload['vba'];
   try {
-    zip = await JSZip.loadAsync(buffer);
+    const zip = await JSZip.loadAsync(buffer);
+    const vbaFile = zip.file('xl/vbaProject.bin');
+    if (vbaFile) {
+      vba = { binBase64: await vbaFile.async('base64') };
+    }
   } catch {
     return undefined;
   }
-  const vbaFile = zip.file('xl/vbaProject.bin');
-  if (!vbaFile) return undefined;
-  const binBase64 = await vbaFile.async('base64');
-  return { vba: { binBase64 } };
+
+  // Pivots — re-opens the buffer internally. Could be optimised to a
+  // single zip read but the second open is ~tens of ms even for big
+  // files and the symmetry with VBA is more important.
+  const pivots = await capturePivotsFromBuffer(buffer);
+
+  if (!vba && !pivots) return undefined;
+  return { vba, pivots };
 }
 
 export function mergePassthroughIntoResources(
@@ -82,15 +107,19 @@ const REL_TYPE_REGEX_ESCAPE = (s: string) =>
   s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Re-inject captured OOXML parts into the ExcelJS-written buffer. The
- * input buffer is read but not mutated; a fresh ArrayBuffer is returned.
- * Pass-through is a no-op when payload is empty.
+ * Re-inject every captured OOXML payload into the ExcelJS-written
+ * buffer in one pass. VBA + pivots share a single JSZip session so
+ * the [Content_Types].xml + workbook.xml.rels patches compose cleanly
+ * (each patch sees the previous step's writes).
+ *
+ * The input buffer is read but not mutated; a fresh ArrayBuffer is
+ * returned. No-op when the payload is empty.
  */
 export async function applyPassthroughToXlsxBuffer(
   excelJsBuffer: ArrayBuffer | Uint8Array,
   payload: XlsxPassthroughPayload | undefined,
 ): Promise<ArrayBuffer> {
-  if (!payload?.vba) {
+  if (!payload?.vba && !payload?.pivots) {
     if (excelJsBuffer instanceof ArrayBuffer) return excelJsBuffer;
     return excelJsBuffer.buffer.slice(
       excelJsBuffer.byteOffset,
@@ -100,7 +129,17 @@ export async function applyPassthroughToXlsxBuffer(
 
   const zip = await JSZip.loadAsync(excelJsBuffer);
 
-  zip.file('xl/vbaProject.bin', payload.vba.binBase64, { base64: true });
+  if (payload.vba) await applyVbaToZip(zip, payload.vba);
+  if (payload.pivots) await applyPivotsToZip(zip, payload.pivots);
+
+  return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+async function applyVbaToZip(
+  zip: JSZip,
+  vba: NonNullable<XlsxPassthroughPayload['vba']>,
+): Promise<void> {
+  zip.file('xl/vbaProject.bin', vba.binBase64, { base64: true });
 
   // [Content_Types].xml — add Override for /xl/vbaProject.bin if missing.
   const ctEntry = zip.file('[Content_Types].xml');
@@ -113,10 +152,9 @@ export async function applyPassthroughToXlsxBuffer(
     }
   }
 
-  // xl/_rels/workbook.xml.rels — append a vbaProject relationship with
-  // the next-free rId. ExcelJS-written rels file already declares the
-  // sheet / styles / theme / sharedStrings parts; we just need a unique
-  // id that doesn't collide.
+  // xl/_rels/workbook.xml.rels — append a vbaProject relationship
+  // with the next-free rId. ExcelJS-written rels already declares
+  // sheet / styles / theme / sharedStrings; just need a unique id.
   const relsPath = 'xl/_rels/workbook.xml.rels';
   const relsEntry = zip.file(relsPath);
   if (relsEntry) {
@@ -134,6 +172,4 @@ export async function applyPassthroughToXlsxBuffer(
       zip.file(relsPath, rels);
     }
   }
-
-  return zip.generateAsync({ type: 'arraybuffer' });
 }

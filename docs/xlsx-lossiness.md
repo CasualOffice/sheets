@@ -6,7 +6,7 @@ the result with ExcelJS, and compare feature-by-feature.
 
 Legend: `✅` survived · `⚠️` partial (present but shape differs) · `❌` dropped
 
-**Totals**: 46 ✅ · 0 ⚠️ · 0 ❌ (of 46 probes)
+**Totals**: 54 ✅ · 0 ⚠️ · 0 ❌ (of 54 probes)
 
 ## Sheets
 
@@ -148,3 +148,16 @@ Legend: `✅` survived · `⚠️` partial (present but shape differs) · `❌` 
 | [Content_Types].xml has vbaProject Override | `"present"` | `"present"` | ✅ |
 | xl/_rels/workbook.xml.rels has vbaProject relationship | `"present"` | `"present"` | ✅ |
 | export blob MIME → macroEnabled.12 | `"application/vnd.ms-excel.sheet.macroEnabled.12"` | `"application/vnd.ms-excel.sheet.macroenabled.12"` | ✅ |
+
+## Pivots (cache passthrough)
+
+| Probe | Reference | Actual | Status |
+| --- | --- | --- | --- |
+| xl/pivotCaches/pivotCacheDefinition1.xml survives round-trip | `"contains marker CASUAL-AUDIT-CACHE-DEF"` | `"present + marker"` | ✅ |
+| xl/pivotCaches/pivotCacheRecords1.xml survives round-trip | `"contains marker CASUAL-AUDIT-CACHE-REC"` | `"present + marker"` | ✅ |
+| xl/pivotTables/pivotTable1.xml survives round-trip | `"contains marker CASUAL-AUDIT-PIVOT-TABLE"` | `"present + marker"` | ✅ |
+| [Content_Types].xml has pivotCacheDefinition Override | `"present"` | `"present"` | ✅ |
+| [Content_Types].xml has pivotTable Override | `"present"` | `"present"` | ✅ |
+| xl/workbook.xml has <pivotCaches> element | `"present"` | `"present"` | ✅ |
+| xl/_rels/workbook.xml.rels has pivotCacheDefinition relationship | `"present"` | `"present"` | ✅ |
+| pivot sheet rels has pivotTable relationship | `"present"` | `"present"` | ✅ |

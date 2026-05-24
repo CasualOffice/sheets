@@ -171,6 +171,140 @@ async function buildReferenceXlsx(): Promise<Buffer> {
 }
 
 /**
+ * Build a minimal `.xlsx` fixture WITH a real pivot table — the kind
+ * Excel writes when you Insert → PivotTable from a small source range.
+ * We JSZip-author the OOXML by hand because ExcelJS can't write pivots.
+ *
+ * Layout:
+ *   - Source sheet `Source` with A1:B4 (Item, Qty).
+ *   - Output sheet `Pivot` with the materialised pivot cells (so the
+ *     visible data round-trips via the normal cell pipeline).
+ *   - xl/pivotCaches/pivotCacheDefinition1.xml + Records1.xml
+ *   - xl/pivotTables/pivotTable1.xml (single table)
+ *   - workbook.xml has `<pivotCaches>` pointing at rId
+ *   - workbook.xml.rels points cacheDef at the cache part
+ *   - Pivot sheet's .rels points at the pivot table part
+ *   - [Content_Types].xml has Overrides for all three pivot parts
+ *
+ * The probes check that each of those pieces survives the parser →
+ * snapshot → exporter pipeline.
+ */
+async function buildReferenceXlsxWithPivot(): Promise<{
+  bytes: Buffer;
+  cacheDefMarker: string;
+  cacheRecMarker: string;
+  pivotTableMarker: string;
+}> {
+  // Start from an ExcelJS workbook so the base xlsx (workbook /
+  // workbook.rels / styles / sheets / Content_Types) is valid OOXML
+  // we don't have to author by hand.
+  const wb = new ExcelJS.Workbook();
+  const src = wb.addWorksheet('Source');
+  src.getCell('A1').value = 'Item';
+  src.getCell('B1').value = 'Qty';
+  src.getCell('A2').value = 'Apples';
+  src.getCell('B2').value = 10;
+  src.getCell('A3').value = 'Oranges';
+  src.getCell('B3').value = 20;
+  src.getCell('A4').value = 'Apples';
+  src.getCell('B4').value = 5;
+
+  const pivot = wb.addWorksheet('Pivot');
+  // Materialised pivot output — survives via normal cell round-trip.
+  pivot.getCell('A1').value = 'Item';
+  pivot.getCell('B1').value = 'Sum of Qty';
+  pivot.getCell('A2').value = 'Apples';
+  pivot.getCell('B2').value = 15;
+  pivot.getCell('A3').value = 'Oranges';
+  pivot.getCell('B3').value = 20;
+  pivot.getCell('A4').value = 'Grand Total';
+  pivot.getCell('B4').value = 35;
+
+  const baseBuf = await wb.xlsx.writeBuffer();
+  const zip = await JSZip.loadAsync(baseBuf);
+
+  // ─── Authored pivot parts. Markers in the content so we can
+  //     byte-confirm survival in probes (it's enough to know the
+  //     part is present + has our marker — Excel itself is the only
+  //     thing that re-reads pivots, and we don't run Excel in CI).
+  const cacheDefMarker = 'CASUAL-AUDIT-CACHE-DEF';
+  const cacheRecMarker = 'CASUAL-AUDIT-CACHE-REC';
+  const pivotTableMarker = 'CASUAL-AUDIT-PIVOT-TABLE';
+
+  const cacheDef = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1" refreshedBy="${cacheDefMarker}" recordCount="3"><cacheSource type="worksheet"><worksheetSource ref="A1:B4" sheet="Source"/></cacheSource><cacheFields count="2"><cacheField name="Item" numFmtId="0"><sharedItems count="2"><s v="Apples"/><s v="Oranges"/></sharedItems></cacheField><cacheField name="Qty" numFmtId="0"><sharedItems containsSemiMixedTypes="0" containsString="0" containsNumber="1" containsInteger="1" minValue="5" maxValue="20"/></cacheField></cacheFields></pivotCacheDefinition>`;
+  const cacheDefRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords" Target="pivotCacheRecords1.xml"/></Relationships>`;
+  const cacheRec = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotCacheRecords xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3"><!-- ${cacheRecMarker} --><r><x v="0"/><n v="10"/></r><r><x v="1"/><n v="20"/></r><r><x v="0"/><n v="5"/></r></pivotCacheRecords>`;
+  const pivotTable = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" name="${pivotTableMarker}" cacheId="0" dataOnRows="1" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values" updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" multipleFieldFilters="0"><location ref="A1:B4" firstHeaderRow="1" firstDataRow="2" firstDataCol="1"/><pivotFields count="2"><pivotField axis="axisRow" showAll="0"><items count="3"><item x="0"/><item x="1"/><item t="default"/></items></pivotField><pivotField dataField="1" showAll="0"/></pivotFields><rowFields count="1"><field x="0"/></rowFields><rowItems count="3"><i><x/></i><i><x v="1"/></i><i t="grand"><x/></i></rowItems><colItems count="1"><i/></colItems><dataFields count="1"><dataField name="Sum of Qty" fld="1" baseField="0" baseItem="0"/></dataFields></pivotTableDefinition>`;
+  const pivotTableRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCaches/pivotCacheDefinition1.xml"/></Relationships>`;
+
+  zip.file('xl/pivotCaches/pivotCacheDefinition1.xml', cacheDef);
+  zip.file('xl/pivotCaches/_rels/pivotCacheDefinition1.xml.rels', cacheDefRels);
+  zip.file('xl/pivotCaches/pivotCacheRecords1.xml', cacheRec);
+  zip.file('xl/pivotTables/pivotTable1.xml', pivotTable);
+  zip.file('xl/pivotTables/_rels/pivotTable1.xml.rels', pivotTableRels);
+
+  // [Content_Types].xml — add Overrides for the three new parts.
+  const ctEntry = zip.file('[Content_Types].xml');
+  if (ctEntry) {
+    let ct = await ctEntry.async('string');
+    const overrides = [
+      '<Override PartName="/xl/pivotCaches/pivotCacheDefinition1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>',
+      '<Override PartName="/xl/pivotCaches/pivotCacheRecords1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml"/>',
+      '<Override PartName="/xl/pivotTables/pivotTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>',
+    ].join('');
+    ct = ct.replace('</Types>', `${overrides}</Types>`);
+    zip.file('[Content_Types].xml', ct);
+  }
+
+  // xl/_rels/workbook.xml.rels — add pivotCacheDefinition rel.
+  // The pivot sheet's rels — add pivotTable rel.
+  const wbRelsEntry = zip.file('xl/_rels/workbook.xml.rels');
+  if (wbRelsEntry) {
+    let rels = await wbRelsEntry.async('string');
+    const used = new Set<number>();
+    for (const m of rels.matchAll(/Id="rId(\d+)"/g)) used.add(Number(m[1]));
+    let n = 1;
+    while (used.has(n)) n++;
+    const cacheRelId = `rId${n}`;
+    rels = rels.replace(
+      '</Relationships>',
+      `<Relationship Id="${cacheRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCaches/pivotCacheDefinition1.xml"/></Relationships>`,
+    );
+    zip.file('xl/_rels/workbook.xml.rels', rels);
+
+    // xl/workbook.xml — inject <pivotCaches> after </sheets>.
+    const wbXmlEntry = zip.file('xl/workbook.xml');
+    if (wbXmlEntry) {
+      let wbXml = await wbXmlEntry.async('string');
+      wbXml = wbXml.replace(
+        '</sheets>',
+        `</sheets><pivotCaches><pivotCache cacheId="0" r:id="${cacheRelId}"/></pivotCaches>`,
+      );
+      zip.file('xl/workbook.xml', wbXml);
+    }
+  }
+
+  // Pivot-sheet rels. ExcelJS's second sheet is sheet2.xml.
+  const pivotSheetRelsPath = 'xl/worksheets/_rels/sheet2.xml.rels';
+  let pivotSheetRels =
+    (await zip.file(pivotSheetRelsPath)?.async('string')) ??
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+  pivotSheetRels = pivotSheetRels.replace(
+    '</Relationships>',
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>`,
+  );
+  zip.file(pivotSheetRelsPath, pivotSheetRels);
+
+  const out = await zip.generateAsync({ type: 'nodebuffer' });
+  return { bytes: out, cacheDefMarker, cacheRecMarker, pivotTableMarker };
+}
+
+/**
  * Build a minimal .xlsm fixture for the macros byte-passthrough probe.
  * Starts from an ExcelJS-generated xlsx (so the file is structurally
  * valid), then JSZip-injects a deterministic 1 KB `vbaProject.bin` plus
@@ -609,6 +743,96 @@ test.describe('xlsx round-trip lossiness audit', () => {
         'application/vnd.ms-excel.sheet.macroenabled.12',
     });
 
+    // Pivot cache + pivot table passthrough probes. ExcelJS doesn't
+    // surface pivots so we round-trip a hand-authored fixture and
+    // JSZip-inspect the result. The fixture embeds unique markers in
+    // each part so we can confirm the bytes are the same after the
+    // pipeline (not just that some pivot-shaped file is present).
+    const { bytes: pivotBytes, cacheDefMarker, cacheRecMarker, pivotTableMarker } =
+      await buildReferenceXlsxWithPivot();
+    const pivotRoundTripped = await page.evaluate(async (bytesArr) => {
+      const buf = new Uint8Array(bytesArr).buffer;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const snapshot: any = await window.__xlsx!.xlsxToWorkbookData(buf);
+      const blob = await window.__xlsx!.workbookDataToXlsx(snapshot);
+      const out = new Uint8Array(await blob.arrayBuffer());
+      return Array.from(out);
+    }, Array.from(pivotBytes));
+    const pivotZip = await JSZip.loadAsync(Buffer.from(pivotRoundTripped));
+    const cacheDefAfter =
+      (await pivotZip.file('xl/pivotCaches/pivotCacheDefinition1.xml')?.async('string')) ?? '';
+    const cacheRecAfter =
+      (await pivotZip.file('xl/pivotCaches/pivotCacheRecords1.xml')?.async('string')) ?? '';
+    const pivotTableAfter =
+      (await pivotZip.file('xl/pivotTables/pivotTable1.xml')?.async('string')) ?? '';
+    const pivotCtXml =
+      (await pivotZip.file('[Content_Types].xml')?.async('string')) ?? '';
+    const pivotWbXml =
+      (await pivotZip.file('xl/workbook.xml')?.async('string')) ?? '';
+    const pivotWbRels =
+      (await pivotZip.file('xl/_rels/workbook.xml.rels')?.async('string')) ?? '';
+    const pivotSheetRels =
+      (await pivotZip
+        .file('xl/worksheets/_rels/sheet2.xml.rels')
+        ?.async('string')) ?? '';
+
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: 'xl/pivotCaches/pivotCacheDefinition1.xml survives round-trip',
+      reference: `contains marker ${cacheDefMarker}`,
+      actual: cacheDefAfter.includes(cacheDefMarker) ? 'present + marker' : 'missing',
+      result: cacheDefAfter.includes(cacheDefMarker),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: 'xl/pivotCaches/pivotCacheRecords1.xml survives round-trip',
+      reference: `contains marker ${cacheRecMarker}`,
+      actual: cacheRecAfter.includes(cacheRecMarker) ? 'present + marker' : 'missing',
+      result: cacheRecAfter.includes(cacheRecMarker),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: 'xl/pivotTables/pivotTable1.xml survives round-trip',
+      reference: `contains marker ${pivotTableMarker}`,
+      actual: pivotTableAfter.includes(pivotTableMarker) ? 'present + marker' : 'missing',
+      result: pivotTableAfter.includes(pivotTableMarker),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: '[Content_Types].xml has pivotCacheDefinition Override',
+      reference: 'present',
+      actual: /pivotCacheDefinition1\.xml/.test(pivotCtXml) ? 'present' : 'missing',
+      result: /pivotCacheDefinition1\.xml/.test(pivotCtXml),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: '[Content_Types].xml has pivotTable Override',
+      reference: 'present',
+      actual: /pivotTable1\.xml/.test(pivotCtXml) ? 'present' : 'missing',
+      result: /pivotTable1\.xml/.test(pivotCtXml),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: 'xl/workbook.xml has <pivotCaches> element',
+      reference: 'present',
+      actual: /<pivotCaches\b/.test(pivotWbXml) ? 'present' : 'missing',
+      result: /<pivotCaches\b/.test(pivotWbXml),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: 'xl/_rels/workbook.xml.rels has pivotCacheDefinition relationship',
+      reference: 'present',
+      actual: /Type="[^"]*pivotCacheDefinition"/i.test(pivotWbRels) ? 'present' : 'missing',
+      result: /Type="[^"]*pivotCacheDefinition"/i.test(pivotWbRels),
+    });
+    probes.push({
+      category: 'Pivots (cache passthrough)',
+      what: 'pivot sheet rels has pivotTable relationship',
+      reference: 'present',
+      actual: /Type="[^"]*pivotTable"/i.test(pivotSheetRels) ? 'present' : 'missing',
+      result: /Type="[^"]*pivotTable"/i.test(pivotSheetRels),
+    });
+
     const report = buildReport(probes);
 
     // Always write the latest report so the doc reflects the build's actual state.
@@ -638,6 +862,14 @@ test.describe('xlsx round-trip lossiness audit', () => {
     lock('Macros (VBA passthrough)', '[Content_Types].xml has vbaProject Override');
     lock('Macros (VBA passthrough)', 'xl/_rels/workbook.xml.rels has vbaProject relationship');
     lock('Macros (VBA passthrough)', 'export blob MIME → macroEnabled.12');
+    lock('Pivots (cache passthrough)', 'xl/pivotCaches/pivotCacheDefinition1.xml survives round-trip');
+    lock('Pivots (cache passthrough)', 'xl/pivotCaches/pivotCacheRecords1.xml survives round-trip');
+    lock('Pivots (cache passthrough)', 'xl/pivotTables/pivotTable1.xml survives round-trip');
+    lock('Pivots (cache passthrough)', '[Content_Types].xml has pivotCacheDefinition Override');
+    lock('Pivots (cache passthrough)', '[Content_Types].xml has pivotTable Override');
+    lock('Pivots (cache passthrough)', 'xl/workbook.xml has <pivotCaches> element');
+    lock('Pivots (cache passthrough)', 'xl/_rels/workbook.xml.rels has pivotCacheDefinition relationship');
+    lock('Pivots (cache passthrough)', 'pivot sheet rels has pivotTable relationship');
     // Note: hyperlinks ARE preserved by our pipeline, but the encoding
     // lives in `cell.p.body.customRanges` (per xlsx-hyperlinks.spec.ts),
     // not in the `cell.value.hyperlink` shape ExcelJS exposes after the
