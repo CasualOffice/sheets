@@ -45,4 +45,25 @@ test.describe('home screen', () => {
     // Confirm workbook name reflects the template.
     await expect(page.getByText('Personal budget').first()).toBeVisible();
   });
+
+  test('close button + Esc dismiss without picking', async ({ page }) => {
+    await expect(page.getByTestId('home-screen')).toBeVisible();
+    await page.getByTestId('home-close').click();
+    await expect(page.getByTestId('home-screen')).toHaveCount(0);
+  });
+});
+
+test.describe('home screen — suppression', () => {
+  test('does not render on a collab room URL (/r/:id)', async ({ page }) => {
+    // Real collab join requires Hocuspocus; we only need to confirm the
+    // home overlay is suppressed for the path pattern so coedit specs
+    // can interact with the canvas without the overlay swallowing clicks.
+    await page.goto('/r/test1234');
+    await expect(page.getByTestId('home-screen')).toHaveCount(0);
+  });
+
+  test('does not render on a ?room= URL', async ({ page }) => {
+    await page.goto('/?room=test1234');
+    await expect(page.getByTestId('home-screen')).toHaveCount(0);
+  });
 });

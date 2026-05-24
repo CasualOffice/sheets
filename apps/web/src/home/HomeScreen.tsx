@@ -36,6 +36,18 @@ export function HomeScreen({
   const recents = useLiveRecentFiles();
 
   const isBlank = wb.meta.name === 'Untitled' && wb.meta.revision <= 1;
+  // Suppress the home in collab rooms — the URL is the authoritative
+  // signal here (collab context hydrates async, but Hocuspocus will
+  // shortly replace the workbook with the room's snapshot and the home
+  // would just flash). Matches CollabDriver's readRoomFromLocation():
+  //   /r/:id           — canonical room URL
+  //   /?room=:id        — query fallback
+  // Same pattern the e2e prod-bundle specs use to enter rooms.
+  const inCollabRoom =
+    typeof window !== 'undefined' &&
+    (/^\/r\/[\w-]{4,}\/?$/.test(window.location.pathname) ||
+      (new URLSearchParams(window.location.search).get('room') ?? '').length >= 4);
+
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'All'>('All');
 
@@ -63,7 +75,7 @@ export function HomeScreen({
     return map;
   }, []);
 
-  const visible = !dismissed && isBlank;
+  const visible = !dismissed && isBlank && !inCollabRoom;
 
   // Esc closes the home, same as the X button.
   useEffect(() => {
