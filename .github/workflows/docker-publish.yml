@@ -38,6 +38,17 @@ jobs:
         with:
           ref: ${{ steps.tag.outputs.raw }}
 
+      - name: Resolve build metadata
+        id: meta
+        # RFC 3339 UTC build timestamp + the full commit SHA at the tag.
+        # These ride through as build args so the OCI labels baked into
+        # the image match the artifact's provenance — operators can
+        # `docker inspect` and see exactly which commit was built.
+        run: |
+          set -euo pipefail
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "git_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         # Needed so buildx can produce arm64 layers on the amd64 runner.
         uses: docker/setup-qemu-action@v3
@@ -51,6 +62,34 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Compute Docker tags
+        id: docker_meta
+        # docker/metadata-action expands a single git tag into the full
+        # rolling-tag set:
+        #   v0.1.0  →  0.1.0  +  0.1  +  0  +  latest
+        # Operators who pin `:0.1` get patch updates; `:0` gets minor +
+        # patch; `:latest` is the bleeding edge.
+        uses: docker/metadata-action@v5
+        with:
+          images: schnsrw/casual-sheets
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.tag.outputs.raw }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.tag.outputs.raw }}
+            type=semver,pattern={{major}},value=${{ steps.tag.outputs.raw }}
+            type=raw,value=latest
+          # Labels here go on the manifest list (the multi-arch index),
+          # distinct from per-platform labels baked into the Dockerfile
+          # via OCI build args. Keep these in sync with the LABEL block
+          # in the Dockerfile.
+          labels: |
+            org.opencontainers.image.title=Casual Sheets
+            org.opencontainers.image.description=Excel-flavored web spreadsheet with real-time co-editing.
+            org.opencontainers.image.url=https://sheet.schnsrw.live/
+            org.opencontainers.image.source=https://github.com/schnsrw/sheets
+            org.opencontainers.image.documentation=https://schnsrw.live/docs/sheets/
+            org.opencontainers.image.vendor=Sachin Sarwa
+            org.opencontainers.image.licenses=Apache-2.0
+
       - name: Build and push
         # Multi-arch so the image runs on both Linux servers (amd64) and
         # Apple Silicon laptops (arm64) without an emulation hit.
@@ -60,9 +99,17 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            schnsrw/casual-sheets:${{ steps.tag.outputs.version }}
-            schnsrw/casual-sheets:latest
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            CASUAL_VERSION=${{ steps.tag.outputs.raw }}
+            CASUAL_GIT_SHA=${{ steps.meta.outputs.git_sha }}
+            CASUAL_BUILD_DATE=${{ steps.meta.outputs.build_date }}
+          # Provenance + SBOM ride along inside the OCI manifest so
+          # downstream scanners (Trivy, Snyk, GitHub's dep graph) can
+          # verify what's in the image without unpacking it.
+          provenance: true
+          sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

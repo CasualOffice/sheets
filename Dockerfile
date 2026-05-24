@@ -85,6 +85,36 @@ COPY apps/server/src apps/server/src
 COPY apps/server/tsconfig.json apps/server/
 COPY --from=build-web /repo/apps/web/dist apps/web/dist
 
+# ─────────────── OCI image labels ───────────────
+#
+# Standard `org.opencontainers.image.*` keys baked into every published
+# image. The CI workflow passes these as build args at tag-time:
+#
+#     --build-arg CASUAL_VERSION=v0.1.0   (the git tag)
+#     --build-arg CASUAL_GIT_SHA=abc1234  (full commit SHA)
+#     --build-arg CASUAL_BUILD_DATE=...   (RFC 3339 UTC timestamp)
+#
+# Inspect with:
+#     docker inspect schnsrw/casual-sheets:latest | jq '.[0].Config.Labels'
+#
+# Downstream operators rely on these labels to pin a specific build;
+# they're the documentation that travels with the artifact.
+ARG CASUAL_VERSION=dev
+ARG CASUAL_GIT_SHA=unknown
+ARG CASUAL_BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="Casual Sheets" \
+      org.opencontainers.image.description="Excel-flavored web spreadsheet with real-time co-editing. Single image: web app, Hocuspocus WebSocket gateway, and Fastify HTTP server on one port. Built on Univer OSS." \
+      org.opencontainers.image.url="https://sheet.schnsrw.live/" \
+      org.opencontainers.image.source="https://github.com/schnsrw/sheets" \
+      org.opencontainers.image.documentation="https://schnsrw.live/docs/sheets/" \
+      org.opencontainers.image.vendor="Sachin Sarwa" \
+      org.opencontainers.image.authors="Sachin Sarwa <schnsrw@gmail.com>" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${CASUAL_VERSION}" \
+      org.opencontainers.image.revision="${CASUAL_GIT_SHA}" \
+      org.opencontainers.image.created="${CASUAL_BUILD_DATE}"
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
