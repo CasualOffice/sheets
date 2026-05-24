@@ -4,7 +4,7 @@
    ───────────────────────────────────────────────────────────────────────── */
 :root {
   /* Brand */
-  --color-accent: #217346;            /* Excel green */
+  --color-accent: #217346; /* Excel green */
   --color-accent-hover: #1e6b40;
   --color-accent-active: #185a36;
   --color-accent-fg: #ffffff;
@@ -16,9 +16,9 @@
        zone 2 (warmer grey) — chrome strips (sheet tabs + status bar)
      Each zone is visually distinct without needing hard borders. */
   --color-bg: #ffffff;
-  --color-surface: #ffffff;              /* zone 0 */
-  --color-surface-alt: #eef0f4;          /* zone 1 — clearly visible vs white */
-  --color-surface-strip: #e8eaed;        /* zone 2 — distinct chrome strip */
+  --color-surface: #ffffff; /* zone 0 */
+  --color-surface-alt: #eef0f4; /* zone 1 — clearly visible vs white */
+  --color-surface-strip: #e8eaed; /* zone 2 — distinct chrome strip */
   --color-surface-raised: #ffffff;
   --color-border: #d2d6dc;
   --color-border-strong: #b9bec5;
@@ -36,7 +36,7 @@
   --color-text-on-accent: #ffffff;
 
   --color-hover: rgba(0, 0, 0, 0.05);
-  --color-pressed: rgba(0, 0, 0, 0.10);
+  --color-pressed: rgba(0, 0, 0, 0.1);
   --color-focus-ring: #217346;
   --color-selected: rgba(33, 115, 70, 0.12);
   --color-selected-strong: rgba(33, 115, 70, 0.22);
@@ -56,10 +56,9 @@
   --space-8: 24px;
 
   /* Typography */
-  --font-sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono",
-    Menlo, monospace;
+  --font-sans:
+    'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -77,15 +76,15 @@
   /* Shape — keep two scales only, used consistently:
      --radius-md for all interactive controls (buttons, selects, inputs),
      --radius-lg for containers (dialogs, popovers, menus). */
-  --radius-sm: 4px;  /* alias for backwards compat */
+  --radius-sm: 4px; /* alias for backwards compat */
   --radius-md: 4px;
   --radius-lg: 8px;
   --radius-pill: 20px;
 
   /* Elevation */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
-  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 
   /* Layout — title bar now hosts the menu bar inline (Google Docs
      pattern), so the two strips collapse into one 64 px chrome layer:
@@ -118,11 +117,11 @@
    zone 1 (toolbar) ~#26282d, zone 2 (sheet tabs / status) ~#2e3036.
    Picked to keep the three-layer hierarchy readable in low-light.
    ───────────────────────────────────────────────────────────────────────── */
-html[data-theme="dark"] {
+html[data-theme='dark'] {
   color-scheme: dark;
 }
-html[data-theme="dark"] :root,
-[data-theme="dark"] {
+html[data-theme='dark'] :root,
+[data-theme='dark'] {
   /* Brand — keep Excel green but tone down saturation so it doesn't
      buzz against the dark surfaces; soft is a much more transparent
      blue-green tint readable on near-black bg. */
@@ -150,53 +149,59 @@ html[data-theme="dark"] :root,
   --color-hover: rgba(255, 255, 255, 0.06);
   --color-pressed: rgba(255, 255, 255, 0.12);
   --color-focus-ring: #2faf6b;
-  --color-selected: rgba(47, 175, 107, 0.20);
+  --color-selected: rgba(47, 175, 107, 0.2);
   --color-selected-strong: rgba(47, 175, 107, 0.34);
 
   --color-toolbar-pill: #2a2c31;
 
   /* Stronger shadows to read on near-black */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 1px rgba(0, 0, 0, 0.30);
-  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.35);
 }
 
 /* Banner palettes get explicit dark variants — they use hardcoded
    warm/cool tones, not the neutral tokens. */
-html[data-theme="dark"] .autosave-banner {
+html[data-theme='dark'] .autosave-banner {
   background: #3f2a14;
   border-bottom-color: #a86332;
   color: #ffd8b2;
 }
-html[data-theme="dark"] .autosave-banner__btn {
+html[data-theme='dark'] .autosave-banner__btn {
   border-color: #a86332;
   color: #ffd8b2;
 }
-html[data-theme="dark"] .autosave-banner__btn:hover { background: #5a3d1c; }
-html[data-theme="dark"] .autosave-banner__btn--primary {
+html[data-theme='dark'] .autosave-banner__btn:hover {
+  background: #5a3d1c;
+}
+html[data-theme='dark'] .autosave-banner__btn--primary {
   background: #c75827;
   border-color: #c75827;
   color: #ffffff;
 }
-html[data-theme="dark"] .autosave-banner__btn--primary:hover {
-  background: #d76a36; border-color: #d76a36;
+html[data-theme='dark'] .autosave-banner__btn--primary:hover {
+  background: #d76a36;
+  border-color: #d76a36;
 }
-html[data-theme="dark"] .preview-banner {
+html[data-theme='dark'] .preview-banner {
   background: #1a2b48;
   border-bottom-color: #3b5fa1;
   color: #cfdcf3;
 }
-html[data-theme="dark"] .preview-banner__btn {
+html[data-theme='dark'] .preview-banner__btn {
   border-color: #3b5fa1;
   color: #cfdcf3;
 }
-html[data-theme="dark"] .preview-banner__btn:hover { background: #243b65; }
-html[data-theme="dark"] .preview-banner__btn--primary {
+html[data-theme='dark'] .preview-banner__btn:hover {
+  background: #243b65;
+}
+html[data-theme='dark'] .preview-banner__btn--primary {
   background: #3b6cd8;
   border-color: #3b6cd8;
 }
-html[data-theme="dark"] .preview-banner__btn--primary:hover {
-  background: #4a7be0; border-color: #4a7be0;
+html[data-theme='dark'] .preview-banner__btn--primary:hover {
+  background: #4a7be0;
+  border-color: #4a7be0;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -228,7 +233,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv11", "ss01", "ss03";
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
 }
 
 button {
@@ -253,7 +258,7 @@ button {
    `opsz` axis is bumped in lockstep so stroke optical weight matches
    the glyph size. */
 .icon {
-  font-family: "Material Symbols Outlined";
+  font-family: 'Material Symbols Outlined';
   font-weight: normal;
   font-style: normal;
   font-size: 20px;
@@ -264,20 +269,40 @@ button {
   white-space: nowrap;
   word-wrap: normal;
   direction: ltr;
-  font-feature-settings: "liga";
-  -webkit-font-feature-settings: "liga";
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
   user-select: none;
   font-variation-settings:
-    "FILL" 0,
-    "wght" 400,
-    "GRAD" 0,
-    "opsz" 24;
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
 }
 
-.icon--sm { font-size: 16px; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 20; }
-.icon--lg { font-size: 24px; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 28; }
-.icon--filled { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }
+.icon--sm {
+  font-size: 16px;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 20;
+}
+.icon--lg {
+  font-size: 24px;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 28;
+}
+.icon--filled {
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 500,
+    'GRAD' 0,
+    'opsz' 24;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    App shell — strict grid, only the grid row stretches.
@@ -296,6 +321,7 @@ button {
   grid-template-rows:
     var(--titlebar-h)
     var(--toolbar-h)
+    auto /* banner — autosave restore / preview; collapses to 0 when no banner is rendered */
     var(--formula-bar-h)
     minmax(0, 1fr)
     var(--mobile-bar-h, 0px)
@@ -303,6 +329,7 @@ button {
   grid-template-areas:
     'titlebar'
     'toolbar'
+    'banner'
     'formulabar'
     'gridrow'
     'mobilebar'
@@ -317,24 +344,47 @@ button {
   grid-template-rows:
     var(--titlebar-h)
     var(--toolbar-h)
+    auto /* banner row — same as above */
     minmax(0, 1fr)
     var(--mobile-bar-h, 0px)
     var(--sheet-tabs-h);
   grid-template-areas:
     'titlebar'
     'toolbar'
+    'banner'
     'gridrow'
     'mobilebar'
     'sheettabs';
 }
 
-
-.app > .titlebar    { grid-area: titlebar; }
-.app > .toolbar     { grid-area: toolbar; }
-.app > .formula-bar { grid-area: formulabar; }
-.app > .grid-row    { grid-area: gridrow; }
-.app > .mobile-bar  { grid-area: mobilebar; }
-.app > .sheet-tabs  { grid-area: sheettabs; }
+.app > .titlebar {
+  grid-area: titlebar;
+}
+.app > .toolbar {
+  grid-area: toolbar;
+}
+/* Both banners (autosave restore + version-history preview) land in
+   the same auto-height row. They never render simultaneously — the
+   autosave banner only appears on first load before any edit, and
+   the preview banner only appears in version-history preview mode. */
+.app > .autosave-banner {
+  grid-area: banner;
+}
+.app > .preview-banner {
+  grid-area: banner;
+}
+.app > .formula-bar {
+  grid-area: formulabar;
+}
+.app > .grid-row {
+  grid-area: gridrow;
+}
+.app > .mobile-bar {
+  grid-area: mobilebar;
+}
+.app > .sheet-tabs {
+  grid-area: sheettabs;
+}
 
 /* ── Menu bar (Google-Sheets style top dropdowns) ───────────────────────── */
 .menubar {
@@ -383,7 +433,9 @@ button {
   height: var(--toolbar-h);
   background: var(--color-surface-alt);
   padding: 0;
-  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(0, 0, 0, 0.04),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
   z-index: 2;
   /* As a CSS Grid row of `.app`, default `min-width: auto` keeps this
      element at the min-content size of its descendants — which on a
@@ -412,19 +464,11 @@ button {
 }
 .toolbar__overflow--left {
   left: 0;
-  background: linear-gradient(
-    to right,
-    var(--color-surface-alt) 60%,
-    rgba(244, 243, 242, 0)
-  );
+  background: linear-gradient(to right, var(--color-surface-alt) 60%, rgba(244, 243, 242, 0));
 }
 .toolbar__overflow--right {
   right: 0;
-  background: linear-gradient(
-    to left,
-    var(--color-surface-alt) 60%,
-    rgba(244, 243, 242, 0)
-  );
+  background: linear-gradient(to left, var(--color-surface-alt) 60%, rgba(244, 243, 242, 0));
 }
 .toolbar__overflow:hover {
   color: var(--color-text);
@@ -448,7 +492,9 @@ button {
   min-width: 0;
 }
 
-.toolbar__inner::-webkit-scrollbar { display: none; }
+.toolbar__inner::-webkit-scrollbar {
+  display: none;
+}
 
 /* ── Static 2-row ribbon group ──────────────────────────────────────
    Each group is a vertical stack: button-body (top) + label (bottom).
@@ -466,7 +512,9 @@ button {
   flex-shrink: 0;
 }
 
-.toolbar .ribbon__group:first-child { padding-left: var(--space-2); }
+.toolbar .ribbon__group:first-child {
+  padding-left: var(--space-2);
+}
 .toolbar .ribbon__group:last-child {
   border-right: 0;
   padding-right: var(--space-2);
@@ -546,7 +594,11 @@ button {
 .toolbar .btn--big .icon {
   font-size: 28px;
   line-height: 1;
-  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 32;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 32;
 }
 .toolbar .btn__big-label {
   font-size: 11px;
@@ -562,7 +614,9 @@ button {
 /* Group labels hidden inside the toolbar — icons are self-explanatory
    on hover (tooltips already do the work). Hiding the labels recovers
    ~14 px of vertical room and reduces visual noise. */
-.toolbar .ribbon__group-label { display: none; }
+.toolbar .ribbon__group-label {
+  display: none;
+}
 
 /* Buttons / selects inside the pill — slightly smaller and rounded. */
 .toolbar .btn {
@@ -584,13 +638,13 @@ button {
   background: rgba(0, 0, 0, 0.06);
 }
 
-.toolbar .btn[aria-pressed="true"] {
+.toolbar .btn[aria-pressed='true'] {
   background: var(--color-selected);
   color: var(--color-accent);
   border-color: transparent;
 }
 
-.toolbar .btn[aria-pressed="true"]:hover:not(:disabled) {
+.toolbar .btn[aria-pressed='true']:hover:not(:disabled) {
   background: var(--color-selected-strong);
 }
 
@@ -896,13 +950,17 @@ button {
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-out);
 }
-.titlebar__namepill:hover { background: var(--color-hover); }
+.titlebar__namepill:hover {
+  background: var(--color-hover);
+}
 .titlebar__namepill .icon {
   font-size: 14px;
   opacity: 0.5;
   margin-left: 2px;
 }
-.titlebar__namepill:hover .icon { opacity: 1; }
+.titlebar__namepill:hover .icon {
+  opacity: 1;
+}
 .titlebar__namepill-dot {
   width: 8px;
   height: 8px;
@@ -942,7 +1000,8 @@ button {
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out),
+  transition:
+    background var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
 }
 .titlebar__icon-btn:hover {
@@ -983,7 +1042,9 @@ button {
 }
 
 @keyframes busy-pill-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Ribbon */
@@ -1029,7 +1090,7 @@ button {
   color: var(--color-text);
 }
 
-.ribbon__tab[aria-selected="true"] {
+.ribbon__tab[aria-selected='true'] {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);
 }
@@ -1145,13 +1206,13 @@ button {
   padding: 0;
 }
 
-.btn[aria-pressed="true"] {
+.btn[aria-pressed='true'] {
   background: var(--color-selected);
   border-color: transparent;
   color: var(--color-accent);
 }
 
-.btn[aria-pressed="true"]:hover:not(:disabled) {
+.btn[aria-pressed='true']:hover:not(:disabled) {
   background: var(--color-selected-strong);
 }
 
@@ -1169,9 +1230,17 @@ button {
   transition: border-color var(--motion-fast) var(--ease-out);
 }
 
-.ribbon__select:hover:not(:disabled) { border-color: var(--color-text-secondary); }
-.ribbon__select:focus { outline: none; border-color: var(--color-focus-ring); }
-.ribbon__select:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
+.ribbon__select:hover:not(:disabled) {
+  border-color: var(--color-text-secondary);
+}
+.ribbon__select:focus {
+  outline: none;
+  border-color: var(--color-focus-ring);
+}
+.ribbon__select:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
 
 /* Generic split button (icon + caret with popover) */
 .btn-split {
@@ -1244,9 +1313,11 @@ button {
   transition: background var(--motion-fast) var(--ease-out);
 }
 
-.btn-color__picker:hover { background: var(--color-hover); }
+.btn-color__picker:hover {
+  background: var(--color-hover);
+}
 
-.btn-color__picker input[type="color"] {
+.btn-color__picker input[type='color'] {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1490,7 +1561,8 @@ button {
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out),
+  transition:
+    background var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
 }
 .panel-rail__btn:hover {
@@ -1567,7 +1639,12 @@ button {
   font-weight: 600;
   font-size: var(--text-sm);
 }
-.side-panel__title { margin: 0; font-size: inherit; font-weight: inherit; flex: 1; }
+.side-panel__title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  flex: 1;
+}
 .side-panel__count {
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -1758,8 +1835,7 @@ button {
 .tables-panel__range {
   grid-area: range;
   color: var(--color-text-secondary);
-  font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--text-xs);
 }
 
@@ -1817,7 +1893,9 @@ button {
 }
 .chart-overlay--selected {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent), 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 0 0 1px var(--color-accent),
+    0 2px 6px rgba(0, 0, 0, 0.08);
   z-index: 1;
 }
 .chart-overlay--dragging {
@@ -1834,14 +1912,42 @@ button {
   box-sizing: border-box;
   z-index: 2;
 }
-.chart-overlay__handle--n  { top: -6px; left: 50%; transform: translateX(-50%); }
-.chart-overlay__handle--s  { bottom: -6px; left: 50%; transform: translateX(-50%); }
-.chart-overlay__handle--w  { top: 50%; left: -6px; transform: translateY(-50%); }
-.chart-overlay__handle--e  { top: 50%; right: -6px; transform: translateY(-50%); }
-.chart-overlay__handle--nw { top: -6px; left: -6px; }
-.chart-overlay__handle--ne { top: -6px; right: -6px; }
-.chart-overlay__handle--sw { bottom: -6px; left: -6px; }
-.chart-overlay__handle--se { bottom: -6px; right: -6px; }
+.chart-overlay__handle--n {
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.chart-overlay__handle--s {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.chart-overlay__handle--w {
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%);
+}
+.chart-overlay__handle--e {
+  top: 50%;
+  right: -6px;
+  transform: translateY(-50%);
+}
+.chart-overlay__handle--nw {
+  top: -6px;
+  left: -6px;
+}
+.chart-overlay__handle--ne {
+  top: -6px;
+  right: -6px;
+}
+.chart-overlay__handle--sw {
+  bottom: -6px;
+  left: -6px;
+}
+.chart-overlay__handle--se {
+  bottom: -6px;
+  right: -6px;
+}
 
 /* Chart context menu — right-click on a chart. Same chrome as the
    in-app menu bar dropdowns; positioned via fixed coords from the
@@ -2032,8 +2138,7 @@ button {
   color: var(--color-text);
 }
 .charts-panel__range {
-  font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .charts-panel__delete {
   grid-area: delete;
@@ -2063,16 +2168,16 @@ button {
 /* Univer side panels — Comments, Data Validation, Conditional Formatting,
    etc. all mount into Univer's right-sidebar slot. Give them a slightly
    different tint so they read as a separate surface from the white grid. */
-.grid-host [data-u-comp="sidebar"] {
+.grid-host [data-u-comp='sidebar'] {
   background: var(--color-surface-alt) !important;
   border-left: 1px solid var(--color-divider) !important;
 }
 
-.grid-host [data-u-comp="sidebar"] section {
+.grid-host [data-u-comp='sidebar'] section {
   background: transparent !important;
 }
 
-.grid-host [data-u-comp="sidebar"] header {
+.grid-host [data-u-comp='sidebar'] header {
   background: var(--color-surface) !important;
   border-bottom: 1px solid var(--color-divider) !important;
 }
@@ -2121,12 +2226,18 @@ button {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes skeleton-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Sheet tabs — zone 1 (grey). The bg shift separates it from the
@@ -2339,7 +2450,9 @@ button {
   border-radius: var(--radius-sm);
   color: var(--color-text);
 }
-.statbar-customise__item:hover { background: var(--color-hover); }
+.statbar-customise__item:hover {
+  background: var(--color-hover);
+}
 .statbar-customise__item input[type='checkbox'] {
   accent-color: var(--color-accent);
 }
@@ -2452,7 +2565,7 @@ button {
   color: var(--color-text);
 }
 
-.statusbar__zoom input[type="range"] {
+.statusbar__zoom input[type='range'] {
   width: 96px;
   height: 14px;
   cursor: pointer;
@@ -2575,18 +2688,31 @@ button {
   border: 1px solid color-mix(in srgb, var(--color-border-strong) 60%, transparent);
   cursor: pointer;
   padding: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
-.menu__color-swatch:hover { transform: scale(1.08); }
+.menu__color-swatch:hover {
+  transform: scale(1.08);
+}
 
 .menu__color-swatch--active {
-  box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 3px var(--color-surface);
+  box-shadow:
+    0 0 0 2px var(--color-accent),
+    0 0 0 3px var(--color-surface);
 }
 
 /* Custom color = a label-wrapped <input type="color"> with an icon overlay. */
 .menu__color-swatch--custom {
-  background: linear-gradient(135deg, #ff0066 0%, #ff9900 25%, #ffee00 50%, #00ff66 75%, #0066ff 100%);
+  background: linear-gradient(
+    135deg,
+    #ff0066 0%,
+    #ff9900 25%,
+    #ffee00 50%,
+    #00ff66 75%,
+    #0066ff 100%
+  );
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2619,13 +2745,19 @@ button {
   background: var(--color-surface);
   cursor: pointer;
   padding: 0 6px;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
-.menu__weight-swatch:hover { transform: scale(1.04); }
+.menu__weight-swatch:hover {
+  transform: scale(1.04);
+}
 
 .menu__weight-swatch--active {
-  box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 3px var(--color-surface);
+  box-shadow:
+    0 0 0 2px var(--color-accent),
+    0 0 0 3px var(--color-surface);
 }
 
 .menu__weight-swatch-line {
@@ -2705,7 +2837,9 @@ button {
 }
 
 @keyframes loading-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-overlay__title {
@@ -2755,20 +2889,19 @@ button {
 .loading-overlay__bar-fill {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--color-accent) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, var(--color-accent) 50%, transparent 100%);
   width: 40%;
   border-radius: 999px;
   animation: loading-sweep 1.4s ease-in-out infinite;
 }
 
 @keyframes loading-sweep {
-  0%   { left: -40%; }
-  100% { left: 100%; }
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .loading-overlay__elapsed {
@@ -2793,7 +2926,9 @@ button {
   background: color-mix(in srgb, #d93025 14%, transparent);
   color: #d93025;
 }
-.loading-overlay__icon--error .material-symbols-outlined { font-size: 22px; }
+.loading-overlay__icon--error .material-symbols-outlined {
+  font-size: 22px;
+}
 
 .loading-overlay__error-text {
   text-align: left;
@@ -2827,8 +2962,12 @@ button {
 }
 
 @keyframes backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .dialog {
@@ -2846,7 +2985,9 @@ button {
   overflow: hidden;
 }
 
-.dialog--narrow { width: min(420px, 92vw); }
+.dialog--narrow {
+  width: min(420px, 92vw);
+}
 
 .dialog__header {
   display: flex;
@@ -2884,9 +3025,16 @@ button {
 }
 
 /* Page Setup dialog */
-.page-setup { display: grid; gap: 18px; }
+.page-setup {
+  display: grid;
+  gap: 18px;
+}
 
-.page-setup__group { border: 0; padding: 0; margin: 0; }
+.page-setup__group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
 
 .page-setup__legend {
   font-size: 12px;
@@ -2914,10 +3062,14 @@ button {
   font-size: 13px;
   font-weight: var(--weight-medium, 500);
   background: var(--color-surface);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 
-.page-setup__option:hover { background: var(--color-hover); }
+.page-setup__option:hover {
+  background: var(--color-hover);
+}
 
 .page-setup__option--active {
   border-color: var(--color-accent);
@@ -2951,8 +3103,15 @@ button {
 
 /* Insert PivotTable dialog — Excel-style "Create PivotTable + Fields"
    compressed to a single screen. */
-.insert-pivot { display: grid; gap: 18px; }
-.insert-pivot__group { border: 0; padding: 0; margin: 0; }
+.insert-pivot {
+  display: grid;
+  gap: 18px;
+}
+.insert-pivot__group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
 .insert-pivot__legend {
   font-size: 12px;
   font-weight: var(--weight-semibold, 600);
@@ -3002,8 +3161,12 @@ button {
   color: var(--color-text);
   cursor: pointer;
 }
-.insert-pivot__filter-value:hover { background: var(--color-hover); }
-.insert-pivot__filter-value input[type='checkbox'] { accent-color: var(--color-accent); }
+.insert-pivot__filter-value:hover {
+  background: var(--color-hover);
+}
+.insert-pivot__filter-value input[type='checkbox'] {
+  accent-color: var(--color-accent);
+}
 
 .insert-pivot__hint {
   margin: 6px 0 0;
@@ -3048,8 +3211,15 @@ button {
        previews + label).
      - Right bottom: source-range input.
    Visual chrome stays in line with Page Setup so dialogs feel coherent. */
-.insert-chart { display: grid; gap: 18px; }
-.insert-chart__group { border: 0; padding: 0; margin: 0; }
+.insert-chart {
+  display: grid;
+  gap: 18px;
+}
+.insert-chart__group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
 .insert-chart__legend {
   font-size: 12px;
   font-weight: var(--weight-semibold, 600);
@@ -3127,7 +3297,10 @@ button {
   font-weight: var(--weight-medium, 500);
   text-align: center;
   color: var(--color-text);
-  transition: border-color 0.12s ease, background 0.12s ease, transform 0.06s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    transform 0.06s ease;
 }
 .insert-chart__subtype:hover {
   background: var(--color-hover);
@@ -3164,8 +3337,15 @@ button {
 /* Format Chart dialog — Excel's "Format Chart Area" pane, compressed
    into a single tabbed-style dialog. Reuses the same compact field
    chrome as the Insert dialog for visual coherence. */
-.format-chart { display: grid; gap: 18px; }
-.format-chart__group { border: 0; padding: 0; margin: 0; }
+.format-chart {
+  display: grid;
+  gap: 18px;
+}
+.format-chart__group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
 .format-chart__legend {
   font-size: 12px;
   font-weight: var(--weight-semibold, 600);
@@ -3175,7 +3355,12 @@ button {
   margin-bottom: 8px;
   padding: 0;
 }
-.format-chart__row { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.format-chart__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
 .format-chart__checkbox {
   display: inline-flex;
   align-items: center;
@@ -3222,9 +3407,13 @@ button {
   font-size: 13px;
   font-weight: var(--weight-medium, 500);
   background: var(--color-surface);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
-.format-chart__seg-opt:hover { background: var(--color-hover); }
+.format-chart__seg-opt:hover {
+  background: var(--color-hover);
+}
 .format-chart__seg-opt--active {
   border-color: var(--color-accent);
   color: var(--color-accent);
@@ -3270,9 +3459,13 @@ button {
   border-radius: var(--radius-sm);
   cursor: pointer;
   background: var(--color-surface);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
-.format-chart__palette:hover { background: var(--color-hover); }
+.format-chart__palette:hover {
+  background: var(--color-hover);
+}
 .format-chart__palette--active {
   border-color: var(--color-accent);
   background: var(--color-accent-soft, transparent);
@@ -3315,7 +3508,9 @@ button {
   padding: 4px 6px;
   border-radius: var(--radius-sm);
 }
-.format-chart__series-row:hover { background: var(--color-hover); }
+.format-chart__series-row:hover {
+  background: var(--color-hover);
+}
 .format-chart__series-name {
   flex: 1;
   font-size: 13px;
@@ -3342,13 +3537,14 @@ button {
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-.format-chart__series-reset:hover { background: var(--color-pressed); }
+.format-chart__series-reset:hover {
+  background: var(--color-pressed);
+}
 .insert-chart__range {
   width: 100%;
   height: 32px;
   padding: 0 12px;
-  font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   color: var(--color-text);
   background: var(--color-surface);
@@ -3390,7 +3586,9 @@ button {
   cursor: pointer;
   font-size: 13px;
   font-weight: var(--weight-medium, 500);
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 .cells-op__option:hover {
   background: var(--color-hover);
@@ -3578,7 +3776,6 @@ button {
   font-size: 12px;
 }
 
-
 /* ── Sparklines ────────────────────────────────────────────────── */
 .sparkline-layer {
   position: absolute;
@@ -3619,14 +3816,18 @@ button {
   white-space: nowrap;
   box-sizing: border-box;
 }
-[data-theme="dark"] .show-formulas-cell {
+[data-theme='dark'] .show-formulas-cell {
   background: #3a2a14;
   border-color: #d97706;
   color: #fde68a;
 }
 
 /* ── Drill-down dialog table ──────────────────────────────────── */
-.drill-down { display: flex; flex-direction: column; min-height: 200px; }
+.drill-down {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
 .drill-down__empty {
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -3663,7 +3864,9 @@ button {
   border-bottom: 1px solid var(--color-divider);
   color: var(--color-text);
 }
-.drill-down__table tr:last-child td { border-bottom: 0; }
+.drill-down__table tr:last-child td {
+  border-bottom: 0;
+}
 
 .insert-sparkline {
   display: flex;
@@ -3718,7 +3921,9 @@ button {
   color: var(--color-text);
   font-size: 13px;
 }
-.insert-sparkline__type-opt:hover { background: var(--color-hover); }
+.insert-sparkline__type-opt:hover {
+  background: var(--color-hover);
+}
 .insert-sparkline__type-opt--active {
   background: var(--color-accent-soft);
   color: var(--color-accent);
@@ -4112,8 +4317,12 @@ button {
   transition: background var(--motion-fast) var(--ease-out);
 }
 
-.btn-primary:hover { background: var(--color-accent-hover); }
-.btn-primary:active { background: var(--color-accent-active); }
+.btn-primary:hover {
+  background: var(--color-accent-hover);
+}
+.btn-primary:active {
+  background: var(--color-accent-active);
+}
 
 .btn-secondary {
   height: 28px;
@@ -4128,7 +4337,9 @@ button {
   transition: background var(--motion-fast) var(--ease-out);
 }
 
-.btn-secondary:hover { background: var(--color-hover); }
+.btn-secondary:hover {
+  background: var(--color-hover);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Collab status indicator. Small pill in the sheet-tabs strip showing the
@@ -4175,7 +4386,9 @@ button {
   color: #d93025;
   border-color: color-mix(in srgb, #d93025 35%, transparent);
 }
-.collab-indicator--offline .collab-indicator__dot { background: #d93025; }
+.collab-indicator--offline .collab-indicator__dot {
+  background: #d93025;
+}
 
 /* Sync-health warning: WS is "live" but our Y.Doc state vector
    disagrees with peers' for >15 s. Amber to distinguish from the
@@ -4192,8 +4405,13 @@ button {
 }
 
 @keyframes collab-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -4220,7 +4438,9 @@ button {
   line-height: 1.4;
 }
 
-.collab-banner__body { flex: 1 1 auto; }
+.collab-banner__body {
+  flex: 1 1 auto;
+}
 .collab-banner__body code {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
@@ -4248,7 +4468,9 @@ button {
   cursor: pointer;
 }
 
-.collab-banner__close:hover { background: rgba(255, 255, 255, 0.18); }
+.collab-banner__close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
 
 /* Neutral variant (view-only notice) — softer, doesn't feel like an alert. */
 .collab-banner--neutral {
@@ -4265,8 +4487,12 @@ button {
   color: var(--color-accent);
   text-decoration-color: var(--color-accent);
 }
-.collab-banner--neutral .collab-banner__close { color: var(--color-text-soft, var(--color-text)); }
-.collab-banner--neutral .collab-banner__close:hover { background: var(--color-hover); }
+.collab-banner--neutral .collab-banner__close {
+  color: var(--color-text-soft, var(--color-text));
+}
+.collab-banner--neutral .collab-banner__close:hover {
+  background: var(--color-hover);
+}
 
 /* Warn variant — for the "Waiting to reconnect to server" banner.
    Amber to match the diverged sync-health pill, softer than the
@@ -4275,9 +4501,11 @@ button {
   background: color-mix(in srgb, #e7a851 18%, var(--color-surface));
   color: #b06000;
   border: 1px solid color-mix(in srgb, #e7a851 50%, transparent);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
-.collab-banner--warn .collab-banner__body strong { color: #8a4a00; }
+.collab-banner--warn .collab-banner__body strong {
+  color: #8a4a00;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Live presence: remote cursors / selections + avatar stack.
@@ -4326,8 +4554,11 @@ button {
 }
 
 .presence-cursor--moving {
-  transition: top 120ms ease-out, left 120ms ease-out,
-    width 120ms ease-out, height 120ms ease-out;
+  transition:
+    top 120ms ease-out,
+    left 120ms ease-out,
+    width 120ms ease-out,
+    height 120ms ease-out;
 }
 
 .presence-cursor__label {
@@ -4358,9 +4589,15 @@ button {
 }
 
 @keyframes presence-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset; }
-  50%      { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset,
-                         0 0 0 2px color-mix(in srgb, var(--presence-color, #1a73e8) 35%, transparent); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.6) inset,
+      0 0 0 2px color-mix(in srgb, var(--presence-color, #1a73e8) 35%, transparent);
+  }
 }
 
 .presence-cursor__ghost {
@@ -4402,7 +4639,9 @@ button {
   cursor: default;
   user-select: none;
 }
-.presence-avatar:first-child { margin-left: 0; }
+.presence-avatar:first-child {
+  margin-left: 0;
+}
 .presence-avatar--more {
   background: var(--color-surface-alt);
   color: var(--color-text);
@@ -4421,7 +4660,10 @@ button {
   display: grid;
   gap: 14px;
 }
-.share-room__row { display: grid; gap: 6px; }
+.share-room__row {
+  display: grid;
+  gap: 6px;
+}
 .share-room__label {
   font-size: 12px;
   font-weight: var(--weight-semibold, 600);
@@ -4466,7 +4708,9 @@ button {
   font-weight: var(--weight-medium, 500);
   text-align: left;
 }
-.share-room__seg-opt:hover { background: var(--color-hover); }
+.share-room__seg-opt:hover {
+  background: var(--color-hover);
+}
 .share-room__seg-opt--active {
   border-color: var(--color-accent);
   background: var(--color-accent-soft, transparent);
@@ -4477,7 +4721,9 @@ button {
   font-weight: var(--weight-regular, 400);
   color: var(--color-text-soft, var(--color-text));
 }
-.share-room__seg-opt--active .share-room__seg-opt-desc { color: var(--color-accent); }
+.share-room__seg-opt--active .share-room__seg-opt-desc {
+  color: var(--color-accent);
+}
 
 .share-room__urls {
   display: grid;
@@ -4516,7 +4762,9 @@ button {
   cursor: pointer;
   font-size: 13px;
 }
-.share-room__copy:hover { background: var(--color-hover); }
+.share-room__copy:hover {
+  background: var(--color-hover);
+}
 .share-room__copy--done {
   border-color: var(--color-accent);
   color: var(--color-accent);
@@ -4561,7 +4809,9 @@ button {
   border-radius: 4px;
 }
 
-.outline-panel__close:hover { background: var(--color-surface-strip); }
+.outline-panel__close:hover {
+  background: var(--color-surface-strip);
+}
 
 .outline-panel__body {
   flex: 1 1 auto;
@@ -4618,9 +4868,11 @@ button {
 }
 
 .outline-panel__toggle:hover,
-.outline-panel__remove:hover { background: var(--color-surface-strip); }
+.outline-panel__remove:hover {
+  background: var(--color-surface-strip);
+}
 
-.outline-panel__toggle[aria-pressed="true"] {
+.outline-panel__toggle[aria-pressed='true'] {
   color: var(--color-accent);
 }
 
@@ -4678,8 +4930,13 @@ button {
 }
 
 @keyframes tooltip-fade-in {
-  from { opacity: 0; transform: translate(-50%, 2px); }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+    transform: translate(-50%, 2px);
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .tooltip--top {
@@ -4687,8 +4944,14 @@ button {
 }
 
 @keyframes tooltip-fade-in-top {
-  from { opacity: 0; transform: translate(-50%, calc(-100% + 2px)); }
-  to   { opacity: 1; transform: translate(-50%, -100%); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% + 2px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -4788,7 +5051,9 @@ button {
   color: #1e3a8a;
   font-size: 13px;
 }
-.preview-banner__text { flex: 1; }
+.preview-banner__text {
+  flex: 1;
+}
 .preview-banner__btn {
   font: inherit;
   padding: 4px 12px;
@@ -4798,7 +5063,9 @@ button {
   color: #1e3a8a;
   cursor: pointer;
 }
-.preview-banner__btn:hover { background: #dbeafe; }
+.preview-banner__btn:hover {
+  background: #dbeafe;
+}
 .preview-banner__btn--primary {
   background: #2563eb;
   color: #fff;
@@ -4830,7 +5097,9 @@ button {
   color: var(--color-text-secondary);
   cursor: pointer;
 }
-.version-history__tab:hover { color: var(--color-text); }
+.version-history__tab:hover {
+  color: var(--color-text);
+}
 .version-history__tab--active {
   color: var(--color-accent);
   font-weight: var(--weight-semibold, 600);
@@ -4850,7 +5119,9 @@ button {
   overflow-y: auto;
   padding: 8px 0;
 }
-.version-history__group { padding: 6px 12px 10px; }
+.version-history__group {
+  padding: 6px 12px 10px;
+}
 .version-history__group-label {
   margin: 0 0 6px;
   font-size: 11px;
@@ -4875,7 +5146,9 @@ button {
   border-radius: var(--radius-sm);
   transition: background var(--motion-fast) var(--ease-out);
 }
-.version-history__row:hover { background: var(--color-hover); }
+.version-history__row:hover {
+  background: var(--color-hover);
+}
 .version-history__row--active {
   background: var(--color-accent-soft, var(--color-pressed));
 }
@@ -4918,7 +5191,9 @@ button {
   width: 20px;
   color: var(--color-text-secondary);
 }
-.version-history__kind--manual { color: var(--color-accent); }
+.version-history__kind--manual {
+  color: var(--color-accent);
+}
 .version-history__row-actions {
   display: flex;
   gap: 2px;
@@ -4937,8 +5212,13 @@ button {
   color: var(--color-text-secondary);
   cursor: pointer;
 }
-.version-history__action:hover { background: var(--color-pressed); color: var(--color-text); }
-.version-history__action--danger:hover { color: #b91c1c; }
+.version-history__action:hover {
+  background: var(--color-pressed);
+  color: var(--color-text);
+}
+.version-history__action--danger:hover {
+  color: #b91c1c;
+}
 .version-history__rename-input {
   font: inherit;
   font-size: 13px;
@@ -4963,7 +5243,9 @@ button {
 }
 /* Hide the nested HistoryPanel's own header — we already render the
    panel header at the outer VersionHistoryPanel level. */
-.version-history__activity .side-panel__header { display: none; }
+.version-history__activity .side-panel__header {
+  display: none;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Responsive shell — viewer + light-editor lane (CLAUDE.md scope).
@@ -4998,18 +5280,39 @@ button {
   /* Title bar — shrink the brand icon and tighten the two rows so the
      filename and menu strip both stay legible without claiming a third
      of the viewport. */
-  .titlebar { padding: 0 12px; gap: 8px; }
-  .titlebar__brand-icon { width: 24px; height: 24px; }
-  .titlebar__center-top { height: 22px; font-size: 13px; }
-  .titlebar__center-bottom { height: 26px; font-size: 13px; }
-  .titlebar__center { padding: 3px 0; }
-  .titlebar__filename, .titlebar__filename-input { height: 22px; }
-  .titlebar__center-bottom .menubar__item { height: 24px; }
+  .titlebar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .titlebar__brand-icon {
+    width: 24px;
+    height: 24px;
+  }
+  .titlebar__center-top {
+    height: 22px;
+    font-size: 13px;
+  }
+  .titlebar__center-bottom {
+    height: 26px;
+    font-size: 13px;
+  }
+  .titlebar__center {
+    padding: 3px 0;
+  }
+  .titlebar__filename,
+  .titlebar__filename-input {
+    height: 22px;
+  }
+  .titlebar__center-bottom .menubar__item {
+    height: 24px;
+  }
 
   /* Title bar actions strip (Share, kebab) — hide on mobile; everything
      it carries is also in the File menu. Drives a chunk of horizontal
      real estate back into the centre column. */
-  .titlebar__actions { display: none; }
+  .titlebar__actions {
+    display: none;
+  }
 
   /* Menu bar — single-row horizontal scroll with a right-edge fade so
      the scroll affordance is visible. The fade is the only hint users
@@ -5022,9 +5325,11 @@ button {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
-            mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
   }
-  .menubar::-webkit-scrollbar { display: none; }
+  .menubar::-webkit-scrollbar {
+    display: none;
+  }
   .menubar__item {
     flex: 0 0 auto;
     min-height: 32px;
@@ -5038,12 +5343,20 @@ button {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
-            mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
   }
-  .toolbar::-webkit-scrollbar { display: none; }
-  .toolbar__inner { padding: 0 8px; }
-  .ribbon__group { padding: 0 4px; }
-  .ribbon__group-label { display: none; }
+  .toolbar::-webkit-scrollbar {
+    display: none;
+  }
+  .toolbar__inner {
+    padding: 0 8px;
+  }
+  .ribbon__group {
+    padding: 0 4px;
+  }
+  .ribbon__group-label {
+    display: none;
+  }
 
   /* Formula bar — compact name box, discoverable underline on the
      input, font-size pinned to 16 px (iOS focus-zoom guard). */
@@ -5068,7 +5381,10 @@ button {
   .titlebar .btn,
   .toolbar .btn,
   .formula-bar .formula-bar__action,
-  .formula-bar .formula-bar__fx { min-height: 32px; min-width: 32px; }
+  .formula-bar .formula-bar__fx {
+    min-height: 32px;
+    min-width: 32px;
+  }
 
   /* Sheet tabs — compact paddings + scroll-end fade. Drop the zoom
      slider + multi-cell stats + section dividers (pinch-zoom on the
@@ -5077,15 +5393,21 @@ button {
     padding: 0 6px;
     gap: 4px;
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
-            mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
+    mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
   }
   .sheet-tabs__zoom-slider,
   .sheet-tabs__sep,
-  .sheet-tabs__stats { display: none; }
+  .sheet-tabs__stats {
+    display: none;
+  }
 
   /* Tighter dialog padding so phone-width modals don't lose chrome to gutters. */
-  .dialog__body { padding: 14px 16px; }
-  .dialog__footer { padding: 12px 16px; }
+  .dialog__body {
+    padding: 14px 16px;
+  }
+  .dialog__footer {
+    padding: 12px 16px;
+  }
 
   /* Side panels replace the grid rather than squeezing it. */
   .tables-panel,
@@ -5099,7 +5421,10 @@ button {
   }
 
   /* Save / message toast stays out of the way of the sheet-tab strip. */
-  .collab-banner { bottom: 72px; max-width: calc(100vw - 16px); }
+  .collab-banner {
+    bottom: 72px;
+    max-width: calc(100vw - 16px);
+  }
 }
 
 /* Bottom action bar — visible only on mobile (≤ 480 px). Sticky strip
@@ -5109,7 +5434,9 @@ button {
    formatting + undo grouping are identical.
 
    Default: hidden. Mobile breakpoint flips display to flex. */
-.mobile-bar { display: none; }
+.mobile-bar {
+  display: none;
+}
 .mobile-bar__btn {
   flex: 0 0 auto;
   width: 36px;
@@ -5125,12 +5452,17 @@ button {
   cursor: pointer;
 }
 .mobile-bar__btn:hover,
-.mobile-bar__btn:active { background: var(--color-hover); color: var(--color-text); }
+.mobile-bar__btn:active {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
 .mobile-bar__btn--on {
   background: var(--color-selected);
   color: var(--color-accent);
 }
-.mobile-bar__btn .icon { font-size: 20px; }
+.mobile-bar__btn .icon {
+  font-size: 20px;
+}
 .mobile-bar__sep {
   flex: 0 0 1px;
   height: 22px;
@@ -5168,24 +5500,55 @@ button {
     flex-shrink: 0;
     z-index: 3;
   }
-  .mobile-bar::-webkit-scrollbar { display: none; }
+  .mobile-bar::-webkit-scrollbar {
+    display: none;
+  }
 
   /* Even tighter titlebar — drop brand label, keep just the icon. */
-  .titlebar { padding: 0 8px; gap: 6px; }
-  .titlebar__center-top { height: 20px; font-size: 12.5px; }
-  .titlebar__center-bottom { height: 22px; font-size: 12.5px; }
-  .titlebar__brand-icon { width: 22px; height: 22px; }
-  .titlebar__divider { display: none; }
+  .titlebar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .titlebar__center-top {
+    height: 20px;
+    font-size: 12.5px;
+  }
+  .titlebar__center-bottom {
+    height: 22px;
+    font-size: 12.5px;
+  }
+  .titlebar__brand-icon {
+    width: 22px;
+    height: 22px;
+  }
+  .titlebar__divider {
+    display: none;
+  }
 
   /* Toolbar: row 2 hidden, big-button labels + chevrons off, ~36 px
      square hit targets. */
-  .toolbar .ribbon__group-row[data-row='2'] { display: none; }
+  .toolbar .ribbon__group-row[data-row='2'] {
+    display: none;
+  }
   .toolbar .btn__big-label,
-  .toolbar .btn__big-chevron { display: none; }
-  .toolbar .btn--big { padding: 0 8px; min-width: 36px; height: 32px; }
-  .toolbar .btn--big .icon { font-size: 18px; }
-  .toolbar .ribbon__group-lead { display: none; }
+  .toolbar .btn__big-chevron {
+    display: none;
+  }
+  .toolbar .btn--big {
+    padding: 0 8px;
+    min-width: 36px;
+    height: 32px;
+  }
+  .toolbar .btn--big .icon {
+    font-size: 18px;
+  }
+  .toolbar .ribbon__group-lead {
+    display: none;
+  }
 
   /* Sheet tabs even tighter. */
-  .sheet-tabs__tab { min-height: 28px; padding: 0 10px; }
+  .sheet-tabs__tab {
+    min-height: 28px;
+    padding: 0 10px;
+  }
 }

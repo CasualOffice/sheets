@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { IWorkbookData } from '@univerjs/core';
 import { TitleBar } from './shell/TitleBar';
 import { Toolbar } from './shell/Toolbar';
@@ -63,6 +63,28 @@ export function App() {
   }));
 
   const [homeDismissed, setHomeDismissed] = useState(false);
+  // Auto-dismiss the home screen when an autosave record exists, so
+  // the AutosaveRestoreBanner is visible on first paint instead of
+  // being hidden behind the template gallery. Best-effort IDB probe —
+  // failures (private mode, locked DB) leave home visible, which is
+  // the conservative default.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { readAutosave } = await import('./autosave/store');
+        const rec = await readAutosave();
+        if (!cancelled && rec) {
+          setHomeDismissed(true);
+        }
+      } catch {
+        /* keep home visible on probe failure */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [formulaBarVisible, setFormulaBarVisible] = useState(true);
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
   const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
@@ -77,7 +99,10 @@ export function App() {
   // so a multi-MB snapshot isn't duplicated when we already have one
   // copy in Univer.
   const [preview, setPreview] = useState<PreviewState | null>(null);
-  const previewSavedRef = useRef<{ data: IWorkbookData; sourceFormat: WorkbookFormat | null } | null>(null);
+  const previewSavedRef = useRef<{
+    data: IWorkbookData;
+    sourceFormat: WorkbookFormat | null;
+  } | null>(null);
 
   const enterPreview = useCallback(
     (
@@ -138,28 +163,25 @@ export function App() {
     setPreview(null);
   }, []);
 
-  const replaceWorkbook = useCallback(
-    (next: IWorkbookData, format?: WorkbookFormat | null) => {
-      snapshotRef.current = next;
-      setMeta((prev) => ({
-        id: next.id ?? prev.id,
-        name: next.name ?? prev.name,
-        sourceFormat: format !== undefined ? format : prev.sourceFormat,
-        revision: prev.revision + 1,
-      }));
-      // Free the ref after consumers have processed the revision bump.
-      // We wait two macrotasks: the first lets React flush its render +
-      // useEffect pass (UniverSheet's swap, OutlineProvider's rehydrate);
-      // the second is paranoia for any deferred work scheduled inside
-      // those effects.
+  const replaceWorkbook = useCallback((next: IWorkbookData, format?: WorkbookFormat | null) => {
+    snapshotRef.current = next;
+    setMeta((prev) => ({
+      id: next.id ?? prev.id,
+      name: next.name ?? prev.name,
+      sourceFormat: format !== undefined ? format : prev.sourceFormat,
+      revision: prev.revision + 1,
+    }));
+    // Free the ref after consumers have processed the revision bump.
+    // We wait two macrotasks: the first lets React flush its render +
+    // useEffect pass (UniverSheet's swap, OutlineProvider's rehydrate);
+    // the second is paranoia for any deferred work scheduled inside
+    // those effects.
+    setTimeout(() => {
       setTimeout(() => {
-        setTimeout(() => {
-          if (snapshotRef.current === next) snapshotRef.current = null;
-        }, 0);
+        if (snapshotRef.current === next) snapshotRef.current = null;
       }, 0);
-    },
-    [],
-  );
+    }, 0);
+  }, []);
 
   // App owns only the meta update — TitleBar mirrors into Univer via
   // setName since App itself is outside the UniverProvider.
@@ -271,69 +293,76 @@ export function App() {
       toggleShowFormulas: () => setShowFormulas((v) => !v),
       openShareRoom: () => setShareRoomOpen(true),
     }),
-    [formulaBarVisible, tablesPanelVisible, outlinePanelVisible, chartsPanelVisible, historyPanelVisible, showFormulas],
+    [
+      formulaBarVisible,
+      tablesPanelVisible,
+      outlinePanelVisible,
+      chartsPanelVisible,
+      historyPanelVisible,
+      showFormulas,
+    ],
   );
 
   return (
     <UniverRoot>
       <UIContext.Provider value={uiValue}>
         <WorkbookContext.Provider value={wbValue}>
-        <LoadingContext.Provider value={loadingValue}>
-        <BusyProvider>
-        <ChartsProvider>
-        <PivotsProvider>
-        <SparklinesProvider>
-          <OutlineProvider>
-            <GrowthDriver />
-            <FileDropDriver />
-            <AutosaveDriver />
-            <TouchPanDriver />
-            <VersionHistoryDriver />
-            <PreviewDriver />
-            <InputParserDriver />
-            <ThemeBridge />
-            <CollabDriver>
-              <div
-                className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
-                data-testid="app-shell"
-              >
-                <TitleBar />
-                <Toolbar />
-                <AutosaveRestoreBanner />
-                <PreviewBanner />
-                {formulaBarVisible && <FormulaBar />}
-                <div className="grid-row">
-                  <main className="grid-host" data-testid="grid-host">
-                    <UniverSheet revision={meta.revision} initialSnapshot={initial} />
-                  </main>
-                  {tablesPanelVisible && <TablesPanel />}
-                  {outlinePanelVisible && <OutlinePanel />}
-                  {chartsPanelVisible && <ChartsPanel />}
-                  {historyPanelVisible && <VersionHistoryPanel />}
-                  <PanelRail />
-                </div>
-                <MobileActionBar />
-                <SheetTabs />
-                <PanelMutex />
-                {shareRoomOpen && (
-                  <CreateRoomDialog onClose={() => setShareRoomOpen(false)} />
-                )}
-              </div>
-            </CollabDriver>
-            <HomeScreen
-              dismissed={homeDismissed}
-              onDismiss={() => setHomeDismissed(true)}
-            />
-            <LoadingOverlay />
-            <ChartLayer />
-            <SparklineLayer />
-            <ShowFormulasLayer />
-          </OutlineProvider>
-        </SparklinesProvider>
-        </PivotsProvider>
-        </ChartsProvider>
-        </BusyProvider>
-        </LoadingContext.Provider>
+          <LoadingContext.Provider value={loadingValue}>
+            <BusyProvider>
+              <ChartsProvider>
+                <PivotsProvider>
+                  <SparklinesProvider>
+                    <OutlineProvider>
+                      <GrowthDriver />
+                      <FileDropDriver />
+                      <AutosaveDriver />
+                      <TouchPanDriver />
+                      <VersionHistoryDriver />
+                      <PreviewDriver />
+                      <InputParserDriver />
+                      <ThemeBridge />
+                      <CollabDriver>
+                        <div
+                          className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
+                          data-testid="app-shell"
+                        >
+                          <TitleBar />
+                          <Toolbar />
+                          <AutosaveRestoreBanner />
+                          <PreviewBanner />
+                          {formulaBarVisible && <FormulaBar />}
+                          <div className="grid-row">
+                            <main className="grid-host" data-testid="grid-host">
+                              <UniverSheet revision={meta.revision} initialSnapshot={initial} />
+                            </main>
+                            {tablesPanelVisible && <TablesPanel />}
+                            {outlinePanelVisible && <OutlinePanel />}
+                            {chartsPanelVisible && <ChartsPanel />}
+                            {historyPanelVisible && <VersionHistoryPanel />}
+                            <PanelRail />
+                          </div>
+                          <MobileActionBar />
+                          <SheetTabs />
+                          <PanelMutex />
+                          {shareRoomOpen && (
+                            <CreateRoomDialog onClose={() => setShareRoomOpen(false)} />
+                          )}
+                        </div>
+                      </CollabDriver>
+                      <HomeScreen
+                        dismissed={homeDismissed}
+                        onDismiss={() => setHomeDismissed(true)}
+                      />
+                      <LoadingOverlay />
+                      <ChartLayer />
+                      <SparklineLayer />
+                      <ShowFormulasLayer />
+                    </OutlineProvider>
+                  </SparklinesProvider>
+                </PivotsProvider>
+              </ChartsProvider>
+            </BusyProvider>
+          </LoadingContext.Provider>
         </WorkbookContext.Provider>
       </UIContext.Provider>
     </UniverRoot>
