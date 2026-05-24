@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { IWorkbookData } from '@univerjs/core';
 import { Icon } from '../shell/Icon';
 import { useWorkbook } from '../use-workbook';
@@ -7,6 +7,7 @@ import { useLiveRecentFiles } from '../recent-files/useLiveRecentFiles';
 import { deleteRecentFile, type RecentFile } from '../recent-files/store';
 import { xlsxToWorkbookData } from '../xlsx';
 import { emptyWorkbook } from '../snapshot';
+import { loadSpreadsheetFile, pickXlsxFile } from '../shell/file-actions';
 import { CATEGORIES, TEMPLATES, type Template, type TemplateCategory } from './registry';
 import { TemplateCard } from './TemplateCard';
 import './home.css';
@@ -23,7 +24,13 @@ import './home.css';
  * place. The overlay self-dismisses because the workbook is no longer
  * blank after a successful pick.
  */
-export function HomeScreen() {
+export function HomeScreen({
+  dismissed,
+  onDismiss,
+}: {
+  dismissed: boolean;
+  onDismiss: () => void;
+}) {
   const wb = useWorkbook();
   const loading = useLoading();
   const recents = useLiveRecentFiles();
@@ -56,11 +63,32 @@ export function HomeScreen() {
     return map;
   }, []);
 
-  if (!isBlank) return null;
+  const visible = !dismissed && isBlank;
+
+  // Esc closes the home, same as the X button.
+  useEffect(() => {
+    if (!visible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onDismiss();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visible, onDismiss]);
+
+  // Show on a blank Untitled workbook, until the user picks something
+  // (template, Blank, or explicit close). Once dismissed it stays gone
+  // for this session — re-entry will land via File → New later.
+  if (!visible) return null;
 
   const pick = async (t: Template) => {
     if (t.id === 'blank') {
+      // Blank pick keeps the workbook Untitled; explicit dismiss flips
+      // the gate so the home goes away.
       wb.replaceWorkbook(emptyWorkbook(), null);
+      onDismiss();
       return;
     }
     const url = `${import.meta.env.BASE_URL ?? '/'}templates/${t.id}.xlsx`;
@@ -75,6 +103,7 @@ export function HomeScreen() {
       data.name = t.name;
       loading.set({ phase: 'mounting' });
       wb.replaceWorkbook(data, 'xlsx');
+      onDismiss();
       // LoadingOverlay closes itself when the workbook swap completes.
       loading.set(null);
     } catch (err) {
@@ -90,6 +119,27 @@ export function HomeScreen() {
 
   const onOpenRecent = (rec: RecentFile) => {
     wb.replaceWorkbook(rec.data as IWorkbookData, rec.sourceFormat);
+    onDismiss();
+  };
+
+  const openFileFromDisk = async () => {
+    const file = await pickXlsxFile();
+    if (!file) return;
+    loading.set({ fileName: file.name, sizeBytes: file.size, phase: 'reading' });
+    try {
+      await loadSpreadsheetFile(file, null, wb.replaceWorkbook, (phase) =>
+        loading.set({ phase }),
+      );
+      onDismiss();
+      loading.set(null);
+    } catch (err) {
+      console.error('[home] open file failed', err);
+      loading.set({
+        fileName: file.name,
+        phase: 'reading',
+        error: err instanceof Error ? err.message : 'Could not open this file.',
+      });
+    }
   };
   const onDeleteRecent = (rec: RecentFile) => {
     if (rec.id == null) return;
@@ -98,6 +148,16 @@ export function HomeScreen() {
 
   return (
     <div className="home" data-testid="home-screen" aria-label="Start a new spreadsheet">
+      <button
+        type="button"
+        className="home__close"
+        aria-label="Close home"
+        title="Close (Esc)"
+        onClick={onDismiss}
+        data-testid="home-close"
+      >
+        <Icon name="close" />
+      </button>
       <div className="home__scroll">
         <header className="home__hero">
           <div className="home__hero-glow" aria-hidden />
@@ -122,6 +182,15 @@ export function HomeScreen() {
                   data-testid="home-search"
                 />
               </div>
+              <button
+                type="button"
+                className="home__open-file"
+                onClick={() => void openFileFromDisk()}
+                data-testid="home-open-file"
+              >
+                <Icon name="folder_open" />
+                <span>Open file</span>
+              </button>
               <div className="home__cats">
                 <button
                   type="button"

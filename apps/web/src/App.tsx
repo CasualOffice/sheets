@@ -59,6 +59,7 @@ export function App() {
     revision: 0,
   }));
 
+  const [homeDismissed, setHomeDismissed] = useState(false);
   const [formulaBarVisible, setFormulaBarVisible] = useState(true);
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
   const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
@@ -299,7 +300,6 @@ export function App() {
                 <div className="grid-row">
                   <main className="grid-host" data-testid="grid-host">
                     <UniverSheet revision={meta.revision} initialSnapshot={initial} />
-                    <HomeScreen />
                   </main>
                   {tablesPanelVisible && <TablesPanel />}
                   {outlinePanelVisible && <OutlinePanel />}
@@ -314,6 +314,10 @@ export function App() {
                 )}
               </div>
             </CollabDriver>
+            <HomeScreen
+              dismissed={homeDismissed}
+              onDismiss={() => setHomeDismissed(true)}
+            />
             <LoadingOverlay />
             <ChartLayer />
             <SparklineLayer />

@@ -12,12 +12,13 @@
  * ─────────────────────────────────────────────────────────────────────── */
 
 .home {
-  position: absolute;
+  /* Full-viewport takeover — covers TitleBar, Toolbar, FormulaBar, grid,
+     and SheetTabs. The editor stays mounted behind so picking a template
+     dissolves straight into a ready workbook with no remount cost.
+     LoadingOverlay (z-index 1100) still wins on top during the parse. */
+  position: fixed;
   inset: 0;
-  /* Univer's canvas layers sit inside `.grid-host > [data-testid=univer-host]`
-     with their own stacking — push the home well clear so pointer events
-     on cards reach the buttons, not the canvas underneath. */
-  z-index: 50;
+  z-index: 80;
   isolation: isolate;
   display: flex;
   flex-direction: column;
@@ -117,6 +118,56 @@
   gap: 18px;
   flex-wrap: wrap;
 }
+
+.home__close {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+.home__close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+.home__close .icon { font-size: 22px; }
+
+.home__open-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+.home__open-file:hover {
+  background: var(--color-hover);
+  border-color: var(--color-border-strong);
+}
+.home__open-file .icon { font-size: 18px; color: var(--color-text-secondary); }
 
 .home__search {
   display: inline-flex;
