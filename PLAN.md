@@ -90,34 +90,40 @@ All three technical risks proved out:
 
 ---
 
+### ✅ Phase 6 — Self-host platform (complete — v0.1.0)
+
+The first version-bumped release. v0.0.x was the "build a real editor end-to-end" arc; v0.1.0 earns its self-host story.
+
+- **WOPI host integration** — `host.Integration` TypeScript interface + 4 concrete backends behind `CASUAL_STORAGE`: `memory` (default, preserves v0.0.x shape) · `local` (filesystem) · `s3` (AWS / MinIO / R2 / B2) · `postgres` (single bytea table).
+- **WOPI endpoints**: CheckFileInfo · GetFile · PutFile (with `X-WOPI-ItemVersion` honoured as If-Match → 409 on mismatch).
+- **JWT auth** — `CASUAL_JWT_SECRET` enables. Claims model: `sub` · `file_id` · `role` (admin/editor/commenter/viewer) · per-flag `permissions` · `features` toggles · `password_required` · `display_name`. URL `:id` must match `file_id` claim → 403 on cross-file lateral. `POST /api/tokens` admin-gated mint endpoint; `GET /api/me` self-introspection.
+- **Admin panel** at `/admin` — env-gated by `CASUAL_ADMIN_USERNAME` + `CASUAL_ADMIN_PASSWORD`. Seven sections: branding · base path · storage (with per-backend cred forms) · networking (CORS / trust-proxy / HSTS / public origin) · room limits · auth providers (JWT live; OIDC + SAML stubbed for v0.2) · webhooks. JSON config persisted with mode 0600; secrets redacted on read (`***` sentinel preserves prior verbatim on write-back).
+- **Webhook dispatcher** — 9 events (`room.created` / `dropped`, `file.uploaded` / `saved` / `deleted`, `user.joined` / `left`, `admin.login` / `login_failed`). HMAC-SHA256 signed via `X-Casual-Signature: sha256=<hex>` when subscription has a secret. Single retry after 5 s; v0.2 ships proper queue + dead-letter.
+- **P6.1 — complex pivot cache passthrough** — `xl/pivotCaches/**` + `xl/pivotTables/**` survive round-trip. Rel renumbering across `xl/_rels/workbook.xml.rels` + every `xl/worksheets/_rels/sheet*.xml.rels`; `<pivotCaches>` injected into the ExcelJS-regenerated `xl/workbook.xml`. **Audit: 46/46 → 54/54**.
+- **OCI image labels** — `org.opencontainers.image.*` baked in from CI build args. Rolling-tag scheme: `0.1.0` · `0.1` · `0` · `latest`. SBOM + provenance attestations in the manifest.
+- **Self-hosting + customization docs** — 11 new pages on schnsrw.live/docs/sheets/ covering overview · reverse-proxy recipes · TLS · CORS · scaling · backups · admin walkthrough · auth claims + token issuance · webhook signature verification (Node/Python/Go).
+- **Mobile lane** (back-ported) — touch-pan driver synthesizes wheel events from pointermove (Univer 0.24 has no native touch-pan); compact chrome at ≤ 720 px / ≤ 480 px; sticky bottom action bar; formula bar input pinned to 16 px (iOS focus-zoom guard).
+- **Test coverage** — unit tests **8 → 60** (host contract + WOPI routes + JWT auth matrix + admin config + webhook HMAC). E2E suite 357 + the home + mobile + audit specs.
+
+---
+
 ## What's next
 
-### P6 — Remaining gaps (small)
+### P7 — v0.2 expansion (planned)
 
-| Area | What's needed |
-| --- | --- |
-| Pivots | ~~Multi-row-field with Excel's compact layout~~ ✅ (P1.5 — outer subtotals + indented inner rows + grand total; sub-row dropdown on Insert dialog; drill-down follows the full composite key path) |
-| xlsx round-trip | VBA stub passthrough ✅ (lossiness audit now 46/46 — .xlsm files round-trip macros byte-equal). Complex pivot cache deferred to **P6.1** (rel renumbering + workbook.xml surgery); numfmt long tail ✅ |
-| UX | ~~Display-name edit surface post-join~~ ✅ (join prompt now carries a "Joining as" field so users can override their stored name BEFORE peers see them; NamePill stays the post-join surface) |
-
-### P6.1 — Complex pivot cache passthrough (deferred)
-
-xlsx files authored with pivot tables currently lose the `xl/pivotCaches/**`
-and `xl/pivotTables/**` parts on round-trip. The clean fix is the same
-byte-passthrough pattern shipped for VBA, but pivots need extra OOXML
-surgery: rel renumbering across `xl/_rels/workbook.xml.rels` +
-`xl/worksheets/_rels/sheet*.xml.rels` and injection of `<pivotCaches>`
-into the ExcelJS-regenerated `xl/workbook.xml`. Estimated 2 days. Slot
-in alongside the home/templates work as a side track.
-
-### P7 — WOPI host integration (deferred)
-
-When persistence is required: add a Hocuspocus persistence adapter (Postgres or S3-backed) and implement the WOPI host contract. The collab layer doesn't change — only the storage backend.
+- **OIDC + SAML backend** — UI shipped in v0.1, schema persists; v0.2 ships enforcement.
+- **Webhook retry queue** — proper exponential backoff + dead-letter store.
+- **Horizontal scale-out** — sticky-session for `/yjs` WebSocket + cross-replica awareness backplane (Redis pub/sub).
+- **Real-device mobile pass** — Playwright iPhone 13 emulation got us to 7/7 mobile e2e; v0.2 adds physical-phone testing for pinch-zoom + virtual keyboard + landscape rotation behaviour.
 
 ### P8 — Scale (deferred)
 
 - Op-log scale for multi-hour rooms (current Stage-6 compaction is fine for typical sessions; bound growth more aggressively when we see real pressure).
-- Horizontal scale-out: single-process today.
+- Horizontal scale-out beyond sticky sessions: stateless WebSocket via shared Yjs state, multi-region replication.
+
+### Univer fork perf (separate pipeline)
+
+See [`docs/UNIVER_FORK_PERF.md`](./docs/UNIVER_FORK_PERF.md). Items 5–10 (incremental scroll, sparse insert, lazy bootstrap, listener batching, formula coalescing, incremental dep-tree) are gated behind "Excel parity first" per [project memory](../../.claude/projects/-Users-sachin-Desktop-melp-services-sheet/memory/MEMORY.md) — finish app-side polish before the fork dive.
 
 ---
 
@@ -130,9 +136,13 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full diagram and da
 | Grid + formula engine | Univer OSS 0.24.x |
 | Frontend | React 18 + Vite + TypeScript strict |
 | Collab | Yjs + Hocuspocus over WebSocket |
-| xlsx I/O | ExcelJS in Web Workers |
+| xlsx I/O | ExcelJS + JSZip in Web Workers (with OOXML passthrough for VBA + pivots) |
 | ods / csv / tsv | `@e965/xlsx` in Web Workers |
 | Charts | ECharts overlay anchored to cell ranges |
-| Persistence | Redis optional, 7-day TTL |
-| Container | Node 22 Alpine, multi-arch (amd64 + arm64) |
-| Tests | Playwright (Chromium), 337 e2e tests |
+| Workbook persistence | `host.Integration` interface (memory · local · S3 · Postgres) |
+| Room persistence | Redis optional, 7-day TTL |
+| Auth | JWT (HS256) with role + permission + feature claims |
+| Admin | `/admin` React panel; env-gated; on-disk JSON config |
+| Webhooks | 9 events with HMAC-SHA256 signing |
+| Container | Node 22 Alpine, multi-arch (amd64 + arm64), OCI-labelled |
+| Tests | 60 unit + 357 + home + mobile + lossiness Playwright e2e |
