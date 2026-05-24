@@ -43,6 +43,7 @@ import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
 import { useVersionHistoryCapture } from './version-history/useVersionHistoryCapture';
 import { useTouchPan } from './touch/useTouchPan';
+import { MobileActionBar } from './shell/MobileActionBar';
 
 export function App() {
   // Snapshot lives in a ref, NOT React state — see workbook-context.tsx.
@@ -309,6 +310,7 @@ export function App() {
                   {historyPanelVisible && <VersionHistoryPanel />}
                   <PanelRail />
                 </div>
+                <MobileActionBar />
                 <SheetTabs />
                 <PanelMutex />
                 {shareRoomOpen && (

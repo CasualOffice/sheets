@@ -86,6 +86,28 @@ test.describe('Mobile shell (375 × 667)', () => {
     expect(fontSize, `formula-bar input font-size was ${fontSize}px`).toBeGreaterThanOrEqual(16);
   });
 
+  test('bottom action bar is visible on mobile with formatting buttons', async ({ page }) => {
+    await dismissHome(page);
+    // The bar is CSS-hidden above 480 px so it MUST be visible at our
+    // 375 × 667 viewport. Tap targets cover B/I/U + $/% + decimal +
+    // align — the most-used formatters for a thumb-driven mobile edit.
+    const bar = page.getByTestId('mobile-action-bar');
+    await expect(bar).toBeVisible();
+
+    for (const id of [
+      'mobile-bar-bold',
+      'mobile-bar-italic',
+      'mobile-bar-underline',
+      'mobile-bar-currency',
+      'mobile-bar-percent',
+      'mobile-bar-align-left',
+      'mobile-bar-align-center',
+      'mobile-bar-align-right',
+    ]) {
+      await expect(page.getByTestId(id), `${id} attached`).toBeAttached();
+    }
+  });
+
   test('touch-drag on the canvas dispatches wheel events (TouchPanDriver wired)', async ({ page }) => {
     // Univer 0.24 has no native touch-pan — we synthesize wheel events
     // from pointermove deltas in `useTouchPan`. Dismiss the home,

@@ -289,18 +289,23 @@ button {
      items fell into the toolbar's row instead of the 1fr below it,
      and the grid host collapsed to a few-pixel sliver at narrow
      viewports. Explicit areas pin each chrome row to its slot
-     regardless of which siblings are present. */
+     regardless of which siblings are present.
+     `mobilebar` row collapses to 0 on desktop (`--mobile-bar-h: 0px`),
+     so the strip is invisible there but the grid stays well-formed
+     for the auto-placed React node. */
   grid-template-rows:
     var(--titlebar-h)
     var(--toolbar-h)
     var(--formula-bar-h)
     minmax(0, 1fr)
+    var(--mobile-bar-h, 0px)
     var(--sheet-tabs-h);
   grid-template-areas:
     'titlebar'
     'toolbar'
     'formulabar'
     'gridrow'
+    'mobilebar'
     'sheettabs';
   height: 100dvh;
   width: 100vw;
@@ -313,20 +318,23 @@ button {
     var(--titlebar-h)
     var(--toolbar-h)
     minmax(0, 1fr)
+    var(--mobile-bar-h, 0px)
     var(--sheet-tabs-h);
   grid-template-areas:
     'titlebar'
     'toolbar'
     'gridrow'
+    'mobilebar'
     'sheettabs';
 }
 
 
-.app > .titlebar   { grid-area: titlebar; }
-.app > .toolbar    { grid-area: toolbar; }
+.app > .titlebar    { grid-area: titlebar; }
+.app > .toolbar     { grid-area: toolbar; }
 .app > .formula-bar { grid-area: formulabar; }
-.app > .grid-row   { grid-area: gridrow; }
-.app > .sheet-tabs { grid-area: sheettabs; }
+.app > .grid-row    { grid-area: gridrow; }
+.app > .mobile-bar  { grid-area: mobilebar; }
+.app > .sheet-tabs  { grid-area: sheettabs; }
 
 /* ── Menu bar (Google-Sheets style top dropdowns) ───────────────────────── */
 .menubar {
@@ -5094,6 +5102,42 @@ button {
   .collab-banner { bottom: 72px; max-width: calc(100vw - 16px); }
 }
 
+/* Bottom action bar — visible only on mobile (≤ 480 px). Sticky strip
+   that sits above the sheet-tabs row and carries the most-used
+   formatters (Bold / Italic / Underline / $ / % / decimals / align).
+   Reuses the same Univer commands the desktop ribbon fires, so
+   formatting + undo grouping are identical.
+
+   Default: hidden. Mobile breakpoint flips display to flex. */
+.mobile-bar { display: none; }
+.mobile-bar__btn {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+}
+.mobile-bar__btn:hover,
+.mobile-bar__btn:active { background: var(--color-hover); color: var(--color-text); }
+.mobile-bar__btn--on {
+  background: var(--color-selected);
+  color: var(--color-accent);
+}
+.mobile-bar__btn .icon { font-size: 20px; }
+.mobile-bar__sep {
+  flex: 0 0 1px;
+  height: 22px;
+  background: var(--color-divider);
+  margin: 0 4px;
+}
+
 @media (max-width: 480px) {
   /* Very narrow phones — toolbar collapses to a single-row icon-only
      scrollable strip with row 2 of every ribbon group hidden. Light
@@ -5103,7 +5147,28 @@ button {
     --titlebar-h: 48px;
     --toolbar-h: 40px;
     --sheet-tabs-h: 32px;
+    --mobile-bar-h: 40px;
   }
+
+  /* Bottom action bar visible on mobile only. Sticky above the sheet-
+     tabs strip, full-width, horizontal scroll if too many buttons. */
+  .mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: var(--mobile-bar-h);
+    padding: 0 8px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 0;
+    z-index: 3;
+  }
+  .mobile-bar::-webkit-scrollbar { display: none; }
 
   /* Even tighter titlebar — drop brand label, keep just the icon. */
   .titlebar { padding: 0 8px; gap: 6px; }

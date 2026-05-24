@@ -48,6 +48,16 @@ test.describe('Home ribbon → Univer commands', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);
+    // The home overlay (template gallery) covers the ribbon while the
+    // workbook is a blank Untitled. Dismiss it so clicks on
+    // `ribbon-btn-*` are reachable — `selectRange` activates the cell
+    // programmatically, but it doesn't bump the workbook revision so
+    // the home stays visible without this dismiss.
+    const home = page.getByTestId('home-screen');
+    if (await home.count()) {
+      await page.getByTestId('home-close').click();
+      await expect(home).toHaveCount(0);
+    }
     await selectRange(page, 'A1');
   });
 
