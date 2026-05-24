@@ -173,6 +173,24 @@ Copy `.env.example` to `.env`; `docker compose up` picks it up automatically.
 
 `VITE_*` vars are baked in at build time. Pass them with `--build-arg` on `docker build`, or via the `args:` block in `docker-compose.yml`.
 
+The full env-var matrix (storage backends, networking, admin, JWT, webhooks, more) is documented in [`docs/ENV.md`](./docs/ENV.md) — that's the canonical reference the admin panel reads from too.
+
+### 📚 Self-hosting + customization docs
+
+| Topic | Lives on the site at | Source in this repo |
+|---|---|---|
+| **Self-hosting overview** | [schnsrw.live/docs/sheets/self-hosting/](https://schnsrw.live/docs/sheets/self-hosting/) | [`docs/self-hosting/overview.md`](./docs/self-hosting/overview.md) |
+| Reverse-proxy recipes (nginx · Caddy · Traefik) | [/docs/sheets/self-hosting-reverse-proxy/](https://schnsrw.live/docs/sheets/self-hosting-reverse-proxy/) | [`docs/self-hosting/reverse-proxy.md`](./docs/self-hosting/reverse-proxy.md) |
+| TLS + custom domain | [/docs/sheets/self-hosting-tls/](https://schnsrw.live/docs/sheets/self-hosting-tls/) | [`docs/self-hosting/tls.md`](./docs/self-hosting/tls.md) |
+| CORS | [/docs/sheets/self-hosting-cors/](https://schnsrw.live/docs/sheets/self-hosting-cors/) | [`docs/self-hosting/cors.md`](./docs/self-hosting/cors.md) |
+| Scaling | [/docs/sheets/self-hosting-scaling/](https://schnsrw.live/docs/sheets/self-hosting-scaling/) | [`docs/self-hosting/scaling.md`](./docs/self-hosting/scaling.md) |
+| Backups | [/docs/sheets/self-hosting-backups/](https://schnsrw.live/docs/sheets/self-hosting-backups/) | [`docs/self-hosting/backups.md`](./docs/self-hosting/backups.md) |
+| **Customization overview** | [/docs/sheets/customization/](https://schnsrw.live/docs/sheets/customization/) | [`docs/customization/overview.md`](./docs/customization/overview.md) |
+| Auth — JWT, roles, permissions, features | [/docs/sheets/customization-auth/](https://schnsrw.live/docs/sheets/customization-auth/) | [`docs/customization/auth.md`](./docs/customization/auth.md) |
+| Webhooks — events, payload, signature verification | [/docs/sheets/customization-webhooks/](https://schnsrw.live/docs/sheets/customization-webhooks/) | [`docs/customization/webhooks.md`](./docs/customization/webhooks.md) |
+
+The admin panel at **`/admin`** is the runtime UI for everything above — branding, storage backend selection, networking, room limits, auth providers (JWT live; OIDC + SAML stubbed for v0.2), webhook subscriptions, base path. Enable it by setting `CASUAL_ADMIN_USERNAME` + `CASUAL_ADMIN_PASSWORD` + `CASUAL_JWT_SECRET` on the container.
+
 ---
 
 ## 🛠 Develop
