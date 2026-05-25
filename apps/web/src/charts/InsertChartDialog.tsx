@@ -253,13 +253,32 @@ export function InsertChartDialog({
 
         <fieldset className="insert-chart__group">
           <legend className="insert-chart__legend">Source data</legend>
+          {/* Error elevates ABOVE the input so the user's eye lands
+              on it before the field they're correcting. The previous
+              "small red text below the input" layout was easy to
+              miss (audit finding 1.2); a proper banner with icon +
+              role=alert + aria-live=assertive makes it impossible
+              to skip. Screen readers announce on appearance. */}
+          {error && (
+            <div
+              className="insert-chart__error"
+              data-testid="insert-chart-error"
+              role="alert"
+              aria-live="assertive"
+            >
+              <span className="insert-chart__error-icon" aria-hidden="true">!</span>
+              <span>{error}</span>
+            </div>
+          )}
           <input
             ref={inputRef}
             type="text"
-            className="insert-chart__range"
+            className={`insert-chart__range${error ? ' insert-chart__range--error' : ''}`}
             data-testid="insert-chart-range"
             value={sourceA1}
             spellCheck={false}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'insert-chart-error-desc' : undefined}
             onChange={(e) => {
               setSourceA1(e.target.value);
               if (error) setError(null);
@@ -272,12 +291,7 @@ export function InsertChartDialog({
             }}
             placeholder="A1:C4"
           />
-          {error && (
-            <div className="insert-chart__error" data-testid="insert-chart-error">
-              {error}
-            </div>
-          )}
-          <p className="insert-chart__hint">
+          <p className="insert-chart__hint" id="insert-chart-error-desc">
             First row is used as series labels and the first column as category
             labels — same convention as Excel's Insert &gt; Chart.
           </p>

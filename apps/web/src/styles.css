@@ -3555,10 +3555,47 @@ button {
   outline: none;
   border-color: var(--color-accent);
 }
+/* Insert Chart — error banner. Sits ABOVE the source-range input
+   (not below) with a visible icon, danger-tinted background, and a
+   left border that draws the eye on appearance. Replaces the
+   earlier "small red text below the input" that users missed and
+   silently retried (audit finding 1.2). */
 .insert-chart__error {
-  margin-top: 6px;
-  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--color-danger, #c4321a);
+  background: color-mix(in srgb, var(--color-danger, #c4321a) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger, #c4321a) 30%, transparent);
+  border-left-width: 3px;
+  border-radius: 6px;
+}
+.insert-chart__error-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-danger, #c4321a);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+/* Mirror the error tint onto the input border so the field the
+   user needs to correct is unmistakable. */
+.insert-chart__range--error {
+  border-color: var(--color-danger, #c4321a);
+}
+.insert-chart__range--error:focus {
+  border-color: var(--color-danger, #c4321a);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-danger, #c4321a) 20%, transparent);
 }
 .insert-chart__hint {
   margin: 6px 0 0;
