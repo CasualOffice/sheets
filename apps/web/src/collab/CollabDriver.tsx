@@ -497,6 +497,24 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     return () => clearInterval(id);
   }, [status, peers]);
 
+  // Replay-failure counter — the bridge increments this every time
+  // a remote mutation throws on local apply. Each one is a candidate
+  // divergence (peer's edit didn't land here, so state vectors will
+  // disagree). Sticky for the session; refresh-recommended UX when
+  // > 0. See v0.1 audit finding #2: failed replays were silently
+  // logged to console.warn with no user-facing surface.
+  const [replayFailures, setReplayFailures] = useState(0);
+  useEffect(() => {
+    const handle = handleRef.current;
+    if (!handle) return;
+    setReplayFailures(handle.getReplayFailures());
+    const off = handle.subscribeReplayFailures((n) => setReplayFailures(n));
+    return off;
+    // re-subscribe whenever the bridge handle is replaced (room
+    // re-join after disconnect, etc.). We key on `doc` since each
+    // bridge handle has a fresh doc instance.
+  }, [doc]);
+
   // Queued-mutation counter: how many of OUR mutation records have
   // landed in the op log since we last knew the server was alive.
   // Yjs writes to the local Y.Array immediately even when the WS is
@@ -550,9 +568,10 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       syncHealth,
       peerCount: peers.length,
       queuedLocal,
+      replayFailures,
       doc,
     }),
-    [roomId, status, role, syncHealth, peers.length, queuedLocal, doc],
+    [roomId, status, role, syncHealth, peers.length, queuedLocal, replayFailures, doc],
   );
 
   const presenceCtx = useMemo(

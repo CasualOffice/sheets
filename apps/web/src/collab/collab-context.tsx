@@ -40,6 +40,13 @@ export type CollabCtxValue = {
    *  indicator show "3 changes queued" so users can see their edits
    *  aren't being silently lost. */
   queuedLocal: number;
+  /** Number of REMOTE mutations that have thrown during local replay
+   *  since the bridge started. Each one is a candidate divergence
+   *  (peer's edit didn't apply here → state vectors will disagree).
+   *  Surfaced as a warning pill so the user sees the failure before
+   *  acting on a stale view. Refresh re-fetches the full snapshot
+   *  and typically recovers. Sticky for the session (doesn't reset). */
+  replayFailures: number;
   /** Active room's Yjs document — null when not in a room. Exposed
    *  via context so the HistoryPanel can subscribe to the op-log
    *  array without piping it through three layers of props. */
@@ -54,6 +61,7 @@ export const CollabContext = createContext<CollabCtxValue>({
   syncHealth: 'in-sync',
   peerCount: 0,
   queuedLocal: 0,
+  replayFailures: 0,
   doc: null,
 });
 

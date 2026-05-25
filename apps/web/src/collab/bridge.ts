@@ -239,6 +239,22 @@ export type BridgeHandle = {
   doc: Y.Doc;
   /** Stop listening and detach. */
   dispose: () => void;
+  /**
+   * How many remote mutations have thrown during replay since the
+   * bridge started. Each one is a candidate divergence — the local
+   * state didn't accept the peer's change, so the two state vectors
+   * are now off by at least that mutation. The CollabDriver
+   * subscribes (see `subscribeReplayFailures`) so the indicator can
+   * warn the user before they discover it the hard way.
+   */
+  getReplayFailures: () => number;
+  /**
+   * Subscribe to replay-failure count changes. Fires after every
+   * increment with the new total. Returns a teardown that unhooks
+   * the subscriber. No initial-value fire — caller can read
+   * `getReplayFailures()` once at subscribe time if they need it.
+   */
+  subscribeReplayFailures: (cb: (count: number) => void) => () => void;
 };
 
 export type BridgeOptions = {
@@ -305,6 +321,24 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   const myClientId = String(doc.clientID);
   // One-shot guard for the __splitChunk__ regression watchdog below.
   let splitChunkWarned = false;
+
+  // Replay-failure tracking — surfaces silent divergences to the UI.
+  // Every time a remote mutation throws on apply, this counter ticks
+  // and any subscribers (CollabDriver) get the new total. Local writes
+  // never tick this (they're applied by Univer before we even append
+  // to the log).
+  let replayFailures = 0;
+  const replayFailureSubscribers = new Set<(count: number) => void>();
+  const noteReplayFailure = () => {
+    replayFailures += 1;
+    for (const cb of replayFailureSubscribers) {
+      try {
+        cb(replayFailures);
+      } catch (err) {
+        console.warn('[collab] replay-failure subscriber threw', err);
+      }
+    }
+  };
   // Undo params keyed by JSON.stringify(params) so we can pair them up
   // when the matching `onMutationExecutedForCollab` fires moments later.
   // Cleared after each pairing — there's no eviction policy because the
@@ -497,6 +531,7 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
             })
             .catch((err) => {
               console.warn('[collab] replay failed for', rec.id, err);
+              noteReplayFailure();
               if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
             });
         }
@@ -648,9 +683,17 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       if (pending.length > 0) flush();
       log.unobserve(observer);
       pendingUndo.clear();
+      replayFailureSubscribers.clear();
       // Two scheduling paths in setup above — clean up whichever ran.
       if (intervalHandle) clearInterval(intervalHandle);
       if (idleHandle !== null && typeof cic === 'function') cic(idleHandle);
+    },
+    getReplayFailures: () => replayFailures,
+    subscribeReplayFailures: (cb) => {
+      replayFailureSubscribers.add(cb);
+      return () => {
+        replayFailureSubscribers.delete(cb);
+      };
     },
   };
 }

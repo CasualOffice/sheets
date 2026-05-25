@@ -6,28 +6,28 @@ import { Tooltip } from './Tooltip';
  * state. Stays out of the way in single-user mode (compact "Solo" pill);
  * becomes a green live indicator with a peer count inside a room.
  *
- * When the divergence detector flags `syncHealth = diverged` (peer Y.Doc
- * state vectors have disagreed with ours for >15 s), we override the
- * "Live" pill with an amber "Out of sync" pill so the user knows their
- * view may differ from peers' before they discover it the hard way.
+ * Priority of override states (highest first):
+ *   1. `replayFailures > 0` — amber. Remote mutations failed to apply
+ *      locally, so our view is missing peer edits. "Refresh recommended."
+ *   2. `syncHealth === 'diverged'` — amber. State vectors have
+ *      disagreed for > 15 s. Refresh-recommended too.
+ *   3. Transport status: live / connecting / offline / off.
  *
- * When the transport drops to `offline`, the pill turns amber and
- * shows the number of LOCAL mutations queued waiting for the WS to
- * come back. Yjs writes to the local doc immediately even offline, so
- * those edits aren't lost — but users that don't know that close the
- * tab and lose them. The queue count makes the "your edits are safe"
- * promise visible.
+ * Both warning paths use the same "diverged" CSS class so the visual
+ * stays consistent (one shade of amber for "you should refresh").
  */
 export function CollabIndicator() {
-  const { status, roomId, syncHealth, peerCount, queuedLocal } = useCollab();
-  const diverged = status === 'live' && syncHealth === 'diverged';
-  const effectiveStatus = diverged ? 'diverged' : status;
+  const { status, roomId, syncHealth, peerCount, queuedLocal, replayFailures } = useCollab();
+  const failed = status === 'live' && replayFailures > 0;
+  const diverged = !failed && status === 'live' && syncHealth === 'diverged';
+  const effectiveStatus = failed || diverged ? 'diverged' : status;
 
   // Visible text on the pill. Kept short — the tooltip carries the
   // full context. "Live · 2" reads as "live, with two others"; "Solo"
   // makes the single-user case unambiguous.
   let text: string;
-  if (diverged) text = 'Out of sync';
+  if (failed) text = `${replayFailures} not synced`;
+  else if (diverged) text = 'Out of sync';
   else if (status === 'live') text = peerCount > 0 ? `Live · ${peerCount}` : 'Live';
   else if (status === 'connecting') text = '…';
   else if (status === 'offline')
@@ -37,7 +37,9 @@ export function CollabIndicator() {
   // Tooltip — the long-form version of whatever the pill says, plus
   // the roomId for the share-link case.
   let baseLabel: string;
-  if (diverged) {
+  if (failed) {
+    baseLabel = `${replayFailures} ${replayFailures === 1 ? 'edit from a peer' : 'edits from peers'} couldn't be applied to your view — refresh to resync`;
+  } else if (diverged) {
     baseLabel = 'Out of sync with peers — refresh usually recovers';
   } else if (status === 'live') {
     baseLabel =
@@ -65,6 +67,7 @@ export function CollabIndicator() {
         data-sync-health={syncHealth}
         data-peer-count={peerCount}
         data-queued-local={queuedLocal}
+        data-replay-failures={replayFailures}
         role="status"
         aria-label={label}
       >
