@@ -708,7 +708,7 @@ export function MenuBar() {
       if (mod && !e.altKey && !e.shiftKey && k === 'e') {
         if (inTextInput) return;
         e.preventDefault();
-        if (api) flashFill(api);
+        if (api) runFlashFillWithToast(api);
       }
       // ── Pivot drill-down: Ctrl+Shift+D ─────────────────────────
       // Pops the source rows that contributed to the selected pivot
@@ -972,6 +972,32 @@ export function MenuBar() {
   // primary Save handler — wrap each in try/catch + toast so the
   // user sees confirmation of the download or a real error if the
   // serializer choked. Mirrors the handleSave pattern.
+  // Outcome-aware Flash Fill wrapper. The underlying helper returns
+  // one of four results; we want to acknowledge the win ("Filled N
+  // cells") AND explain the silent-failure cases ("no pattern",
+  // "no source column", etc.) so the user isn't left wondering why
+  // nothing happened. Used by both the Ctrl+E shortcut and the
+  // Data → Flash Fill menu item.
+  const runFlashFillWithToast = (univer: FUniver) => {
+    const result = flashFill(univer);
+    switch (result.status) {
+      case 'filled':
+        toast.success(
+          `Flash Fill: filled ${result.count} ${result.count === 1 ? 'cell' : 'cells'}`,
+        );
+        return;
+      case 'no-pattern':
+        toast.info("Flash Fill: couldn't infer a pattern from the examples");
+        return;
+      case 'no-source':
+        toast.info('Flash Fill: needs a column to the left to derive from');
+        return;
+      case 'no-examples':
+        toast.info('Flash Fill: type a few examples in the column first');
+        return;
+    }
+  };
+
   const exportAs = async (
     format: 'xlsx' | 'ods' | 'csv' | 'tsv',
     runner: () => Promise<unknown>,
@@ -1136,8 +1162,26 @@ export function MenuBar() {
             );
             if (!name || !api) return;
             const data = api.getActiveWorkbook()?.save() as unknown as Parameters<typeof saveNamedVersion>[0] | undefined;
-            if (!data) return;
-            void saveNamedVersion(data, name.trim(), workbook.meta.sourceFormat ?? null);
+            if (!data) {
+              toast.error("Couldn't read workbook state to save a version");
+              return;
+            }
+            const trimmed = name.trim() || 'Untitled version';
+            void saveNamedVersion(data, trimmed, workbook.meta.sourceFormat ?? null)
+              .then(() => {
+                toast.success(`Saved version "${trimmed}"`, {
+                  action: {
+                    label: 'Open history',
+                    onClick: () => {
+                      if (!ui.historyPanelVisible) ui.toggleHistoryPanel();
+                    },
+                  },
+                });
+              })
+              .catch((err: unknown) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                toast.error(`Couldn't save version: ${msg}`);
+              });
           },
         },
         {
@@ -1351,7 +1395,7 @@ export function MenuBar() {
         { kind: 'item', id: 'data-validation', label: 'Data validation…', icon: 'rule', run: openDataValidation },
         { kind: 'item', id: 'name-manager', label: 'Name Manager…', icon: 'bookmark_add', shortcut: 'Ctrl+F3', onClick: () => setShowNameManager(true) },
         { kind: 'item', id: 'goal-seek', label: 'Goal Seek…', icon: 'analytics', onClick: () => setShowGoalSeek(true) },
-        { kind: 'item', id: 'flash-fill', label: 'Flash Fill', icon: 'auto_awesome', shortcut: 'Ctrl+E', run: flashFill },
+        { kind: 'item', id: 'flash-fill', label: 'Flash Fill', icon: 'auto_awesome', shortcut: 'Ctrl+E', run: runFlashFillWithToast },
         {
           kind: 'item',
           id: 'refresh-pivots',
@@ -1615,14 +1659,24 @@ export function MenuBar() {
             const wb = api.getActiveWorkbook();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ws = wb?.getActiveSheet() as any;
-            if (!wb || !ws) return;
-            sparklinesCtx.add({
-              type,
-              unitId: wb.getId(),
-              sheetId: ws.getSheetId(),
-              source,
-              anchor,
-            });
+            if (!wb || !ws) {
+              toast.error("Couldn't add sparkline: no active sheet");
+              return;
+            }
+            try {
+              sparklinesCtx.add({
+                type,
+                unitId: wb.getId(),
+                sheetId: ws.getSheetId(),
+                source,
+                anchor,
+              });
+              // Capitalise type for the readable label ("line" → "Line").
+              toast.success(`Added ${type.charAt(0).toUpperCase() + type.slice(1)} sparkline at ${anchor}`);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              toast.error(`Couldn't add sparkline: ${msg}`);
+            }
           }}
         />
       )}

@@ -120,21 +120,26 @@ function deriveSharedTransform(
  * "source"), reads the example values the user typed in the target
  * column, infers the transform, and writes the fill below.
  *
- * Returns:
- *   - `'filled'` — wrote ≥ 1 cell
- *   - `'no-pattern'` — couldn't find a transform that explains the examples
- *   - `'no-source'` — no source column to derive from
- *   - `'no-examples'` — target column has nothing to learn from
+ * Returns one of four outcomes; `'filled'` carries the count for
+ * UI confirmation.
+ *   - `{ status: 'filled', count }` — wrote `count` cells
+ *   - `{ status: 'no-pattern' }` — couldn't find a transform
+ *   - `{ status: 'no-source' }` — no source column to derive from
+ *   - `{ status: 'no-examples' }` — target column has nothing to learn from
  */
-export type FlashFillResult = 'filled' | 'no-pattern' | 'no-source' | 'no-examples';
+export type FlashFillResult =
+  | { status: 'filled'; count: number }
+  | { status: 'no-pattern' }
+  | { status: 'no-source' }
+  | { status: 'no-examples' };
 
 export function flashFill(api: FUniver): FlashFillResult {
   const wb = api.getActiveWorkbook();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sheet = wb?.getActiveSheet() as any;
-  if (!wb || !sheet) return 'no-source';
+  if (!wb || !sheet) return { status: 'no-source' };
   const range = sheet.getActiveRange?.();
-  if (!range) return 'no-examples';
+  if (!range) return { status: 'no-examples' };
 
   const startRow: number = range.getRow();
   const startCol: number = range.getColumn();
@@ -143,7 +148,7 @@ export function flashFill(api: FUniver): FlashFillResult {
 
   if (width !== 1) {
     // Multi-column selections aren't a Flash-Fill use case; bail.
-    return 'no-examples';
+    return { status: 'no-examples' };
   }
 
   // Find source column: nearest non-empty column to the LEFT.
@@ -162,7 +167,7 @@ export function flashFill(api: FUniver): FlashFillResult {
       break;
     }
   }
-  if (sourceCol === -1) return 'no-source';
+  if (sourceCol === -1) return { status: 'no-source' };
 
   // Read all (source, target) pairs in the selection rows.
   const examples: Array<{ source: Cell; example: Cell }> = [];
@@ -178,11 +183,11 @@ export function flashFill(api: FUniver): FlashFillResult {
     }
   }
 
-  if (examples.length === 0) return 'no-examples';
-  if (blanks.length === 0) return 'no-examples';
+  if (examples.length === 0) return { status: 'no-examples' };
+  if (blanks.length === 0) return { status: 'no-examples' };
 
   const transform = deriveSharedTransform(examples);
-  if (!transform) return 'no-pattern';
+  if (!transform) return { status: 'no-pattern' };
 
   // Apply the transform to every blank row in the selection.
   const filled: Array<{ row: number; value: string }> = blanks.map((b) => ({
@@ -206,7 +211,7 @@ export function flashFill(api: FUniver): FlashFillResult {
     value,
   });
 
-  return 'filled';
+  return { status: 'filled', count: filled.length };
 }
 
 function readCell(sheet: unknown, row: number, col: number): string {

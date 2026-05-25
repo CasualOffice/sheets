@@ -123,6 +123,24 @@ export function SheetTabs() {
     toast.success(`Duplicated ${name}`);
   };
 
+  // Hide-with-Show — sheet vanishes from the tab strip but stays in
+  // the workbook (formulas still resolve). The recovery path
+  // (Hidden Sheets submenu) is discoverable but not obvious, so
+  // offer Show as a one-click action on the toast.
+  const handleHide = (sheetId: string) => {
+    if (!api) return;
+    const name = sheets.find((s) => s.id === sheetId)?.name ?? 'Sheet';
+    const ok = hideSheet(api, sheetId);
+    if (!ok) {
+      toast.error("Can't hide the last visible sheet");
+      return;
+    }
+    toast.info(`Hid ${name}`, {
+      action: { label: 'Show', onClick: () => api && showSheet(api, sheetId) },
+      duration: 8000,
+    });
+  };
+
   const visibleSheets = sheets.filter((s) => !s.hidden);
   const hiddenSheets = sheets.filter((s) => s.hidden);
   const canDelete = visibleSheets.length > 1;
@@ -305,7 +323,7 @@ export function SheetTabs() {
             if (target) startRename(target.id, target.name);
           }}
           onDuplicate={() => handleDuplicate(tabMenu.sheetId)}
-          onHide={() => api && hideSheet(api, tabMenu.sheetId)}
+          onHide={() => handleHide(tabMenu.sheetId)}
           onDelete={() => handleDelete(tabMenu.sheetId)}
         />
       )}
