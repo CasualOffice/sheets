@@ -957,14 +957,35 @@ export function MenuBar() {
     }
   };
 
-  const handleExportXlsx = async () =>
-    api &&
-    saveAsXlsx(api, workbook.meta.name || 'workbook', {
-      outline: outline.state,
-      charts: charts.charts,
-      pivots: pivots.pivots,
-      sparklines: sparklinesCtx.sparklines,
-    });
+  // Export = "Save As" to a specific format. Same surface as the
+  // primary Save handler — wrap each in try/catch + toast so the
+  // user sees confirmation of the download or a real error if the
+  // serializer choked. Mirrors the handleSave pattern.
+  const exportAs = async (
+    format: 'xlsx' | 'ods' | 'csv' | 'tsv',
+    runner: () => Promise<unknown>,
+  ) => {
+    if (!api) return;
+    const name = workbook.meta.name || 'workbook';
+    const displayName = new RegExp(`\\.${format}$`, 'i').test(name) ? name : `${name}.${format}`;
+    try {
+      await runner();
+      toast.success(`Exported ${displayName}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't export ${displayName}: ${msg}`);
+    }
+  };
+
+  const handleExportXlsx = () =>
+    exportAs('xlsx', () =>
+      saveAsXlsx(api!, workbook.meta.name || 'workbook', {
+        outline: outline.state,
+        charts: charts.charts,
+        pivots: pivots.pivots,
+        sparklines: sparklinesCtx.sparklines,
+      }),
+    );
 
   // Keep the keyboard-listener's handlers in sync with the latest
   // closure after every render. See `handlersRef` declaration above
@@ -977,9 +998,12 @@ export function MenuBar() {
     open: handleOpen,
     drillDown: runDrillDown,
   };
-  const handleExportOds = async () => api && saveAsOds(api, workbook.meta.name || 'workbook');
-  const handleExportCsv = async () => api && saveAsCsv(api, workbook.meta.name || 'workbook');
-  const handleExportTsv = async () => api && saveAsTsv(api, workbook.meta.name || 'workbook');
+  const handleExportOds = () =>
+    exportAs('ods', () => saveAsOds(api!, workbook.meta.name || 'workbook'));
+  const handleExportCsv = () =>
+    exportAs('csv', () => saveAsCsv(api!, workbook.meta.name || 'workbook'));
+  const handleExportTsv = () =>
+    exportAs('tsv', () => saveAsTsv(api!, workbook.meta.name || 'workbook'));
 
   // Menu structure designed against Office 2024's ribbon + File menu.
   // Every item with a global keyboard binding shows its shortcut on the
@@ -1412,6 +1436,21 @@ export function MenuBar() {
             if (model) {
               const name = nextChartName(charts.charts);
               charts.insert({ ...model, title: name });
+              // Transient confirmation — the chart appears as a
+              // floating overlay over the grid, which a user
+              // looking at the source range can miss entirely. The
+              // toast confirms the action AND announces the new
+              // chart's name so the user can find it in the
+              // Charts panel.
+              toast.success(`Added ${name}`);
+            } else {
+              // buildChartModelForRange returns null when the
+              // range can't be coerced (e.g. all-empty selection).
+              // The dialog's pre-flight catches most of these but
+              // some edge cases fall through silently — surface
+              // them via toast so the user isn't left wondering
+              // why nothing appeared.
+              toast.error("Couldn't build a chart from that range — check the source data");
             }
             setShowInsertChart(false);
           }}
