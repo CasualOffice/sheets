@@ -7,6 +7,7 @@ import { AboutDialog } from './AboutDialog';
 import { CommandSearchDialog, type CommandSearchItem } from './CommandSearchDialog';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
+import { useToast } from './toast/toast-context';
 import { saveNamedVersion } from '../version-history/useVersionHistoryCapture';
 import { useUI } from '../use-ui';
 import { emptyWorkbook } from '../snapshot';
@@ -313,6 +314,7 @@ function collectCommandSearchItems(
 export function MenuBar() {
   const api = useUniverAPI();
   const workbook = useWorkbook();
+  const toast = useToast();
   const ui = useUI();
   const outlineActions = useOutlineActions();
   const outline = useOutline();
@@ -917,27 +919,41 @@ export function MenuBar() {
 
   // Save writes back in whatever format the file was opened from, falling
   // back to xlsx for a fresh / empty workbook. Mirrors Excel & LibreOffice.
+  //
+  // Wrapped in try/catch + toast so the user gets feedback for both
+  // success (the browser download bar can be hidden / off-screen on
+  // some setups) and failure (network blip during the worker handoff,
+  // out-of-memory on huge files, etc.). Pre-toast, errors were
+  // swallowed at the call site and the user saw nothing.
   const handleSave = async () => {
     if (!api) return;
     const name = workbook.meta.name || 'workbook';
-    switch (workbook.meta.sourceFormat) {
-      case 'ods':
-        await saveAsOds(api, name);
-        return;
-      case 'csv':
-        await saveAsCsv(api, name);
-        return;
-      case 'tsv':
-        await saveAsTsv(api, name);
-        return;
-      case 'xlsx':
-      default:
-        await saveAsXlsx(api, name, {
-          outline: outline.state,
-          charts: charts.charts,
-          pivots: pivots.pivots,
-          sparklines: sparklinesCtx.sparklines,
-        });
+    try {
+      switch (workbook.meta.sourceFormat) {
+        case 'ods':
+          await saveAsOds(api, name);
+          break;
+        case 'csv':
+          await saveAsCsv(api, name);
+          break;
+        case 'tsv':
+          await saveAsTsv(api, name);
+          break;
+        case 'xlsx':
+        default:
+          await saveAsXlsx(api, name, {
+            outline: outline.state,
+            charts: charts.charts,
+            pivots: pivots.pivots,
+            sparklines: sparklinesCtx.sparklines,
+          });
+      }
+      const ext = (workbook.meta.sourceFormat || 'xlsx').toLowerCase();
+      const displayName = /\.(xlsx|ods|csv|tsv)$/i.test(name) ? name : `${name}.${ext}`;
+      toast.success(`Saved ${displayName}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't save: ${msg}`);
     }
   };
 

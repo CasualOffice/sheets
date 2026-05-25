@@ -25,6 +25,8 @@ import { CreateRoomDialog } from './shell/CreateRoomDialog';
 import { LoadingOverlay } from './shell/LoadingOverlay';
 import { LoadingContext, type LoadingCtxValue, type LoadingState } from './loading-context';
 import { BusyProvider } from './busy-context';
+import { ToastProvider } from './shell/toast/toast-context';
+import { ToastContainer } from './shell/toast/ToastContainer';
 import { ChartsProvider } from './charts/charts-context';
 import { ChartLayer } from './charts/ChartLayer';
 import { ChartsPanel } from './shell/ChartsPanel';
@@ -307,6 +309,7 @@ export function App() {
       <UIContext.Provider value={uiValue}>
         <WorkbookContext.Provider value={wbValue}>
           <LoadingContext.Provider value={loadingValue}>
+            <ToastProvider>
             <BusyProvider>
               <ChartsProvider>
                 <PivotsProvider>
@@ -360,6 +363,8 @@ export function App() {
                 </PivotsProvider>
               </ChartsProvider>
             </BusyProvider>
+            <ToastContainer />
+            </ToastProvider>
           </LoadingContext.Provider>
         </WorkbookContext.Provider>
       </UIContext.Provider>
