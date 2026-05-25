@@ -29,8 +29,21 @@ export function RibbonGroup({
   children?: ReactNode;
 }) {
   const explicit = row1 !== undefined || row2 !== undefined || lead !== undefined;
+  // role="group" + aria-label gives screen readers a way to announce
+  // "History group" / "Clipboard group" / "Font group" when the user
+  // crosses a boundary, instead of reading every button as a flat list
+  // (audit finding 3.1). The visible <div class="ribbon__group-label">
+  // already carries the same text for sighted users — the role just
+  // exposes it to AT. id="" + aria-labelledby would also work but
+  // aria-label is shorter and the label text never differs from
+  // what's visible.
   return (
-    <div className="ribbon__group" data-testid={`ribbon-group-${label.toLowerCase()}`}>
+    <div
+      className="ribbon__group"
+      role="group"
+      aria-label={label}
+      data-testid={`ribbon-group-${label.toLowerCase()}`}
+    >
       {explicit ? (
         <div className="ribbon__group-body ribbon__group-body--two-row">
           {lead && <div className="ribbon__group-lead">{lead}</div>}
@@ -44,7 +57,7 @@ export function RibbonGroup({
           {children}
         </div>
       )}
-      <div className="ribbon__group-label">{label}</div>
+      <div className="ribbon__group-label" aria-hidden="true">{label}</div>
     </div>
   );
 }
