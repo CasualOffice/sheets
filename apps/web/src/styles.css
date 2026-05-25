@@ -5446,6 +5446,45 @@ button {
     min-width: 32px;
   }
 
+  /* Side-panel close buttons — on mobile, Tables/Charts/Outline
+     panels REPLACE the grid (the rail is hidden, the panel takes
+     the full viewport). The desktop "tiny X in the header"
+     pattern is invisible on touch — bump every panel's close
+     button to a proper 40-px tap target with a subtle filled
+     background and add a "← Back" text label before the icon
+     so the back-out affordance is unmistakable.
+     Audit finding 2.3. */
+  .tables-panel__close,
+  .charts-panel__close,
+  .outline-panel__close {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 6px 12px 6px 10px;
+    background: var(--color-surface-strip);
+    border-radius: 6px;
+    color: var(--color-text);
+    font-weight: 600;
+    font-size: 13px;
+    gap: 6px;
+  }
+  .tables-panel__close::before,
+  .charts-panel__close::before,
+  .outline-panel__close::before {
+    content: '← Back';
+    letter-spacing: 0.01em;
+  }
+  /* Hide the original X icon on mobile — replaced by the "← Back"
+     label above. (`.material-icons` covers Univer's icon set; the
+     Casual icon component renders an <svg> we leave visible only
+     when needed via the parent override.) Keep the SVG hidden but
+     reserve its slot in the tap target so the button stays a
+     consistent size. */
+  .tables-panel__close > svg,
+  .charts-panel__close > svg,
+  .outline-panel__close > svg {
+    display: none;
+  }
+
   /* Sheet tabs — compact paddings + scroll-end fade. Drop the zoom
      slider + multi-cell stats + section dividers (pinch-zoom on the
      canvas covers zoom; the stats land on the formula bar). */
