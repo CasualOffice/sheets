@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type * as Y from 'yjs';
+import type { ReplayFailureRecord } from './replay-retry';
 
 export type CollabStatus = 'off' | 'connecting' | 'live' | 'offline' | 'denied';
 export type CollabRole = 'view' | 'write';
@@ -47,6 +48,11 @@ export type CollabCtxValue = {
    *  acting on a stale view. Refresh re-fetches the full snapshot
    *  and typically recovers. Sticky for the session (doesn't reset). */
   replayFailures: number;
+  /** Per-mutation dead-letter records for the latest failures (cap
+   *  20). Surfaces in the CollabIndicator's expand-on-click panel so
+   *  the user can see WHICH mutations failed, not just a count.
+   *  Empty array outside a room and on a healthy session. */
+  replayDeadLetter: readonly ReplayFailureRecord[];
   /** Active room's Yjs document — null when not in a room. Exposed
    *  via context so the HistoryPanel can subscribe to the op-log
    *  array without piping it through three layers of props. */
@@ -62,6 +68,7 @@ export const CollabContext = createContext<CollabCtxValue>({
   peerCount: 0,
   queuedLocal: 0,
   replayFailures: 0,
+  replayDeadLetter: [],
   doc: null,
 });
 

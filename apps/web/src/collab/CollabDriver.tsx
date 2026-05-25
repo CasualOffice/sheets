@@ -7,6 +7,7 @@ import { useLoading } from '../loading-context';
 import { useToast } from '../shell/toast/toast-context';
 import { xlsxToWorkbookData } from '../xlsx';
 import { startBridge, type BridgeHandle } from './bridge';
+import type { ReplayFailureRecord } from './replay-retry';
 import { CollabContext, type CollabRole, type CollabStatus, type SyncHealth } from './collab-context';
 import { useCharts } from '../charts/charts-context';
 import type { ChartModel } from '../charts/types';
@@ -533,12 +534,22 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   // > 0. See v0.1 audit finding #2: failed replays were silently
   // logged to console.warn with no user-facing surface.
   const [replayFailures, setReplayFailures] = useState(0);
+  const [replayDeadLetter, setReplayDeadLetter] = useState<
+    readonly ReplayFailureRecord[]
+  >([]);
   useEffect(() => {
     const handle = handleRef.current;
     if (!handle) return;
     setReplayFailures(handle.getReplayFailures());
+    setReplayDeadLetter(handle.getReplayDeadLetter());
     const off = handle.subscribeReplayFailures((n) => setReplayFailures(n));
-    return off;
+    const offDl = handle.subscribeReplayDeadLetter((entries) =>
+      setReplayDeadLetter(entries),
+    );
+    return () => {
+      off();
+      offDl();
+    };
     // re-subscribe whenever the bridge handle is replaced (room
     // re-join after disconnect, etc.). We key on `doc` since each
     // bridge handle has a fresh doc instance.
@@ -598,9 +609,20 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       peerCount: peers.length,
       queuedLocal,
       replayFailures,
+      replayDeadLetter,
       doc,
     }),
-    [roomId, status, role, syncHealth, peers.length, queuedLocal, replayFailures, doc],
+    [
+      roomId,
+      status,
+      role,
+      syncHealth,
+      peers.length,
+      queuedLocal,
+      replayFailures,
+      replayDeadLetter,
+      doc,
+    ],
   );
 
   const presenceCtx = useMemo(
