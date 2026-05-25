@@ -5336,8 +5336,20 @@ button {
     padding: 0 10px;
   }
 
-  /* Toolbar — same scroll + fade pattern. Buttons stay tap-friendly. */
+  /* Toolbar — keep the OUTER .toolbar non-scrollable so the
+     absolutely-positioned overflow chevrons stay pinned at the
+     viewport edges (anchoring to .toolbar via position: relative).
+     Scrolling happens inside .toolbar__inner — same as desktop —
+     with momentum-scrolling enabled for touch.
+
+     Apply the fade mask to .toolbar__inner instead of .toolbar so
+     the chevrons sit on TOP of the fade rather than being hidden
+     by it. */
   .toolbar {
+    overflow: hidden;
+  }
+  .toolbar__inner {
+    padding: 0 8px;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
@@ -5345,11 +5357,22 @@ button {
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
     mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
   }
-  .toolbar::-webkit-scrollbar {
+  .toolbar__inner::-webkit-scrollbar {
     display: none;
   }
-  .toolbar__inner {
-    padding: 0 8px;
+  /* Chevrons get a proper 32 px touch target (the desktop 28 px is
+     under the iOS/Android tap-target guideline) and a solid
+     background so they stand out against the fade mask. The
+     desktop hover-darken still works; touch users get the same
+     darker color by default since (hover: none) skips the :hover. */
+  .toolbar__overflow {
+    width: 32px;
+    min-width: 32px;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .toolbar__overflow {
+      color: var(--color-text);
+    }
   }
   .ribbon__group {
     padding: 0 4px;
