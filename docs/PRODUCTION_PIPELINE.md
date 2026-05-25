@@ -14,11 +14,17 @@ know our limits), then release.
 |--------|----------------------------------------|-------------|
 | A1     | Bridge replay retry + dead-letter      | done        |
 | A2     | Surface dead-letter detail in indicator| done        |
-| B1     | Typed Univer facade wrapper            | pending     |
+| B1     | Typed Univer facade wrapper            | rolling     |
 | C1     | Backend rate limit on uploads          | done        |
 | C2     | Request size + room eviction caps      | done        |
 | D1     | Load test script + baseline numbers    | done        |
-| E      | Tag v0.1 once A1/C1/C2/D1 are green    | pending     |
+| D2     | Capacity model + sizing tiers          | done        |
+| E      | Tag v0.1 — UNBLOCKED                   | ready       |
+
+**v0.1 is unblocked.** All four blocking streams (A1, C1, C2, D1) plus
+the optional A2 / D2 enhancements have shipped. B1 is rolling — the
+foundation + 5 highest-traffic files are converted; remaining files
+are mechanical follow-up that doesn't gate the release.
 
 ## Stream A — Co-edit reliability
 
@@ -67,21 +73,36 @@ seeing a count.
 
 ## Stream B — Type safety
 
-### B1 — Typed Univer facade wrapper (pending)
+### B1 — Typed Univer facade wrapper (rolling)
 
-`grep -rn "as any" apps/web/src | wc -l` returns ~100 hits, almost
-all at the FUniver → workbook / sheet / range boundary. Build
-`apps/web/src/univer-facade.ts` with typed wrappers:
+`grep -rn "as any" apps/web/src | wc -l` returned 148 at start.
+Built `apps/web/src/univer-facade.ts` (~210 lines) with the
+surface we actually use: sheetId, isHidden, maxRows, maxColumns,
+rangeAt, rangeBox, rangeFromA1, activateRange, dataRangeOrActive,
+setActiveSheet, findSheetById, saveWorkbook, activeSheet,
+activeRange, injector, viteEnv, viteEnvNumber, windowStringGlobal.
 
-```ts
-export function activeSheet(api: FUniver): TypedSheet | null;
-export function setRangeValues(sheet: TypedSheet, ...): void;
-```
+Converted (in commit order):
+- shell/tab-actions.ts: 10 → 2 (-8)
+- shell/sheet-actions.ts: 1 → 0 (-1)
+- shell/flash-fill.ts: 3 → 0 (-3)
+- shell/MenuBar.tsx: 7 → 2 (-5)
+- collab/CollabDriver.tsx: 6 → 2 (-4)
 
-Convert the highest-traffic callers first: `home-tab-actions.ts`,
-`sheet-actions.ts`, `formula-refs.ts`, `flash-fill.ts`. Then add an
-ESLint rule (`@typescript-eslint/no-explicit-any`) scoped to those
-files to prevent regressions.
+**Cumulative: 21 caller-side as-any sites eliminated, 23
+centralized in the facade.** The 4 sites that remain in
+converted files are scoped to single expressions calling Univer
+plugin extensions outside the standard FWorkbook/FWorksheet
+surface (sheets-ui rendering, Hocuspocus provider, tables
+plugin) — TODO-marked for follow-up.
+
+Unconverted files (~127 sites total in ~21 files) are mechanical
+follow-up — same patterns, no design work, **doesn't block v0.1**.
+Tracked here as a rolling stream.
+
+Pending: ESLint rule scoped to converted files to forbid new
+`as any` (prevents regression). Add once 80%+ of caller sites
+are converted.
 
 ## Stream C — Backend hardening
 
