@@ -5474,12 +5474,24 @@ button {
   /* Very narrow phones — toolbar collapses to a single-row icon-only
      scrollable strip with row 2 of every ribbon group hidden. Light
      formatting (B/I/U + currency/percent/comma + font picker) stays
-     one tap away — but each button drops to icon-only. */
+     one tap away — but each button drops to icon-only.
+
+     The desktop ribbon (`.toolbar`) is hidden entirely on phones — the
+     `<MobileActionBar />` below the grid carries the same formatting
+     commands and is thumb-reachable. Collapsing the toolbar's grid
+     track to 0px (via `--toolbar-h: 0`) keeps the named-area layout
+     well-formed; Polish #4's responsive regression check verifies
+     this. */
   :root {
     --titlebar-h: 48px;
-    --toolbar-h: 40px;
+    --toolbar-h: 0px;
     --sheet-tabs-h: 32px;
     --mobile-bar-h: 40px;
+  }
+
+  /* Hide the desktop ribbon on phone. MobileActionBar replaces it. */
+  .toolbar {
+    display: none;
   }
 
   /* Bottom action bar visible on mobile only. Sticky above the sheet-
