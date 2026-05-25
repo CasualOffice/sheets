@@ -33,9 +33,6 @@ import { PanelRail } from './shell/PanelRail';
 import { PanelMutex } from './shell/PanelMutex';
 import { PreviewBanner } from './shell/PreviewBanner';
 import { PreviewDriver } from './shell/PreviewDriver';
-// InputParserDriver intentionally not imported — see App.tsx mount site
-// for the disable rationale. The standalone parseExcelStyleValue helper
-// is still consumed by formula-bar commits.
 import { ThemeBridge } from './shell/ThemeBridge';
 import { HomeScreen } from './home/HomeScreen';
 import { ShowFormulasLayer } from './shell/ShowFormulasLayer';
@@ -321,16 +318,6 @@ export function App() {
                       <TouchPanDriver />
                       <VersionHistoryDriver />
                       <PreviewDriver />
-                      {/* <InputParserDriver /> — temporarily disabled. The
-                          beforeCommandExecuted hook on set-range-values
-                          was intercepting EVERY mutation (formula-calc
-                          writebacks, paste, programmatic test seeds) and
-                          broke the e2e suite. Re-enable behind a guard
-                          that only fires for user-typed cell-edit
-                          commits, not formula-engine or test writes.
-                          Parser code in excel-input-parser.ts still
-                          ships — formulaBar's commitToActiveCell uses
-                          it directly with no mutation interception. */}
                       <ThemeBridge />
                       <CollabDriver>
                         <div

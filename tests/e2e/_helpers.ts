@@ -11,7 +11,12 @@ export function mainCanvas(page: Page) {
   return page.locator('[id^="univer-sheet-main-canvas_"]');
 }
 
-export async function waitForUniver(page: Page) {
+/**
+ * Wait for Univer to finish mounting + dismiss the home screen by
+ * default. Tests that explicitly need the home gallery (the
+ * home-screen.spec suite) pass `{ keepHome: true }` to opt out.
+ */
+export async function waitForUniver(page: Page, opts: { keepHome?: boolean } = {}) {
   await mainCanvas(page).waitFor({ timeout: 15_000 });
   await page.waitForFunction(() => Boolean(window.__univerAPI), null, { timeout: 5_000 });
   // The home-screen template gallery (added in v0.1.0) is a full-viewport
@@ -19,19 +24,37 @@ export async function waitForUniver(page: Page) {
   // Tests assume the editor is interactable straight after waitForUniver,
   // so dismiss the home screen here. Production users dismiss it via the
   // close-X or by picking a template; tests just need it gone.
-  await dismissHomeScreen(page);
+  if (!opts.keepHome) {
+    await dismissHomeScreen(page);
+  }
 }
 
 /**
  * Click the home-screen close button if it's visible. No-op when home
  * is already dismissed (autosave-restore flow, collab URL, etc.).
  * Tolerates absence — older builds without the home gallery still work.
+ *
+ * Race-avoidance: the app has in-flight useEffects that dismiss home
+ * on their own when there's an autosave record or a collab URL. Yield
+ * for ~250 ms before deciding whether to dismiss manually. Without
+ * this, we click the close button BEFORE the autosave-driven useEffect
+ * fires, which (a) registers a click → autosave-driver flips
+ * `userInteracted` true → the empty Untitled workbook overwrites the
+ * seeded autosave record 5 s later, and (b) the banner mounts
+ * post-dismiss but reads an empty record and never appears. The grace
+ * period lets the app dismiss home itself when it's going to.
+ *
+ * Dismissing via Page.evaluate (setting `__casualE2E_dismissHome`)
+ * could replace the click, but the current click path is exercised in
+ * production and worth keeping covered.
  */
 async function dismissHomeScreen(page: Page) {
   try {
     const home = page.getByTestId('home-screen');
     if ((await home.count()) === 0) return;
-    if (!(await home.isVisible({ timeout: 500 }).catch(() => false))) return;
+    // Grace period — see comment above.
+    await page.waitForTimeout(250);
+    if (!(await home.isVisible({ timeout: 200 }).catch(() => false))) return;
     const closeBtn = home.getByRole('button', { name: /close|dismiss/i }).first();
     if ((await closeBtn.count()) > 0) {
       await closeBtn.click({ timeout: 2_000 }).catch(() => undefined);

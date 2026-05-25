@@ -17,7 +17,9 @@ import { waitForUniver } from './_helpers';
 test.describe('home screen', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await waitForUniver(page);
+    // This suite TESTS the home screen — opt out of the default
+    // dismiss-on-mount that other tests get.
+    await waitForUniver(page, { keepHome: true });
   });
 
   test('renders the gallery on a blank Untitled workbook', async ({ page }) => {

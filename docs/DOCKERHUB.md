@@ -123,6 +123,7 @@ Multi-arch manifest: `linux/amd64` + `linux/arm64`. SBOM + provenance attestatio
 
 | Tag | Description |
 | --- | --- |
+| `0.1.1` | Patch — fix **formula cells render blank on template load** (force initial recalc on workbook mount + swap), fix **autosave-restore banner clipped by `.app` grid overflow** (explicit grid-area), Excel-style typed-input parser ($1,234 · 15% · €99 · 15% · (500) → numbers) in the formula bar |
 | `0.1.0` | **WOPI host integration** (memory · local · S3 · Postgres backends) — **JWT auth** with role + permission + feature claims — **admin panel** at `/admin` (branding · base path · storage · networking · room limits · auth providers · webhooks) — **webhook dispatcher** with HMAC-SHA256 signing — **complex pivot cache passthrough** (audit 54/54 pristine) — **OCI image labels** + rolling-tag scheme — full self-hosting + customization docs on schnsrw.live |
 | `0.0.6` | Excel-parity wave — Pivots P1 + drill-down, Sparklines, Goal Seek, Name Manager, Flash Fill, Show Formulas, dark theme, Google-Docs title bar, inline SVG icons, server-side view-only enforcement, recent files, 357 e2e tests |
 | `0.0.5` | Co-edit fidelity pass — charts, pivots, CF/DV/drawings sync, autosave, 337 e2e tests |
