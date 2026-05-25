@@ -17,7 +17,7 @@ know our limits), then release.
 | B1     | Typed Univer facade wrapper            | pending     |
 | C1     | Backend rate limit on uploads          | done        |
 | C2     | Request size + room eviction caps      | done        |
-| D1     | Load test script + baseline numbers    | pending     |
+| D1     | Load test script + baseline numbers    | done        |
 | E      | Tag v0.1 once A1/C1/C2/D1 are green    | pending     |
 
 ## Stream A — Co-edit reliability
