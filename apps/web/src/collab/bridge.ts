@@ -9,6 +9,13 @@ import {
 import { SetRangeValuesUndoMutationFactory } from '@univerjs/sheets';
 import { deepRewriteUnitId } from './bridge-helpers';
 import { ensurePluginByName, type LazyPluginGroup } from '../univer/lazy-plugins';
+import {
+  classifyReplayError,
+  pushDeadLetter,
+  TRANSIENT_RETRY_DELAYS_MS,
+  withRetry,
+  type ReplayFailureRecord,
+} from './replay-retry';
 
 /**
  * Map mutation ids to the lazy-plugin group that owns the matching
@@ -255,6 +262,22 @@ export type BridgeHandle = {
    * `getReplayFailures()` once at subscribe time if they need it.
    */
   subscribeReplayFailures: (cb: (count: number) => void) => () => void;
+  /**
+   * Snapshot of the dead-letter ring buffer — mutations that
+   * exhausted retries (transient class) or failed immediately
+   * (permanent class). Capped at DEAD_LETTER_CAP entries; oldest
+   * evicts on overflow. UI consumes this to render the per-failure
+   * detail panel.
+   */
+  getReplayDeadLetter: () => readonly ReplayFailureRecord[];
+  /**
+   * Subscribe to dead-letter changes. Fires after every push with a
+   * fresh array (reference change — React state updates see it).
+   * Returns a teardown.
+   */
+  subscribeReplayDeadLetter: (
+    cb: (entries: readonly ReplayFailureRecord[]) => void,
+  ) => () => void;
 };
 
 export type BridgeOptions = {
@@ -329,13 +352,25 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // to the log).
   let replayFailures = 0;
   const replayFailureSubscribers = new Set<(count: number) => void>();
-  const noteReplayFailure = () => {
+  let deadLetter: readonly ReplayFailureRecord[] = [];
+  const deadLetterSubscribers = new Set<
+    (entries: readonly ReplayFailureRecord[]) => void
+  >();
+  const noteReplayFailure = (rec: ReplayFailureRecord) => {
     replayFailures += 1;
+    deadLetter = pushDeadLetter(deadLetter, rec);
     for (const cb of replayFailureSubscribers) {
       try {
         cb(replayFailures);
       } catch (err) {
         console.warn('[collab] replay-failure subscriber threw', err);
+      }
+    }
+    for (const cb of deadLetterSubscribers) {
+      try {
+        cb(deadLetter);
+      } catch (err) {
+        console.warn('[collab] dead-letter subscriber threw', err);
       }
     }
   };
@@ -520,18 +555,59 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
           const lazyGroup = MUTATION_TO_LAZY_GROUP[rec.id];
           // Fire-and-forget; ordering is preserved by Univer's command bus
           // serialising its own dispatch.
-          // `.catch` surfaces malformed-mutation / out-of-bounds replays
-          // that would otherwise silently fork local state — every
-          // divergence we've chased after a release started as one of
-          // these swallowed throws.
-          (lazyGroup ? ensurePluginByName(lazyGroup) : Promise.resolve())
-            .then(() => cmdSvc.executeCommand(rec.id, params, { fromCollab: true }))
+          //
+          // Failure handling is two-class (see replay-retry.ts):
+          //   - TRANSIENT (dynamic-import chunk-load failures) → retry
+          //     with 300/900/2700 ms backoff. The lazy-plugin gate is
+          //     the common source: a network flap during webpack chunk
+          //     fetch rejects the import; retries land cleanly once
+          //     connectivity recovers.
+          //   - PERMANENT (malformed params, unknown command id, range
+          //     out-of-bounds) → dead-letter immediately. Retrying
+          //     just re-throws the same stack.
+          //
+          // Final failure (after retries exhausted OR permanent on
+          // first throw) increments `replayFailures` AND appends to
+          // the dead-letter ring buffer for the UI to render.
+          const attempt = () =>
+            (lazyGroup ? ensurePluginByName(lazyGroup) : Promise.resolve())
+              .then(() => cmdSvc.executeCommand(rec.id, params, { fromCollab: true }));
+          void withRetry(
+            attempt,
+            TRANSIENT_RETRY_DELAYS_MS,
+            (err) => classifyReplayError(err) === 'transient',
+          )
             .then(() => {
               if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
             })
-            .catch((err) => {
-              console.warn('[collab] replay failed for', rec.id, err);
-              noteReplayFailure();
+            .catch((err: unknown) => {
+              const cls = classifyReplayError(err);
+              const message =
+                err instanceof Error ? err.message : String(err);
+              console.warn(
+                '[collab] replay failed for',
+                rec.id,
+                '(class:',
+                cls + ',',
+                'gave up)',
+                err,
+              );
+              const now = Date.now();
+              const failure: ReplayFailureRecord = {
+                id: rec.id,
+                params: rec.p,
+                lastError: message,
+                // Permanent = 1 attempt; transient = 1 + N retries
+                // configured in TRANSIENT_RETRY_DELAYS_MS.
+                attempts:
+                  cls === 'transient'
+                    ? 1 + TRANSIENT_RETRY_DELAYS_MS.length
+                    : 1,
+                firstFailedAt: now,
+                lastFailedAt: now,
+                classification: cls,
+              };
+              noteReplayFailure(failure);
               if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
             });
         }
@@ -684,6 +760,7 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       log.unobserve(observer);
       pendingUndo.clear();
       replayFailureSubscribers.clear();
+      deadLetterSubscribers.clear();
       // Two scheduling paths in setup above — clean up whichever ran.
       if (intervalHandle) clearInterval(intervalHandle);
       if (idleHandle !== null && typeof cic === 'function') cic(idleHandle);
@@ -693,6 +770,13 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       replayFailureSubscribers.add(cb);
       return () => {
         replayFailureSubscribers.delete(cb);
+      };
+    },
+    getReplayDeadLetter: () => deadLetter,
+    subscribeReplayDeadLetter: (cb) => {
+      deadLetterSubscribers.add(cb);
+      return () => {
+        deadLetterSubscribers.delete(cb);
       };
     },
   };
