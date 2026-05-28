@@ -4,11 +4,11 @@
    ───────────────────────────────────────────────────────────────────────── */
 :root {
   /* Brand */
-  --color-accent: #0c825a; /* dark mint */
-  --color-accent-hover: #0a724f;
-  --color-accent-active: #086344;
+  --color-accent: #0e7490; /* deep teal-cyan */
+  --color-accent-hover: #0c627a;
+  --color-accent-active: #0a5266;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: #e1f3ec;
+  --color-accent-soft: #e2f0f4;
 
   /* Neutrals — three-tone layering scale.
        zone 0 (white) — content surfaces (titlebar + menubar + formula bar + grid)
@@ -37,9 +37,9 @@
 
   --color-hover: rgba(0, 0, 0, 0.05);
   --color-pressed: rgba(0, 0, 0, 0.1);
-  --color-focus-ring: #0c825a;
-  --color-selected: rgba(12, 130, 90, 0.12);
-  --color-selected-strong: rgba(12, 130, 90, 0.22);
+  --color-focus-ring: #0e7490;
+  --color-selected: rgba(14, 116, 144, 0.12);
+  --color-selected-strong: rgba(14, 116, 144, 0.22);
 
   /* Toolbar pill — neutral grey, matches Google's tint */
   --color-toolbar-pill: #f1f3f4;
@@ -122,14 +122,14 @@ html[data-theme='dark'] {
 }
 html[data-theme='dark'] :root,
 [data-theme='dark'] {
-  /* Brand — brighter mint on dark surfaces so it reads as vibrant
-     without buzzing; soft is a transparent mint tint readable on
+  /* Brand — brighter cyan on dark surfaces so it reads as vibrant
+     without buzzing; soft is a transparent cyan tint readable on
      near-black bg. */
-  --color-accent: #1fbe8c;
-  --color-accent-hover: #2ad09a;
-  --color-accent-active: #19ab7c;
+  --color-accent: #22d3ee;
+  --color-accent-hover: #3ddff5;
+  --color-accent-active: #1cb8d4;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: rgba(31, 190, 140, 0.18);
+  --color-accent-soft: rgba(34, 211, 238, 0.18);
 
   --color-bg: #1a1b1f;
   --color-surface: #1f2024;
@@ -148,9 +148,9 @@ html[data-theme='dark'] :root,
 
   --color-hover: rgba(255, 255, 255, 0.06);
   --color-pressed: rgba(255, 255, 255, 0.12);
-  --color-focus-ring: #1fbe8c;
-  --color-selected: rgba(31, 190, 140, 0.2);
-  --color-selected-strong: rgba(31, 190, 140, 0.34);
+  --color-focus-ring: #22d3ee;
+  --color-selected: rgba(34, 211, 238, 0.2);
+  --color-selected-strong: rgba(34, 211, 238, 0.34);
 
   --color-toolbar-pill: #2a2c31;
 

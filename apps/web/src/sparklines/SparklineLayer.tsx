@@ -180,7 +180,7 @@ export function SparklineLayer() {
 
 function SparklineSvg({ geom }: { geom: Geom }) {
   const { sparkline, values, width, height } = geom;
-  const color = sparkline.color ?? '#0c825a';
+  const color = sparkline.color ?? '#0e7490';
   const neg = sparkline.negativeColor ?? '#d93025';
   // Numeric-only series for the value-axis range. Null cells act as
   // gaps in line / column modes.
