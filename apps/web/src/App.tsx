@@ -64,6 +64,17 @@ export function App() {
   }));
 
   const [homeDismissed, setHomeDismissed] = useState(false);
+
+  // Mirror the open file's name into the browser tab/window title,
+  // Office-style ("Book1 — Casual Sheets"). On the home screen keep the
+  // original marketing/SEO title (captured once at mount) so bookmarks
+  // and shared links stay descriptive.
+  const baseTitle = useRef(document.title);
+  useEffect(() => {
+    document.title = homeDismissed
+      ? `${meta.name || 'Untitled'} — Casual Sheets`
+      : baseTitle.current;
+  }, [homeDismissed, meta.name]);
   // Auto-dismiss the home screen when an autosave record exists, so
   // the AutosaveRestoreBanner is visible on first paint instead of
   // being hidden behind the template gallery. Best-effort IDB probe —
