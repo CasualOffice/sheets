@@ -15,8 +15,8 @@
   --admin-text: var(--color-text, #1a1a1a);
   --admin-text-soft: var(--color-text-secondary, #4a4a4a);
   --admin-text-muted: var(--color-text-muted, #8a8a85);
-  --admin-accent: var(--color-accent, #217346);
-  --admin-accent-soft: var(--color-accent-soft, rgba(33, 115, 70, 0.08));
+  --admin-accent: var(--color-accent, #0c825a);
+  --admin-accent-soft: var(--color-accent-soft, rgba(12, 130, 90, 0.08));
   --admin-radius: 8px;
   --admin-radius-lg: 12px;
   font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
@@ -284,7 +284,7 @@
   border-radius: 4px;
 }
 .admin-status--ok {
-  background: rgba(33, 115, 70, 0.08);
+  background: rgba(12, 130, 90, 0.08);
   color: #15803d;
 }
 .admin-status--err {

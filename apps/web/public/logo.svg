@@ -1,10 +1,10 @@
 <svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Casual Sheets">
   <title>Casual Sheets</title>
   <!-- Page body — same path as docx-editor's title-bar icon, only the
-       fill changed from blue (#1a73e8) to Excel green (#217346). -->
-  <path d="M2 0C0.9 0 0 0.9 0 2V38C0 39.1 0.9 40 2 40H30C31.1 40 32 39.1 32 38V10L22 0H2Z" fill="#217346"/>
-  <!-- Folded corner, darker shade of the same green. -->
-  <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#185a36"/>
+       fill changed from blue (#1a73e8) to dark mint (#0c825a). -->
+  <path d="M2 0C0.9 0 0 0.9 0 2V38C0 39.1 0.9 40 2 40H30C31.1 40 32 39.1 32 38V10L22 0H2Z" fill="#0c825a"/>
+  <!-- Folded corner, darker shade of the same mint. -->
+  <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#086344"/>
   <!-- The three text-line rects from docx-editor are at y=18, 23, 28,
        x=7, width=18. Replace each with a row of 4 cells so the icon
        signals "spreadsheet" while keeping the same vertical rhythm,

@@ -27,13 +27,13 @@
   /* Subtle ambient gradient — gives the page its own atmosphere
      without competing with the template cards. */
   background-image:
-    radial-gradient(900px circle at 8% -10%, rgba(33, 115, 70, 0.10), transparent 55%),
+    radial-gradient(900px circle at 8% -10%, rgba(12, 130, 90, 0.10), transparent 55%),
     radial-gradient(700px circle at 95% 30%, rgba(29, 78, 216, 0.08), transparent 60%);
 }
 
 [data-theme='dark'] .home {
   background-image:
-    radial-gradient(900px circle at 8% -10%, rgba(47, 175, 107, 0.18), transparent 55%),
+    radial-gradient(900px circle at 8% -10%, rgba(31, 190, 140, 0.18), transparent 55%),
     radial-gradient(700px circle at 95% 30%, rgba(96, 165, 250, 0.10), transparent 60%);
 }
 
@@ -57,14 +57,14 @@
   height: 320px;
   pointer-events: none;
   background:
-    radial-gradient(closest-side, rgba(33, 115, 70, 0.18), transparent 70%),
+    radial-gradient(closest-side, rgba(12, 130, 90, 0.18), transparent 70%),
     radial-gradient(closest-side at 70% 50%, rgba(91, 33, 182, 0.16), transparent 75%);
   filter: blur(40px);
   opacity: 0.85;
 }
 [data-theme='dark'] .home__hero-glow {
   background:
-    radial-gradient(closest-side, rgba(47, 175, 107, 0.30), transparent 70%),
+    radial-gradient(closest-side, rgba(31, 190, 140, 0.30), transparent 70%),
     radial-gradient(closest-side at 70% 50%, rgba(168, 85, 247, 0.20), transparent 75%);
   opacity: 0.9;
 }

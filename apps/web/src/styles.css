@@ -4,11 +4,11 @@
    ───────────────────────────────────────────────────────────────────────── */
 :root {
   /* Brand */
-  --color-accent: #217346; /* Excel green */
-  --color-accent-hover: #1e6b40;
-  --color-accent-active: #185a36;
+  --color-accent: #0c825a; /* dark mint */
+  --color-accent-hover: #0a724f;
+  --color-accent-active: #086344;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: #e6f0eb;
+  --color-accent-soft: #e1f3ec;
 
   /* Neutrals — three-tone layering scale.
        zone 0 (white) — content surfaces (titlebar + menubar + formula bar + grid)
@@ -37,9 +37,9 @@
 
   --color-hover: rgba(0, 0, 0, 0.05);
   --color-pressed: rgba(0, 0, 0, 0.1);
-  --color-focus-ring: #217346;
-  --color-selected: rgba(33, 115, 70, 0.12);
-  --color-selected-strong: rgba(33, 115, 70, 0.22);
+  --color-focus-ring: #0c825a;
+  --color-selected: rgba(12, 130, 90, 0.12);
+  --color-selected-strong: rgba(12, 130, 90, 0.22);
 
   /* Toolbar pill — neutral grey, matches Google's tint */
   --color-toolbar-pill: #f1f3f4;
@@ -122,14 +122,14 @@ html[data-theme='dark'] {
 }
 html[data-theme='dark'] :root,
 [data-theme='dark'] {
-  /* Brand — keep Excel green but tone down saturation so it doesn't
-     buzz against the dark surfaces; soft is a much more transparent
-     blue-green tint readable on near-black bg. */
-  --color-accent: #2faf6b;
-  --color-accent-hover: #34c179;
-  --color-accent-active: #28a060;
+  /* Brand — brighter mint on dark surfaces so it reads as vibrant
+     without buzzing; soft is a transparent mint tint readable on
+     near-black bg. */
+  --color-accent: #1fbe8c;
+  --color-accent-hover: #2ad09a;
+  --color-accent-active: #19ab7c;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: rgba(47, 175, 107, 0.18);
+  --color-accent-soft: rgba(31, 190, 140, 0.18);
 
   --color-bg: #1a1b1f;
   --color-surface: #1f2024;
@@ -148,9 +148,9 @@ html[data-theme='dark'] :root,
 
   --color-hover: rgba(255, 255, 255, 0.06);
   --color-pressed: rgba(255, 255, 255, 0.12);
-  --color-focus-ring: #2faf6b;
-  --color-selected: rgba(47, 175, 107, 0.2);
-  --color-selected-strong: rgba(47, 175, 107, 0.34);
+  --color-focus-ring: #1fbe8c;
+  --color-selected: rgba(31, 190, 140, 0.2);
+  --color-selected-strong: rgba(31, 190, 140, 0.34);
 
   --color-toolbar-pill: #2a2c31;
 
