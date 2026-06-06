@@ -27,6 +27,29 @@ const MARGIN_MM: Record<PrintMarginPreset, number> = {
 const STORAGE_KEY = 'casual-sheets/print-options';
 
 /**
+ * Soft cell-count cap before we refuse to render the print HTML.
+ *
+ * The renderer builds one big `<table>` and writes it into an iframe
+ * `srcdoc`. Past ~100k cells:
+ *   - The HTML string itself grows past several MB (each `<td>` is
+ *     ~30 bytes minimum + the value text).
+ *   - The browser materialises one DOM node per cell. At 200k+ cells
+ *     the tab heap hits ~500 MB and Chrome OOMs the renderer (the
+ *     6 MB-xlsx crash reported in issue #50).
+ *
+ * The hard cap stops the user mid-Print with a clear "set a Print
+ * Area" recovery message rather than crashing the tab. 100k is the
+ * smallest number that doesn't reject everyday workbooks; raise it
+ * (or lower the FUDGE) when a user with a beefier device asks.
+ */
+export const PRINT_CELL_LIMIT = 100_000;
+
+export type PrintResult =
+  | { ok: true; cellCount: number }
+  | { ok: false; reason: 'empty' }
+  | { ok: false; reason: 'too-large'; cellCount: number; limit: number };
+
+/**
  * Read previously-chosen print options from localStorage. Returns the
  * defaults if nothing is stored or the stored value looks malformed.
  */
@@ -39,9 +62,10 @@ export function loadPrintOptions(): PrintOptions {
       parsed.orientation === 'landscape' ? 'landscape' : 'portrait';
     const margins: PrintMarginPreset =
       parsed.margins === 'narrow' || parsed.margins === 'wide' ? parsed.margins : 'normal';
-    const printArea = typeof parsed.printArea === 'string' && parsed.printArea.trim()
-      ? parsed.printArea.trim()
-      : null;
+    const printArea =
+      typeof parsed.printArea === 'string' && parsed.printArea.trim()
+        ? parsed.printArea.trim()
+        : null;
     return { orientation, margins, printArea };
   } catch {
     return DEFAULT_PRINT_OPTIONS;
@@ -71,12 +95,12 @@ export function savePrintOptions(options: PrintOptions): void {
 export function printActiveSheet(
   api: FUniver,
   options: PrintOptions = DEFAULT_PRINT_OPTIONS,
-): void {
+): PrintResult {
   const wb = api.getActiveWorkbook();
-  if (!wb) return;
+  if (!wb) return { ok: false, reason: 'empty' };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fws: any = wb.getActiveSheet();
-  if (!fws) return;
+  if (!fws) return { ok: false, reason: 'empty' };
   const ws = fws.getSheet();
 
   // Either the user's explicit Print Area (Excel "Set print area")
@@ -95,10 +119,36 @@ export function printActiveSheet(
       lastRow = parsed.endRow;
       lastCol = parsed.endCol;
     } else {
-      console.warn('[print] could not parse Print Area "%s" — falling back to used range', options.printArea);
+      console.warn(
+        '[print] could not parse Print Area "%s" — falling back to used range',
+        options.printArea,
+      );
     }
   }
-  if (lastRow < 0 || lastCol < 0) return;
+  if (lastRow < 0 || lastCol < 0) return { ok: false, reason: 'empty' };
+
+  // Cell-count guard. The renderer builds one big HTML table; past
+  // ~PRINT_CELL_LIMIT cells the tab OOMs (issue #50). Refuse rather
+  // than crash; the caller surfaces a toast pointing at "Set a Print
+  // Area first" as the recovery path. The limit can be overridden
+  // via `window.__casualPrintCellLimit` — e2e specs use this to
+  // exercise the soft-guard without standing up a multi-MB workbook.
+  const rowCount = lastRow - startRow + 1;
+  const colCount = lastCol - startCol + 1;
+  const cellCount = rowCount * colCount;
+  const overrideLimit =
+    typeof window !== 'undefined'
+      ? (window as Window & { __casualPrintCellLimit?: number }).__casualPrintCellLimit
+      : undefined;
+  const limit = typeof overrideLimit === 'number' ? overrideLimit : PRINT_CELL_LIMIT;
+  if (cellCount > limit) {
+    return {
+      ok: false,
+      reason: 'too-large',
+      cellCount,
+      limit,
+    };
+  }
 
   const sheetName: string = fws.getSheetName?.() ?? 'Sheet';
   const workbookName: string = (wb as { getName?: () => string }).getName?.() ?? 'Workbook';
@@ -110,11 +160,7 @@ export function printActiveSheet(
       const cell = ws.getCell(r, c);
       const raw: unknown = cell?.v;
       const text =
-        raw === undefined || raw === null
-          ? ''
-          : typeof raw === 'string'
-            ? raw
-            : String(raw);
+        raw === undefined || raw === null ? '' : typeof raw === 'string' ? raw : String(raw);
       cells.push(`<td>${escapeHtml(text)}</td>`);
     }
     rows.push(`<tr>${cells.join('')}</tr>`);
@@ -188,6 +234,7 @@ export function printActiveSheet(
     },
     { once: true },
   );
+  return { ok: true, cellCount };
 }
 
 function escapeHtml(s: string): string {
@@ -231,4 +278,3 @@ function colLettersToIndex(letters: string): number {
   }
   return n - 1;
 }
-

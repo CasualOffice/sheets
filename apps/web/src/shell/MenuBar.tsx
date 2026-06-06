@@ -2104,7 +2104,24 @@ export function MenuBar() {
           onPrint={(options) => {
             savePrintOptions(options);
             setShowPageSetup(false);
-            if (api) printActiveSheet(api, options);
+            if (!api) return;
+            const result = printActiveSheet(api, options);
+            if (result.ok) return;
+            // Soft-guard refusal (#50): one big HTML table OOMs the
+            // tab past ~100k cells, so we surface a clear next step
+            // instead of crashing. The "Set Print Area" pointer is
+            // recoverable in a couple of clicks (the menu item already
+            // exists right below Print).
+            if (result.reason === 'too-large') {
+              toast.error(
+                `Too many cells to print at once (${result.cellCount.toLocaleString()} > ` +
+                  `${result.limit.toLocaleString()} limit). Try File → Set Print Area to ` +
+                  `pick a smaller range, or split the sheet.`,
+                { duration: 12_000 },
+              );
+            } else {
+              toast.error('Nothing to print — the active sheet looks empty.');
+            }
           }}
         />
       )}
