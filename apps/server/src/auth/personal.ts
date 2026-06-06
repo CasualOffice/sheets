@@ -51,6 +51,21 @@ export type PublicUser = {
   createdAt: number;
 };
 
+/** Row in the personal-mode files registry. The byte payload lives in
+ *  the `HostIntegration` backend keyed by `id`; this record is the
+ *  ownership + metadata pointer. */
+export type FileRecord = {
+  id: string;
+  ownerId: number;
+  displayName: string;
+  size: number;
+  /** Opaque version, bumped on every write. Matches the WOPI
+   *  `Version` field, used for `If-Match` conflict detection. */
+  etag: string;
+  createdAt: number;
+  modifiedAt: number;
+};
+
 export type PersonalAuthOptions = {
   dbPath: string;
   mode: PersonalMode;
@@ -306,6 +321,126 @@ export class PersonalAuthStore {
     this.db.close();
   }
 
+  // ── Files registry ─────────────────────────────────────────────────────
+
+  /** Generate a fresh opaque file id. 16 hex chars + `f-` prefix —
+   *  enough entropy for a personal-mode docker (the owner_id FK is
+   *  the real ownership boundary; the id is just a server-issued
+   *  handle the web client tosses around). */
+  static newFileId(): string {
+    return `f-${randomBytes(8).toString('hex')}`;
+  }
+
+  /** Insert a new file row. Returns the assigned id (the caller is
+   *  expected to use it as the host integration's `FileId` for the
+   *  byte payload). */
+  createFile(opts: {
+    ownerId: number;
+    displayName: string;
+    size: number;
+    etag: string;
+  }): FileRecord {
+    const id = PersonalAuthStore.newFileId();
+    const now = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO files (id, owner_id, display_name, size, etag, created_at, modified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(id, opts.ownerId, opts.displayName, opts.size, opts.etag, now, now);
+    return {
+      id,
+      ownerId: opts.ownerId,
+      displayName: opts.displayName,
+      size: opts.size,
+      etag: opts.etag,
+      createdAt: now,
+      modifiedAt: now,
+    };
+  }
+
+  /** Read a single file row. Returns null when the id is unknown. */
+  getFile(id: string): FileRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, owner_id, display_name, size, etag, created_at, modified_at
+           FROM files WHERE id = ?`,
+      )
+      .get(id) as
+      | {
+          id: string;
+          owner_id: number;
+          display_name: string;
+          size: number;
+          etag: string;
+          created_at: number;
+          modified_at: number;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      id: row.id,
+      ownerId: row.owner_id,
+      displayName: row.display_name,
+      size: row.size,
+      etag: row.etag,
+      createdAt: row.created_at,
+      modifiedAt: row.modified_at,
+    };
+  }
+
+  /** All files belonging to `ownerId`, newest-edit first. The route
+   *  layer surfaces this to the web client's recents list. */
+  listFilesForUser(ownerId: number): FileRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, owner_id, display_name, size, etag, created_at, modified_at
+           FROM files WHERE owner_id = ? ORDER BY modified_at DESC`,
+      )
+      .all(ownerId) as Array<{
+      id: string;
+      owner_id: number;
+      display_name: string;
+      size: number;
+      etag: string;
+      created_at: number;
+      modified_at: number;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      ownerId: row.owner_id,
+      displayName: row.display_name,
+      size: row.size,
+      etag: row.etag,
+      createdAt: row.created_at,
+      modifiedAt: row.modified_at,
+    }));
+  }
+
+  /** Bump size + etag + modified-at after a put. Caller has already
+   *  written the bytes via the host integration. */
+  recordFileUpdate(id: string, size: number, etag: string): void {
+    this.db
+      .prepare('UPDATE files SET size = ?, etag = ?, modified_at = ? WHERE id = ?')
+      .run(size, etag, Date.now(), id);
+  }
+
+  /** Change a file's display name. */
+  renameFile(id: string, newName: string): boolean {
+    if (!newName.trim()) return false;
+    const result = this.db
+      .prepare('UPDATE files SET display_name = ?, modified_at = ? WHERE id = ?')
+      .run(newName.trim(), Date.now(), id);
+    return result.changes > 0;
+  }
+
+  /** Drop a file row. Caller is expected to also drop the bytes from
+   *  the host integration. Returns false if the id was unknown. */
+  deleteFile(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM files WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
   // ── Internals ──────────────────────────────────────────────────────────
 
   private migrate(): void {
@@ -327,6 +462,25 @@ export class PersonalAuthStore {
 
       CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+      -- Files registry (Phase C Batch 2). Tracks which user owns each
+      -- workbook stored in the HostIntegration backend. The byte
+      -- payload lives there; we only carry metadata here so listing
+      -- and ownership checks are fast (no per-file metadata read of
+      -- the underlying object store).
+      CREATE TABLE IF NOT EXISTS files (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER NOT NULL,
+        display_name TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        etag TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        modified_at INTEGER NOT NULL,
+        FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
+      CREATE INDEX IF NOT EXISTS idx_files_modified ON files(modified_at DESC);
     `);
   }
 

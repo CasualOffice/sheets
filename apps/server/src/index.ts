@@ -17,6 +17,7 @@ import { registerAdminRoutes } from './admin/routes.js';
 import { WebhookDispatcher } from './admin/webhooks.js';
 import { PersonalAuthStore, readModeFromEnv } from './auth/personal.js';
 import { registerPersonalAuthRoutes } from './auth/personal-routes.js';
+import { registerPersonalFilesRoutes } from './files/personal-files-routes.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -169,6 +170,9 @@ if (personalMode !== 'none') {
     bootstrap: process.env.CASUAL_BOOTSTRAP_USER ?? null,
   });
   registerPersonalAuthRoutes(app, personalAuth);
+  registerPersonalFilesRoutes(app, personalAuth, host, {
+    maxUploadBytes: MAX_UPLOAD_BYTES,
+  });
   app.log.info(
     `personal auth: mode=${personalMode} db=${personalDbPath} users=${personalAuth.stats().userCount}`,
   );
