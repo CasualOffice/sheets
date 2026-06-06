@@ -29,6 +29,10 @@ export default defineConfig({
     '**/coedit-data-validation.spec.ts',
     '**/coedit-workbook-metadata.spec.ts',
     '**/coedit-drawings.spec.ts', // runs against prod stack via playwright.docker.config.ts
+    // Personal-mode (Mode 3) specs need a Fastify with
+    // CASUAL_PERSONAL_MODE=single; they run via
+    // playwright.personal.config.ts which manages its own server.
+    'tests/e2e/personal/**',
   ],
   use: {
     baseURL: 'http://127.0.0.1:5273',

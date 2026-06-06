@@ -10,6 +10,7 @@ import { loadSpreadsheetFile, pickXlsxFile } from '../shell/file-actions';
 import { CATEGORIES, TEMPLATES, type Template, type TemplateCategory } from './registry';
 import { TemplateCard } from './TemplateCard';
 import { ReopenBanner } from './ReopenBanner';
+import { IdbQuotaBanner } from './IdbQuotaBanner';
 import { PinnedFolderSection } from './PinnedFolderSection';
 import { usePinnedFolder } from '../file-system-access/usePinnedFolder';
 import './home.css';
@@ -183,6 +184,7 @@ export function HomeScreen({
         <Icon name="close" />
       </button>
       <div className="home__scroll">
+        <IdbQuotaBanner />
         <ReopenBanner recents={recents} onOpen={onOpenRecent} />
         <header className="home__hero">
           <div className="home__hero-glow" aria-hidden />

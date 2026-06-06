@@ -16,11 +16,11 @@ TLS / a custom domain / multi-app multiplexing.
 
 How big is "production" for you? Pick the shape:
 
-| Shape | What | When |
-|---|---|---|
-| **1 — Local dev / personal** | `docker run -p 3000:3000` | Try it. Single host. No persistence — rooms vanish on restart. |
-| **2 — Single-host, persistent** | Docker Compose with Redis + a host volume + your reverse proxy | A team or department. Sticky sessions, but no horizontal scale. |
-| **3 — Multi-host (v0.2 lane)** | Multiple replicas behind a load balancer + S3 / Postgres workbook storage + Redis pub/sub for room state | A real org. Horizontal WebSocket scaling has open questions documented below. |
+| Shape                           | What                                                                                                     | When                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **1 — Local dev / personal**    | `docker run -p 3000:3000`                                                                                | Try it. Single host. No persistence — rooms vanish on restart.                |
+| **2 — Single-host, persistent** | Docker Compose with Redis + a host volume + your reverse proxy                                           | A team or department. Sticky sessions, but no horizontal scale.               |
+| **3 — Multi-host (v0.2 lane)**  | Multiple replicas behind a load balancer + S3 / Postgres workbook storage + Redis pub/sub for room state | A real org. Horizontal WebSocket scaling has open questions documented below. |
 
 This page covers shapes 1 + 2. Shape 3 has _shape-changing_ open
 items that v0.2 closes (sticky WebSocket session handling for the
@@ -30,6 +30,10 @@ that needs hardening.
 
 ## What you'll find in this section
 
+- **[Personal mode (Mode 3)](./personal-mode.md)** — standalone
+  docker with personal accounts. Sign-up, files persist to a
+  volume, CLI password reset, profile + preferences. Landed in
+  Phase C of #49.
 - **[Reverse proxy recipes](./reverse-proxy.md)** — nginx, Caddy,
   Traefik. The WebSocket upgrade header is the most-common
   gotcha; recipes include the minimum config + commentary.
@@ -75,8 +79,8 @@ services:
 
       # ── Admin panel ──
       CASUAL_ADMIN_USERNAME: admin
-      CASUAL_ADMIN_PASSWORD: ${ADMIN_PASSWORD}   # from .env file
-      CASUAL_JWT_SECRET: ${JWT_SECRET}           # 32+ random chars
+      CASUAL_ADMIN_PASSWORD: ${ADMIN_PASSWORD} # from .env file
+      CASUAL_JWT_SECRET: ${JWT_SECRET} # 32+ random chars
       CASUAL_ADMIN_CONFIG_PATH: /data/casual-admin.json
 
       # ── Networking ──
