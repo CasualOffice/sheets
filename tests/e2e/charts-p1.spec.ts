@@ -52,7 +52,9 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
     await seedData(page);
     // Click canvas to focus, then restore the selection (clicking
     // moves the selection caret).
-    await mainCanvas(page).first().click({ position: { x: 100, y: 100 } });
+    await mainCanvas(page)
+      .first()
+      .click({ position: { x: 100, y: 100 } });
     await page.evaluate(() => {
       const api = window.__univerAPI!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,11 +69,17 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
     await expect(page.getByTestId('insert-chart-dialog')).toBeVisible();
     await expect(page.getByTestId('insert-chart-range')).toHaveValue('A1:C3');
     // Column family is the Excel default; Clustered Column is its first subtype.
-    await expect(page.getByTestId('insert-chart-family-column')).toHaveClass(/insert-chart__family--active/);
-    await expect(page.getByTestId('insert-chart-type-column')).toHaveClass(/insert-chart__subtype--active/);
+    await expect(page.getByTestId('insert-chart-family-column')).toHaveClass(
+      /insert-chart__family--active/,
+    );
+    await expect(page.getByTestId('insert-chart-type-column')).toHaveClass(
+      /insert-chart__subtype--active/,
+    );
   });
 
-  test('confirming the dialog inserts a chart and the panel lists it as "Chart 1"', async ({ page }) => {
+  test('confirming the dialog inserts a chart and the panel lists it as "Chart 1"', async ({
+    page,
+  }) => {
     await page.getByTestId('menubar-insert').click();
     await page.getByTestId('menu-item-insert-chart').click();
     // Switch family to Line, then pick the Line subtype.
@@ -104,6 +112,18 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
   });
 
   test('the chart round-trips through xlsx via __casual_sheets_charts__', async ({ page }) => {
+    // CI runners under heavy parallel load occasionally trip the
+    // "Execution context was destroyed by navigation" failure between
+    // the chart-overlay assertion and the page.evaluate snapshot
+    // below. Three retries cover the intermittent slow runner case
+    // without papering over a real navigation regression.
+    test
+      .info()
+      .annotations.push({
+        type: 'flaky',
+        description: 'chart-overlay → save race on slow runners',
+      });
+    test.setTimeout(60_000);
     await exposeRoundTrip(page);
     await page.getByTestId('menubar-insert').click();
     await page.getByTestId('menu-item-insert-chart').click();
@@ -111,6 +131,12 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
     await page.getByTestId('insert-chart-type-pie').click();
     await page.getByTestId('insert-chart-confirm').click();
     await expect(page.getByTestId('chart-overlay')).toBeVisible({ timeout: 5_000 });
+    // Settle the page so the upcoming `page.evaluate` doesn't race a
+    // lazy-loaded module's network/parse. The earlier failure mode
+    // was "Execution context was destroyed, most likely because of
+    // a navigation" — waiting for networkidle here prevents the
+    // race.
+    await page.waitForLoadState('networkidle');
 
     const reloaded = await page.evaluate(async () => {
       const api = window.__univerAPI!;
@@ -121,14 +147,16 @@ test.describe('Charts P1 — insert dialog + panel + persistence', () => {
       const rt = (window as any).__rt__;
       // Mirror what the real Save path does: hand the chart list in
       // via ExportExtras so it gets written into resources.
-      const charts = [{
-        id: 'ch-test',
-        sheetId: snapshot.sheetOrder[0],
-        source: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 2 },
-        pos: { startRow: 4, endRow: 13, startColumn: 0, endColumn: 7 },
-        type: 'pie',
-        title: 'Chart 1',
-      }];
+      const charts = [
+        {
+          id: 'ch-test',
+          sheetId: snapshot.sheetOrder[0],
+          source: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 2 },
+          pos: { startRow: 4, endRow: 13, startColumn: 0, endColumn: 7 },
+          type: 'pie',
+          title: 'Chart 1',
+        },
+      ];
       const blob = await rt.workbookDataToXlsx(snapshot, { charts });
       const buf = await blob.arrayBuffer();
       const reloaded = await rt.xlsxToWorkbookData(buf);

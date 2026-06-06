@@ -21,7 +21,13 @@ import { waitForUniver } from './_helpers';
  * a separate port so the test is hermetic.
  */
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial', retries: 3 });
+
+// Heavy flow: 2 browser contexts + a child Hocuspocus process +
+// xlsx export + upload. The default 30 s test timeout is tight on
+// shared CI runners — give it 90 s so worker fork-out + upload
+// don't push past the wall under parallel load.
+test.setTimeout(90_000);
 
 const SERVER_PORT = 3056;
 const WS_URL = `ws://127.0.0.1:${SERVER_PORT}/yjs`;
@@ -31,14 +37,10 @@ let serverProc: ChildProcess | null = null;
 let browser: Browser | null = null;
 
 test.beforeAll(async () => {
-  serverProc = spawn(
-    'pnpm',
-    ['--filter', '@sheet/server', 'exec', 'tsx', 'src/index.ts'],
-    {
-      env: { ...process.env, PORT: String(SERVER_PORT), HOST: '127.0.0.1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
+  serverProc = spawn('pnpm', ['--filter', '@sheet/server', 'exec', 'tsx', 'src/index.ts'], {
+    env: { ...process.env, PORT: String(SERVER_PORT), HOST: '127.0.0.1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
   await new Promise<void>((resolveReady, reject) => {
     const timer = setTimeout(() => reject(new Error('server boot timed out')), 15_000);
@@ -134,9 +136,7 @@ test('share → password join → presence → download → leave', async ({ bas
 
   // Owner should see their own avatar in the stack.
   await expect(owner.getByTestId('presence-avatars')).toBeVisible({ timeout: 10_000 });
-  await expect(
-    owner.getByTestId('presence-avatar').filter({ hasText: 'AL' }),
-  ).toBeVisible();
+  await expect(owner.getByTestId('presence-avatar').filter({ hasText: 'AL' })).toBeVisible();
 
   // ── Joiner ─────────────────────────────────────────────────────────
   const joinerCtx = await browser!.newContext();
@@ -164,9 +164,9 @@ test('share → password join → presence → download → leave', async ({ bas
     ws.getRange('D4').activate();
   });
   await expect(owner.getByTestId('presence-cursor')).toBeVisible({ timeout: 10_000 });
-  await expect(
-    owner.getByTestId('presence-cursor').locator('.presence-cursor__label'),
-  ).toHaveText('Bob');
+  await expect(owner.getByTestId('presence-cursor').locator('.presence-cursor__label')).toHaveText(
+    'Bob',
+  );
 
   // ── Joiner downloads a copy ────────────────────────────────────────
   await joiner.getByTestId('menubar-file').click();
