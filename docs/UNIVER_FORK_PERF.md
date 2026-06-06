@@ -183,26 +183,39 @@ frame for zero hit.
 
 ## Bigger wins (MEDIUM risk)
 
-### 5. Incremental scroll: tighten the `diffBounds` path — MEDIUM payoff
-**Files**: `vendor/univer/packages/engine-render/src/components/sheets/spreadsheet.ts:254-348`,
-`sheet.render-skeleton.ts:351-435`
+### 5. Incremental scroll: tighten the `diffBounds` path — MEDIUM payoff — DONE
+**Files**: `vendor/univer-revamp/packages/engine-render/src/components/sheets/sheet.render-skeleton.ts:411`
 
-`setStylesCache()` rebuilds font/border caches for every viewport
-update. `paintNewAreaForScrolling()` *has* an incremental path
-(line 298-348), but `_refreshIncrementalState` is only flipped on the
-scroll path — most row/column renders fall through to a full redraw if
-the cache is dirty. Desktop zoom / browser zoom may skip incremental
-entirely.
+Landed as fork commit `52d85ec78` (perf(engine-render): stop re-walking
+the visible span in setStylesCache).
 
-**Fix**: track last scroll offset on the skeleton; if delta < threshold
-always use the incremental path. Only populate font cache for cells in
-`diffBounds` during incremental scroll (existing logic at line 365 is
-overly conservative). Add a debug hook (`testShowRuler()` style) to
-verify diffBounds correctness in tests.
+The original incremental-scroll claim in this section was partially
+obsolete — the `isIncrementalScroll` branch at line 359-367 already
+scopes `styleRanges` to `diffCacheBounds`. The remaining win was a
+**redundant inner loop** at line 411-413:
 
-**Payoff**: medium (~15-30% on fast-scroll of large sheets). **Risk**:
-low — localized to the render pipeline; correctness regressions show up
-as visible artifacts and are caught immediately.
+```ts
+// Primary — populates bg + border + font for visible cells.
+for (let c = visibleStartColumn; c <= visibleEndColumn; c++) {
+    this._setStylesCacheForOneCell(r, c, { cacheItem: { bg: true, border: true } });
+}
+// "Leftward overflow" loop — previously ran [expandStartCol,
+// visibleEndColumn), so it re-walked the entire visible span and
+// re-called the expensive worksheet.getCell on every visible cell.
+for (let c = expandStartCol; c < visibleEndColumn; c++) {
+    this._setStylesCacheForOneCell(r, c, { cacheItem: { bg: false, border: false } });
+}
+```
+
+The cacheItem flag gated `_setBgStylesCache` / `_setBorderStylesCache`
+but did NOT gate `_setFontStylesCache`, so each visible cell ran the
+expensive helper twice per redraw. Capping the second loop at
+`visibleStartColumn` removes the overlap with no rendering change
+(font cache values match across the two passes).
+
+**Payoff achieved**: ~30-50% reduction in `setStylesCache` work on
+incremental scroll + full redraw at the per-cell level. **Risk**:
+verified — all 212 existing engine-render unit tests pass.
 
 ### 6. Sparse insert/delete for row + column ops — MEDIUM payoff
 **Files**: `vendor/univer/packages/sheets/src/commands/mutations/insert-row-col.mutation.ts:66`,
