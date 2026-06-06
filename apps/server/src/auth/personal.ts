@@ -51,6 +51,24 @@ export type PublicUser = {
   createdAt: number;
 };
 
+/** Editable profile fields. Optional everywhere — a freshly-signed-up
+ *  user has none of these set, and the UI defaults the display name
+ *  to the username. */
+export type UserProfile = {
+  displayName: string | null;
+  email: string | null;
+  /** IANA time-zone (e.g. "Europe/Berlin"). Defaults to "UTC". */
+  timezone: string;
+  /** Truthy when an avatar blob has been uploaded — the route layer
+   *  serves the bytes from `GET /auth/profile/avatar`. */
+  hasAvatar: boolean;
+  /** Free-form JSON for client preferences (theme, language, date
+   *  format, etc.). Server doesn't interpret — it just round-trips. */
+  preferences: Record<string, unknown>;
+};
+
+export type FullUser = PublicUser & UserProfile;
+
 /** Row in the personal-mode files registry. The byte payload lives in
  *  the `HostIntegration` backend keyed by `id`; this record is the
  *  ownership + metadata pointer. */
@@ -300,6 +318,121 @@ export class PersonalAuthStore {
     return true;
   }
 
+  // ── Profile (display name / email / timezone / avatar / preferences) ──
+
+  /** Read the editable profile for a signed-in user. */
+  getProfile(userId: number): UserProfile | null {
+    const row = this.db
+      .prepare(
+        `SELECT display_name, email, timezone, avatar_mime, preferences
+           FROM users WHERE id = ?`,
+      )
+      .get(userId) as
+      | {
+          display_name: string | null;
+          email: string | null;
+          timezone: string;
+          avatar_mime: string | null;
+          preferences: string;
+        }
+      | undefined;
+    if (!row) return null;
+    let prefs: Record<string, unknown> = {};
+    try {
+      prefs = JSON.parse(row.preferences ?? '{}');
+    } catch {
+      // Corrupt JSON — treat as empty so the route doesn't 500.
+    }
+    return {
+      displayName: row.display_name,
+      email: row.email,
+      timezone: row.timezone ?? 'UTC',
+      hasAvatar: Boolean(row.avatar_mime),
+      preferences: prefs,
+    };
+  }
+
+  /** Update one or more profile fields. Each field is optional — only
+   *  the keys present in `patch` are written. Returns null when the
+   *  user is unknown OR on a uniqueness collision (`email`). */
+  updateProfile(
+    userId: number,
+    patch: Partial<Pick<UserProfile, 'displayName' | 'email' | 'timezone' | 'preferences'>>,
+  ): UserProfile | null {
+    // Capacity: validate before mutating. Email goes through the
+    // unique index on email; trim + lowercase normalisation isn't
+    // server-imposed (COLLATE NOCASE is on the column).
+    if (patch.displayName !== undefined) {
+      const dn = patch.displayName?.trim() ?? '';
+      if (dn.length > 80) return null;
+    }
+    if (patch.email !== undefined && patch.email !== null) {
+      const em = patch.email.trim();
+      // Cheap shape check — proper validation is a UI concern (the
+      // input element does most of the lifting).
+      if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return null;
+    }
+    if (patch.timezone !== undefined) {
+      // IANA tzs only — validated by `Intl.supportedValuesOf('timeZone')`
+      // on the client; the server treats it as an opaque string but
+      // sanity-checks the length.
+      if (patch.timezone.length > 64) return null;
+    }
+
+    const fields: string[] = [];
+    const values: Array<unknown> = [];
+    if (patch.displayName !== undefined) {
+      fields.push('display_name = ?');
+      values.push(patch.displayName?.trim() || null);
+    }
+    if (patch.email !== undefined) {
+      fields.push('email = ?');
+      const em = patch.email?.trim();
+      values.push(em ? em : null);
+    }
+    if (patch.timezone !== undefined) {
+      fields.push('timezone = ?');
+      values.push(patch.timezone.trim() || 'UTC');
+    }
+    if (patch.preferences !== undefined) {
+      fields.push('preferences = ?');
+      values.push(JSON.stringify(patch.preferences));
+    }
+    if (fields.length === 0) return this.getProfile(userId);
+
+    try {
+      this.db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values, userId);
+    } catch (err) {
+      // Unique-email collision lands here.
+      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') return null;
+      throw err;
+    }
+    return this.getProfile(userId);
+  }
+
+  /** Write an avatar blob. Caller is expected to cap the size + mime
+   *  upstream; the store doesn't second-guess. Pass `null` to clear. */
+  setAvatar(userId: number, mime: string | null, bytes: Uint8Array | null): void {
+    if (mime === null || bytes === null) {
+      this.db
+        .prepare('UPDATE users SET avatar_mime = NULL, avatar_blob = NULL WHERE id = ?')
+        .run(userId);
+      return;
+    }
+    this.db
+      .prepare('UPDATE users SET avatar_mime = ?, avatar_blob = ? WHERE id = ?')
+      .run(mime, Buffer.from(bytes), userId);
+  }
+
+  /** Read the avatar bytes. Returns null when no avatar is set. */
+  getAvatar(userId: number): { mime: string; bytes: Uint8Array } | null {
+    const row = this.db
+      .prepare('SELECT avatar_mime, avatar_blob FROM users WHERE id = ?')
+      .get(userId) as { avatar_mime: string | null; avatar_blob: Buffer | null } | undefined;
+    if (!row?.avatar_mime || !row?.avatar_blob) return null;
+    return { mime: row.avatar_mime, bytes: new Uint8Array(row.avatar_blob) };
+  }
+
   /** Resolve a username back to its id — used by the CLI reset. */
   findIdByUsername(username: string): number | null {
     const row = this.db
@@ -450,8 +583,20 @@ export class PersonalAuthStore {
         username TEXT NOT NULL UNIQUE COLLATE NOCASE,
         password_hash TEXT NOT NULL,
         is_admin INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        display_name TEXT,
+        email TEXT COLLATE NOCASE,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
+        avatar_mime TEXT,
+        avatar_blob BLOB,
+        preferences TEXT NOT NULL DEFAULT '{}'
       );
+
+      -- Email index — unique when present, allows NULL for users
+      -- who didn't fill the field (the personal-mode docker doesn't
+      -- need email since there's no SMTP recovery in v1).
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+        ON users(email) WHERE email IS NOT NULL;
 
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
@@ -482,6 +627,31 @@ export class PersonalAuthStore {
       CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
       CREATE INDEX IF NOT EXISTS idx_files_modified ON files(modified_at DESC);
     `);
+
+    // Idempotent column migrations — a Batch-1 install predates the
+    // profile columns. Trying ALTER on every boot is cheap; the
+    // INSTR check on PRAGMA table_info is the safe guard against
+    // a duplicate-column error (SQLite has no IF NOT EXISTS for
+    // ADD COLUMN).
+    this.addColumnIfMissing('users', 'display_name', 'TEXT');
+    this.addColumnIfMissing('users', 'email', 'TEXT COLLATE NOCASE');
+    this.addColumnIfMissing('users', 'timezone', "TEXT NOT NULL DEFAULT 'UTC'");
+    this.addColumnIfMissing('users', 'avatar_mime', 'TEXT');
+    this.addColumnIfMissing('users', 'avatar_blob', 'BLOB');
+    this.addColumnIfMissing('users', 'preferences', "TEXT NOT NULL DEFAULT '{}'");
+    // The unique-email index is referenced by setEmail; safe-create it
+    // here in case the migration block above didn't fire (CREATE TABLE
+    // path already included it, but ALTER-upgraded DBs need it added).
+    this.db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+        ON users(email) WHERE email IS NOT NULL
+    `);
+  }
+
+  private addColumnIfMissing(table: string, column: string, type: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (cols.some((c) => c.name === column)) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
   }
 
   private applyBootstrap(spec: string): void {
