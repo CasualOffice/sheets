@@ -35,18 +35,21 @@ playwright-report
 vendor
 !vendor/univer-revamp
 
-# Trim what the runtime doesn't need from the fork: source trees
-# (only lib/ is referenced by the link: overrides), node_modules
-# (the consumer workspace resolves prod deps from its own tree),
-# git metadata, examples, and test fixtures. Keep package.json,
-# lib/, and the workspace lockfile.
+# Trim only the parts the build truly doesn't read: .git metadata,
+# upstream examples / e2e / mock fixtures, turbo caches. KEEP the
+# fork's node_modules and package src/ — tsc walks into the fork's
+# compiled lib/types/*.d.ts during the app build, and those files
+# `import` from sibling fork packages by bare specifier
+# (`@univerjs/data-validation`, etc.). The resolution walks up from
+# the d.ts file's location looking for a `node_modules` directory.
+# On the host that hits `vendor/univer-revamp/node_modules/.pnpm/`,
+# which is what the fork's own `pnpm install` populates. Stripping
+# those node_modules in docker made tsc unable to resolve those
+# transitive @univerjs/* imports and threw module-augmentation
+# errors like 'Property getActiveWorkbook does not exist on FUniver'
+# across the entire app bundle build.
 vendor/univer-revamp/.git
-vendor/univer-revamp/node_modules
-vendor/univer-revamp/**/node_modules
 vendor/univer-revamp/**/.turbo
-vendor/univer-revamp/**/src
-vendor/univer-revamp/**/test
-vendor/univer-revamp/**/__tests__
 vendor/univer-revamp/examples
 vendor/univer-revamp/e2e
 vendor/univer-revamp/mock
