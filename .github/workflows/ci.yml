@@ -183,3 +183,41 @@ jobs:
           name: playwright-report-prod
           path: playwright-report/
           retention-days: 7
+
+  e2e-personal:
+    # Mode 3 (personal docker) end-to-end: signup → save → sign out →
+    # sign in → settings, plus the auth-edge battery. Runs against a
+    # dedicated Fastify on port 3055 with CASUAL_PERSONAL_MODE=single
+    # and a scratch users.db on /tmp. The config builds the web bundle
+    # itself; no docker stack here, so the job is fast (~1 min on cold
+    # runners after the Playwright cache hit).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - name: Run personal-mode specs
+        run: pnpm exec playwright test -c playwright.personal.config.ts
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-personal
+          path: playwright-report/
+          retention-days: 7
