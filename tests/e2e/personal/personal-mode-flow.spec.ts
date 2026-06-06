@@ -38,6 +38,17 @@ async function waitForAppReady(page: Page) {
   await page.locator('[id^="univer-sheet-main-canvas_"]').waitFor({ timeout: 30_000 });
 }
 
+// Long happy-path: signup → editor mount → save → reload → list
+// → sign out → login → settings. Locally runs ~25 s; CI shared
+// runners under parallel load go past Playwright's default 30 s
+// test timeout. Bumped to 90 s + 2 retries to absorb runner
+// variance without papering over a real regression — every step
+// still asserts its own state, so a hang on any individual step
+// surfaces as a specific locator-not-visible failure rather than
+// a generic timeout.
+test.describe.configure({ retries: 2 });
+test.setTimeout(90_000);
+
 test('signup → save → reload → list → sign out → login → settings', async ({ page }) => {
   // ── 1. Signup or login (whichever the gate shows) ────────────────
   await page.goto('/');
