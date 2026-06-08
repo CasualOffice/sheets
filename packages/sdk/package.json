@@ -1,6 +1,6 @@
 {
   "name": "@schnsrw/casual-sheets",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Casual Sheets SDK — signing pipeline + iframe postMessage protocol. Univer wrapper (CasualSheets component) to follow.",
   "type": "module",
   "license": "Apache-2.0",
@@ -45,8 +45,12 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "react-dom": { "optional": true }
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
