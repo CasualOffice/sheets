@@ -49,6 +49,20 @@ jobs:
       - name: Build SDK
         run: pnpm --filter @schnsrw/casual-sheets build
 
+      # Write ~/.npmrc explicitly so `changeset publish` (and the
+      # `pnpm dlx` subshell under it) sees the auth token regardless
+      # of the temp .npmrc that setup-node creates at
+      # $NPM_CONFIG_USERCONFIG (which dlx's isolated cwd ignores).
+      - name: Configure npm auth
+        run: |
+          cat > "$HOME/.npmrc" <<EOF
+          //registry.npmjs.org/:_authToken=${NPM_TOKEN}
+          registry=https://registry.npmjs.org/
+          always-auth=true
+          EOF
+        env:
+          NPM_TOKEN: ${{ secrets.NODE_PASS }}
+
       - name: Create release PR or publish
         id: changesets
         uses: changesets/action@v1
