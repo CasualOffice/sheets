@@ -45,6 +45,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # Univer fork lives at vendor/univer-revamp/ as a submodule.
+          # The SDK's CasualSheets wrapper imports @univerjs/* whose
+          # specifiers resolve through pnpm.overrides to the submodule
+          # — empty submodule = unresolved types = tsc errors.
+          submodules: recursive
 
       - uses: pnpm/action-setup@v4
         with:
@@ -52,9 +57,20 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 22 — fork's engine-render prepare script uses
+          # --experimental-strip-types (Node 22+).
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+
+      - name: Build Univer fork (lib/ outputs)
+        # Same fork prep the docker-publish workflow runs: installs
+        # fork deps, builds lib/, swaps each fork package.json from
+        # the dev shape (./src/index.ts) to the consumable shape
+        # (./lib/es/index.js). Required so tsc's dts pass can resolve
+        # @univerjs/* types from the linked fork packages.
+        run: ./scripts/setup-fork.sh
+        shell: bash
 
       - name: Install
         run: pnpm install --frozen-lockfile
