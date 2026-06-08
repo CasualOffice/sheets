@@ -12,8 +12,17 @@ name: Release (npm)
 # secrets.NODE_USERNAME — informational only (npm token auth doesn't need it).
 
 on:
+  # Manual trigger only. Tag-then-release: cut a v* tag locally,
+  # then dispatch this workflow when ready to publish to npm.
+  # No more firing on every main merge.
+  workflow_dispatch:
+  # Also fire when an SDK-style tag is pushed (changesets-action
+  # creates these automatically on publish, but a manual
+  # `git tag @schnsrw/casual-sheets@x.y.z && git push --tags`
+  # works too).
   push:
-    branches: [main]
+    tags:
+      - '@schnsrw/casual-sheets@*'
 
 concurrency:
   group: release-npm-${{ github.ref }}

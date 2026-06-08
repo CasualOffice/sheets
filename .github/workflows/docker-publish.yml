@@ -53,6 +53,32 @@ jobs:
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "git_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Set up pnpm
+        # Needed by the setup-fork step below — the fork install +
+        # build happens on the host before docker copies it in.
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.4'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Build Univer fork (lib/ outputs)
+        # The Dockerfile copies vendor/univer-revamp/ in and runs
+        # pnpm install inside the image — but the fork's package.json
+        # files still point to ./src/index.ts (dev shape). tsc inside
+        # the docker build then tries to typecheck the fork source
+        # and fails because the fork's own node_modules + lib/ aren't
+        # present. setup-fork.sh runs the fork's install + build on
+        # the host, then swaps each fork package.json from src/ to
+        # lib/ shape so the docker layer can consume them as compiled
+        # JS + .d.ts. node_modules are stripped by .dockerignore.
+        run: ./scripts/setup-fork.sh
+        shell: bash
+
       - name: Set up QEMU
         # Needed so buildx can produce arm64 layers on the amd64 runner.
         uses: docker/setup-qemu-action@v3
