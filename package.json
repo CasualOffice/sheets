@@ -18,7 +18,9 @@
     "test:e2e:ui": "playwright test --ui",
     "fork:setup": "./scripts/setup-fork.sh",
     "fork:swap": "node scripts/swap-fork-pkgs.mjs",
-    "fork:restore": "node scripts/swap-fork-pkgs.mjs --restore"
+    "fork:restore": "node scripts/swap-fork-pkgs.mjs --restore",
+    "version-packages": "pnpm dlx @changesets/cli@2 version",
+    "release": "pnpm --filter @schnsrw/casual-sheets build && pnpm dlx @changesets/cli@2 publish"
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",

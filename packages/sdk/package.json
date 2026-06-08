@@ -1,0 +1,73 @@
+{
+  "name": "@schnsrw/casual-sheets",
+  "version": "0.1.0",
+  "description": "Casual Sheets SDK — signing pipeline + iframe postMessage protocol. Univer wrapper (CasualSheets component) to follow.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/schnsrw/sheets.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/schnsrw/sheets/tree/main/packages/sdk",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./signing": {
+      "types": "./dist/signing.d.ts",
+      "import": "./dist/signing.js",
+      "require": "./dist/signing.cjs"
+    },
+    "./embed": {
+      "types": "./dist/embed.d.ts",
+      "import": "./dist/embed.js",
+      "require": "./dist/embed.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx 'src/**/*.unit.test.ts'"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "sheets",
+    "spreadsheet",
+    "signing",
+    "iframe",
+    "postmessage",
+    "univer",
+    "casual-sheets"
+  ]
+}

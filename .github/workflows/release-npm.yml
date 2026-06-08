@@ -1,0 +1,63 @@
+name: Release (npm)
+
+# Changesets-driven npm release for @schnsrw/casual-sheets.
+#
+# Push to main:
+#   - If .changeset/*.md is non-empty: open / update a release PR with
+#     version bumps + CHANGELOG entries.
+#   - If empty (i.e. release PR just merged): build + `changeset publish`
+#     under the @schnsrw scope using secrets.NODE_PASS as the npm token.
+#
+# secrets.NODE_PASS — npm automation token for the @schnsrw scope.
+# secrets.NODE_USERNAME — informational only (npm token auth doesn't need it).
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-npm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Version + Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.4'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK
+        run: pnpm --filter @schnsrw/casual-sheets build
+
+      - name: Create release PR or publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm run version-packages
+          publish: pnpm run release
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_PASS }}
+          NPM_TOKEN: ${{ secrets.NODE_PASS }}
