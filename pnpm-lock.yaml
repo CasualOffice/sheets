@@ -182,6 +182,9 @@ importers:
       '@hocuspocus/provider':
         specifier: ^2.15.2
         version: 2.15.3(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
+      '@schnsrw/casual-sheets':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@univerjs/core':
         specifier: link:../../vendor/univer-revamp/packages/core
         version: link:../../vendor/univer-revamp/packages/core
@@ -378,6 +381,9 @@ importers:
       '@univerjs/ui':
         specifier: link:../../vendor/univer-revamp/packages/ui
         version: link:../../vendor/univer-revamp/packages/ui
+      exceljs:
+        specifier: 4.4.0
+        version: 4.4.0
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

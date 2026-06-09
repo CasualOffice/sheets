@@ -1,33 +1,29 @@
 import ExcelJS from 'exceljs';
 import { CustomRangeType, type IStyleData, type IWorkbookData } from '@univerjs/core';
-import { univerStyleToExcel } from './style-mapping';
+// Shared xlsx utilities (style mappers + resource readers/writers) live
+// in @schnsrw/casual-sheets/xlsx alongside the importer. Export-side
+// snapshot extensions (outline / charts / pivots / sparklines) stay
+// local to apps/web because they pull in per-feature state types.
+import {
+  applyDataValidationToXlsxWorksheet,
+  applyPageSetupToXlsxWorksheet,
+  applyPassthroughToXlsxBuffer,
+  applyTablesToXlsxWorksheet,
+  commentBodyToString,
+  mimeForPassthrough,
+  readCommentsFromSnapshot,
+  readDataValidationFromSnapshot,
+  readPageSetupFromSnapshot,
+  readPassthroughFromSnapshot,
+  readTablesFromSnapshot,
+  refToRowCol,
+  RESOURCES_SHEET,
+  univerStyleToExcel,
+} from '@schnsrw/casual-sheets/xlsx';
 import { writeOutlineIntoSnapshot } from '../outline/resources';
 import { writeChartsIntoSnapshot } from '../charts/resources';
 import { writePivotsIntoSnapshot } from '../pivots/resources';
 import { writeSparklinesIntoSnapshot } from '../sparklines/resources';
-import { RESOURCES_SHEET } from './constants';
-import {
-  commentBodyToString,
-  readCommentsFromSnapshot,
-  refToRowCol,
-} from './comments-resource';
-import {
-  applyPageSetupToXlsxWorksheet,
-  readPageSetupFromSnapshot,
-} from './page-setup-resource';
-import {
-  applyDataValidationToXlsxWorksheet,
-  readDataValidationFromSnapshot,
-} from './data-validation-resource';
-import {
-  applyTablesToXlsxWorksheet,
-  readTablesFromSnapshot,
-} from './tables-resource';
-import {
-  applyPassthroughToXlsxBuffer,
-  mimeForPassthrough,
-  readPassthroughFromSnapshot,
-} from './passthrough-resource';
 import type { ExportExtras } from './export';
 
 /**

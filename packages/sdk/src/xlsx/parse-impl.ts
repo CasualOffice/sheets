@@ -8,7 +8,7 @@ import {
   type IWorkbookData,
 } from '@univerjs/core';
 import { excelStyleToUniver } from './style-mapping';
-import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from '../snapshot';
+import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from './_snapshot-constants';
 import { RESOURCES_SHEET } from './constants';
 import {
   mergeCommentsIntoResources,

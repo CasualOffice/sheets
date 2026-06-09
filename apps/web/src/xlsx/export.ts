@@ -71,4 +71,4 @@ export async function workbookDataToXlsx(
 
 // Re-export the constant from its dedicated module so existing imports
 // from `./export` keep working.
-export { RESOURCES_SHEET } from './constants';
+export { RESOURCES_SHEET } from '@schnsrw/casual-sheets/xlsx';

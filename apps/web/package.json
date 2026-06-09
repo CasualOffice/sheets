@@ -1,6 +1,6 @@
 {
   "name": "@sheet/web",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
   "dependencies": {
     "@e965/xlsx": "0.20.3",
     "@hocuspocus/provider": "^2.15.2",
+    "@schnsrw/casual-sheets": "workspace:*",
     "@univerjs/core": "0.24.0",
     "@univerjs/design": "0.24.0",
     "@univerjs/docs": "0.24.0",

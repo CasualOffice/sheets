@@ -1,5 +1,5 @@
 import type { IWorkbookData } from '@univerjs/core';
-import { timeItAsync } from '../perf';
+import { timeItAsync } from './_perf';
 import { parseXlsxInWorker } from './parse-in-worker';
 
 /**
