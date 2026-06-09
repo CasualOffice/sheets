@@ -42,6 +42,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # apps/web imports `@schnsrw/casual-sheets/xlsx`, whose types
+      # resolve through packages/sdk/dist/. tsc + vite both fail with
+      # TS2307 'Cannot find module' if the SDK hasn't been built yet.
+      - name: Build SDK
+        run: pnpm --filter @schnsrw/casual-sheets build
+
       - name: Typecheck web
         run: pnpm --filter @sheet/web typecheck
 
