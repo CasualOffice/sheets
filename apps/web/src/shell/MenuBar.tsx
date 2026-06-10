@@ -797,6 +797,15 @@ export function MenuBar() {
         e.preventDefault();
         setShowCommandSearch(true);
       }
+      // ── Command palette: Ctrl+Shift+P (VS Code / Linear convention)
+      // UX_AUDIT.md §4.2 / Phase 4 #15. Adds modern muscle memory
+      // without touching Excel's Ctrl+K = Insert Link — both chords
+      // land on the same `CommandSearchDialog` so there's a single
+      // surface, not two competing ones.
+      if (mod && !e.altKey && e.shiftKey && k === 'p') {
+        e.preventDefault();
+        setShowCommandSearch(true);
+      }
       // ── Keyboard shortcuts cheat sheet: Ctrl+/ ─────────────────
       // Mirrors Excel for the Web. `?` (Shift+/) is the Google Docs
       // standard but conflicts with the formula-bar editor where the
@@ -1998,6 +2007,10 @@ export function MenuBar() {
           id: 'command-search',
           label: 'Search / Tell Me…',
           icon: 'search',
+          // Alt+Q is the Office "Tell Me" chord; we also bind
+          // Ctrl+Shift+P (VS Code / Linear / Notion command palette).
+          // Showing Alt+Q here since it's the more discoverable one
+          // for users coming from Excel — the cheat sheet lists both.
           shortcut: 'Alt+Q',
           onClick: () => setShowCommandSearch(true),
         },

@@ -41,6 +41,7 @@ const GROUPS: ShortcutGroup[] = [
       { label: 'Print', combo: 'Ctrl+P' },
       { label: 'Find & replace', combo: 'Ctrl+F' },
       { label: 'Quick actions / Tell Me', combo: 'Alt+Q' },
+      { label: 'Command palette', combo: 'Ctrl+Shift+P' },
       { label: 'Keyboard shortcuts (this dialog)', combo: 'Ctrl+/' },
     ],
   },
