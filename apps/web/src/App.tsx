@@ -227,6 +227,21 @@ export function App() {
     setMeta((prev) => (prev.serverEtag === etag ? prev : { ...prev, serverEtag: etag }));
   }, []);
 
+  const updateServerFileId = useCallback((fileId: string | null) => {
+    setMeta((prev) => (prev.serverFileId === fileId ? prev : { ...prev, serverFileId: fileId }));
+    // Rebind the URL so the draft `/sheet/new` becomes the canonical
+    // `/sheet/<id>` after the first successful save. replaceState (not
+    // pushState) keeps the history clean — back doesn't return to the
+    // ephemeral draft URL. No-op when there's no DOM (SSR / tests).
+    if (fileId && typeof window !== 'undefined' && window.location.pathname === '/sheet/new') {
+      window.history.replaceState(window.history.state, '', `/sheet/${encodeURIComponent(fileId)}`);
+      // Tell router subscribers the URL changed so useRoute() re-reads
+      // and the rest of the app sees route.kind flip from sheet-draft
+      // → sheet without a re-mount.
+      window.dispatchEvent(new CustomEvent('cd:navigate'));
+    }
+  }, []);
+
   // App owns only the meta update — TitleBar mirrors into Univer via
   // setName since App itself is outside the UniverProvider.
   const renameWorkbook = useCallback((name: string) => {
@@ -242,6 +257,7 @@ export function App() {
       replaceWorkbook,
       renameWorkbook,
       updateServerEtag,
+      updateServerFileId,
       preview,
       enterPreview,
       exitPreview,
@@ -252,6 +268,7 @@ export function App() {
       replaceWorkbook,
       renameWorkbook,
       updateServerEtag,
+      updateServerFileId,
       preview,
       enterPreview,
       exitPreview,

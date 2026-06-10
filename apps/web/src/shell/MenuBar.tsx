@@ -968,6 +968,11 @@ export function MenuBar() {
     const serverFileId = workbook.meta.serverFileId ?? null;
     const serverEtag = workbook.meta.serverEtag ?? null;
     const onServerEtag = (etag: string | null) => workbook.updateServerEtag(etag);
+    // Bind the server-minted id back on the first create-save so the
+    // next save takes the in-place PUT path instead of a duplicating
+    // POST. Also rewrites /sheet/new → /sheet/<id> in the URL bar.
+    // UX_AUDIT.md §2.3.
+    const onServerFileId = (fileId: string) => workbook.updateServerFileId(fileId);
     const onConflict = (expectedEtag: string) => {
       toast.error(
         `This file was changed elsewhere (server has ${expectedEtag.slice(0, 8)}…). ` +
@@ -995,6 +1000,7 @@ export function MenuBar() {
             serverFileId,
             serverEtag,
             onServerEtag,
+            onServerFileId,
             onConflict,
           });
       }

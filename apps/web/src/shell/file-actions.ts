@@ -163,6 +163,13 @@ export type SaveOptions = {
    *  current version. Optional — when omitted, etag tracking is
    *  caller's responsibility. */
   onServerEtag?: (etag: string | null) => void;
+  /** Callback invoked after a successful CREATE-save (first save of a
+   *  draft) with the freshly-minted serverFileId. The caller wires this
+   *  through `useWorkbook().updateServerFileId` so the next save sees
+   *  the id and does an in-place PUT instead of creating duplicates
+   *  (UX_AUDIT.md §2.3). Optional — when omitted, the duplicate-row
+   *  symptom returns. */
+  onServerFileId?: (fileId: string) => void;
   /** Surface a conflict (stale etag) to the caller. Default surface
    *  is `toast(api, ...)` from inside file-actions; pass a UI-aware
    *  hook here to drive a richer modal. */
@@ -396,6 +403,12 @@ function handleSaveResult(
   }
   if (result.kind === 'server') {
     options.onServerEtag?.(result.serverEtag);
+    // Bind the file id on FIRST create-save so subsequent saves take
+    // the in-place PUT path (UX_AUDIT.md §2.3). Idempotent — callers
+    // already passing the id through `options.serverFileId` get the
+    // same value echoed back; the wire-through to workbook meta is
+    // cheap thanks to the React equality check in updateServerFileId.
+    options.onServerFileId?.(result.serverFileId);
   }
   toast(api, formatSaveMessage(result, filename));
 }

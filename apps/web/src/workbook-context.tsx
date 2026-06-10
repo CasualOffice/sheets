@@ -73,6 +73,13 @@ export type WorkbookCtxValue = {
   /** Update the tracked server etag after a successful in-place
    *  save — the file id stays the same; only the version moves. */
   updateServerEtag: (etag: string | null) => void;
+  /** Bind a `serverFileId` after the FIRST successful create-save of
+   *  a workbook that started life as a draft (route `/sheet/new` or a
+   *  blank New). Subsequent saves take the in-place PUT path instead
+   *  of creating duplicate rows (UX_AUDIT.md §2.3). Also rewrites
+   *  the browser URL from `/sheet/new` → `/sheet/<id>` via
+   *  history.replaceState so back / refresh / bookmark all converge. */
+  updateServerFileId: (fileId: string | null) => void;
   /**
    * Rename the active workbook in place — updates `meta.name` and calls
    * Univer's `setName` on the active workbook. No re-mount.
