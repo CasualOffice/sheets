@@ -2,13 +2,22 @@
 #
 #   docker compose up -d
 #   open http://localhost:3000
-#   → sign up; your workbooks persist in the named `casual-data` volume.
+#
+# Default shape: anonymous co-edit rooms persisted via Redis (the
+# pre-Phase-C behaviour the e2e suite + live demo expect). To enable
+# Phase C personal mode (sign up + per-user file storage at
+# /data/users/<userID>/), drop a `.env` next to this file with:
+#
+#   CASUAL_PERSONAL_MODE=single   # or `multi`
+#
+# and `docker compose up -d` again. Workbooks persist in the named
+# `casual-data` volume; the README's "Recommended: personal mode"
+# section has the full walk-through.
 #
 # Wires the single app image to:
-#   - a `casual-data` volume mounted at /data — Phase C personal-mode
-#     storage. Holds the users SQLite (auth, sessions, profile) and the
-#     per-user .xlsx workbooks at /data/users/<userID>/. Survives
-#     `docker compose down` and `docker compose pull` upgrades.
+#   - a `casual-data` volume mounted at /data — used when personal
+#     mode is on. Holds the users SQLite + per-user .xlsx tree.
+#     Survives `docker compose down` and `docker compose pull`.
 #   - a Redis container for Y.Doc snapshots so co-edit rooms survive
 #     restarts. Without Redis, the app still runs (in-memory only) —
 #     see Dockerfile for the bare `docker run` form.
@@ -59,12 +68,14 @@ services:
       # data on restart). See docs/STORAGE_MODES.md.
       CASUAL_STORAGE: ${CASUAL_STORAGE:-local}
       CASUAL_LOCAL_PATH: ${CASUAL_LOCAL_PATH:-/data}
-      # `single` = first signup mints the lone account, then signup
-      # closes. `multi` = signup stays open; first user is admin,
-      # subsequent users are plain accounts with per-user file
-      # isolation. `none` keeps the anonymous WOPI shape (no signup,
-      # no per-user save).
-      CASUAL_PERSONAL_MODE: ${CASUAL_PERSONAL_MODE:-single}
+      # `none` (default) = anonymous WOPI / no-signup shape — the
+      # pre-Phase-C behaviour, what the e2e suite and the live demo
+      # at sheet.schnsrw.live expect. Flip to `single` (first signup
+      # mints the lone admin, signup closes) or `multi` (signup stays
+      # open, per-user file isolation) via a `.env` entry to opt into
+      # Phase C personal mode. The README's "Recommended: personal
+      # mode" section walks through the `.env` setup.
+      CASUAL_PERSONAL_MODE: ${CASUAL_PERSONAL_MODE:-none}
       # Optional escape hatch — admin minted on first boot when the
       # users table is empty. Set in your `.env` (not committed) as
       # `CASUAL_BOOTSTRAP_USER=admin:hunter2`. Silently no-ops once
