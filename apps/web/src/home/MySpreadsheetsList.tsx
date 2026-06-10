@@ -14,12 +14,31 @@
  * gone.
  */
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import { useFileSource } from '../file-source';
 import { navigate } from '../router';
 import type { RecentEntry } from '../file-source/types';
 import { AccountMenu } from '../auth/AccountMenu';
+
+/** Track the < 720 px breakpoint. UX_AUDIT.md §2.15 — the /home file
+ *  list must work without a hover affordance (touch has none) and
+ *  needs tighter padding on phones. Mirrors the same pattern the
+ *  document repo's Home.tsx uses; one hook, no media-query CSS. */
+function useIsMobile(): boolean {
+  const [mobile, setMobile] = useState(() =>
+    typeof window === 'undefined' ? false : window.innerWidth < 720,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 719px)');
+    const onChange = (e: MediaQueryListEvent) => setMobile(e.matches);
+    setMobile(mql.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  return mobile;
+}
 
 interface ListState {
   status: 'idle' | 'loading' | 'ready' | 'error';
@@ -32,21 +51,30 @@ const INITIAL: ListState = { status: 'idle', entries: [] };
 export function MySpreadsheetsList() {
   const fs = useFileSource();
   const [state, setState] = useState<ListState>(INITIAL);
-  const aliveRef = useRef(true);
+  const isMobile = useIsMobile();
 
   // Initial load + subscription to file-source changes (the personal
   // source bumps the subscription after every save / delete).
+  //
+  // `cancelled` is a closure-local — NOT a ref shared across effect
+  // runs. The old code used a shared `aliveRef.current` which the new
+  // effect would reset to true, so an in-flight `listRecent` from the
+  // PREVIOUS source (browser, before auth resolved) could resolve
+  // after the new source's reload and clobber it with []. That's why
+  // signing in sometimes flashed an empty list even when the user
+  // had files — UX_AUDIT.md §2.5 fallout the original Phase 1 batch
+  // missed. Per-run flag is the correct guard.
   useEffect(() => {
-    aliveRef.current = true;
+    let cancelled = false;
     const reload = async () => {
-      if (!aliveRef.current) return;
+      if (cancelled) return;
       setState((s) => ({ ...s, status: s.entries.length ? 'ready' : 'loading' }));
       try {
         const rows = await fs.listRecent();
-        if (!aliveRef.current) return;
+        if (cancelled) return;
         setState({ status: 'ready', entries: rows });
       } catch (err) {
-        if (!aliveRef.current) return;
+        if (cancelled) return;
         setState({
           status: 'error',
           entries: [],
@@ -57,7 +85,7 @@ export function MySpreadsheetsList() {
     void reload();
     const unsub = fs.subscribeRecent(reload);
     return () => {
-      aliveRef.current = false;
+      cancelled = true;
       unsub();
     };
   }, [fs]);
@@ -77,17 +105,17 @@ export function MySpreadsheetsList() {
   }, [state.entries]);
 
   return (
-    <div style={pageStyle}>
-      <header style={headerStyle}>
+    <div style={isMobile ? pageStyleMobile : pageStyle}>
+      <header style={isMobile ? headerStyleMobile : headerStyle}>
         <div>
-          <h1 style={titleStyle}>My Spreadsheets</h1>
+          <h1 style={isMobile ? titleStyleMobile : titleStyle}>My Spreadsheets</h1>
           <p style={subtitleStyle}>
             {state.status === 'ready' && visibleRows.length > 0
               ? `${visibleRows.length} ${visibleRows.length === 1 ? 'file' : 'files'}`
               : 'Saved workbooks live here.'}
           </p>
         </div>
-        <div style={actionsStyle}>
+        <div style={isMobile ? actionsStyleMobile : actionsStyle}>
           <button
             type="button"
             onClick={() => navigate('/templates')}
@@ -126,6 +154,7 @@ export function MySpreadsheetsList() {
       {state.status === 'ready' && visibleRows.length > 0 && (
         <FilesGrid
           rows={visibleRows}
+          isMobile={isMobile}
           onOpen={(id) => navigate('/sheet/' + encodeURIComponent(id))}
           onDelete={async (id) => {
             try {
@@ -146,17 +175,25 @@ export function MySpreadsheetsList() {
 
 function FilesGrid({
   rows,
+  isMobile,
   onOpen,
   onDelete,
 }: {
   rows: RecentEntry[];
+  isMobile: boolean;
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   return (
     <ul style={gridStyle} data-testid="home-files-grid">
       {rows.map((row) => (
-        <FileRow key={row.id} row={row} onOpen={onOpen} onDelete={onDelete} />
+        <FileRow
+          key={row.id}
+          row={row}
+          isMobile={isMobile}
+          onOpen={onOpen}
+          onDelete={onDelete}
+        />
       ))}
     </ul>
   );
@@ -164,14 +201,20 @@ function FilesGrid({
 
 function FileRow({
   row,
+  isMobile,
   onOpen,
   onDelete,
 }: {
   row: RecentEntry;
+  isMobile: boolean;
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   const [hover, setHover] = useState(false);
+  // Touch devices have no hover, so the Delete affordance must be
+  // always-visible there. On desktop we keep the hover-reveal so the
+  // row stays clean at rest (matches Google Drive's row UX).
+  const showDelete = isMobile || hover;
   return (
     <li
       style={rowStyle(hover)}
@@ -199,7 +242,7 @@ function FileRow({
       </div>
       <button
         type="button"
-        style={deleteBtnStyle(hover)}
+        style={deleteBtnStyle(showDelete, hover)}
         onClick={(e) => {
           e.stopPropagation();
           if (window.confirm(`Delete "${row.name}"?`)) {
@@ -338,6 +381,32 @@ const subtitleStyle: CSSProperties = {
 
 const actionsStyle: CSSProperties = { display: 'flex', gap: 8 };
 
+// Mobile (≤ 719 px). Same component, tighter spacing + a tap-friendly
+// actions row that wraps under the title cleanly.
+const pageStyleMobile: CSSProperties = {
+  ...pageStyle,
+  padding: '24px 16px 64px',
+  gap: 16,
+};
+
+const headerStyleMobile: CSSProperties = {
+  ...headerStyle,
+  alignItems: 'flex-start',
+  gap: 12,
+};
+
+const titleStyleMobile: CSSProperties = {
+  ...titleStyle,
+  fontSize: 22,
+};
+
+const actionsStyleMobile: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+  width: '100%',
+};
+
 const primaryBtnStyle: CSSProperties = {
   padding: '9px 16px',
   borderRadius: 8,
@@ -415,17 +484,17 @@ const rowMetaStyle: CSSProperties = {
   marginTop: 2,
 };
 
-function deleteBtnStyle(hover: boolean): CSSProperties {
+function deleteBtnStyle(visible: boolean, rowHover: boolean): CSSProperties {
   return {
     padding: '6px 12px',
     borderRadius: 6,
     border: '1px solid #fecaca',
-    background: hover ? '#fef2f2' : '#fff',
+    background: rowHover ? '#fef2f2' : '#fff',
     color: '#b91c1c',
     fontSize: 12,
     fontWeight: 500,
     cursor: 'pointer',
-    visibility: hover ? 'visible' : 'hidden',
+    visibility: visible ? 'visible' : 'hidden',
   };
 }
 
