@@ -43,12 +43,12 @@ import { SparklinesProvider } from './sparklines/sparklines-context';
 import { SparklineLayer } from './sparklines/SparklineLayer';
 import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
-import { FileSourceProvider } from './file-source';
+import { FileSourceProvider, useFileSource } from './file-source';
 import { AuthProvider, PersonalAuthGate } from './auth';
 import { useVersionHistoryCapture } from './version-history/useVersionHistoryCapture';
 import { useTouchPan } from './touch/useTouchPan';
 import { MobileActionBar } from './shell/MobileActionBar';
-import { useRoute } from './router';
+import { navigate, useRoute } from './router';
 import { MySpreadsheetsList } from './home/MySpreadsheetsList';
 
 export function App() {
@@ -377,6 +377,7 @@ export function App() {
                             <VersionHistoryDriver />
                             <PreviewDriver />
                             <ThemeBridge />
+                            <RouteWorkbookSync replaceWorkbook={replaceWorkbook} />
                             <PersonalAuthGate>
                               {showHomeList ? (
                                 <MySpreadsheetsList />
@@ -441,6 +442,52 @@ export function App() {
       </UIContext.Provider>
     </UniverRoot>
   );
+}
+
+/** Effect-only — watches the route and calls `fileSource.openRecent` when
+ *  the URL is `/sheet/<id>`. UX_AUDIT.md §5 Phase 1. The default
+ *  emptyWorkbook stays in place for `/sheet/new` (the draft route) and
+ *  for `/r/<roomId>` (legacy anonymous coedit) where the workbook is
+ *  picked up via the collab driver, not the file source. */
+function RouteWorkbookSync({
+  replaceWorkbook,
+}: {
+  replaceWorkbook: WorkbookCtxValue['replaceWorkbook'];
+}): ReactNode {
+  const route = useRoute();
+  const fileSource = useFileSource();
+  const lastOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (route.kind !== 'sheet' || !route.id) return;
+    if (lastOpenedRef.current === route.id) return; // already loaded
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opened = await fileSource.openRecent(route.id);
+        if (cancelled) return;
+        replaceWorkbook(
+          opened.data,
+          opened.sourceFormat,
+          opened.serverFileId
+            ? { fileId: opened.serverFileId, etag: opened.serverEtag ?? null }
+            : null,
+        );
+        lastOpenedRef.current = route.id;
+      } catch (err) {
+        if (cancelled) return;
+        // Stale URL / file deleted / share token expired — bounce back
+        // to the list. Toast goes here once the toast surface is
+        // hookable from outside React's render tree.
+        // eslint-disable-next-line no-console
+        console.warn('[home] could not open sheet', route.id, err);
+        navigate('/home');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [route.kind, route.id, fileSource, replaceWorkbook]);
+  return null;
 }
 
 /** Effect-only component — auto-grows the active sheet near edges. */
