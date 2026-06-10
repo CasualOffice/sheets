@@ -26,6 +26,7 @@ import { usePresenceWire } from './usePresenceWire';
 import { NamePrompt } from './NamePrompt';
 import { PresenceLayer } from './PresenceLayer';
 import { applyViewOnlyMode } from './view-mode';
+import { useCurrentUser } from '../auth/auth-context';
 
 /**
  * Owns the co-edit join flow:
@@ -47,6 +48,12 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   const loading = useLoading();
   const toast = useToast();
   const charts = useCharts();
+  // Personal-mode pre-fill — UX_AUDIT.md §4.4 / Phase 4 #17. A user
+  // who has already identified themselves to the host shouldn't be
+  // asked to do it again to join a collab room on their own box.
+  // Returns null when not signed in (Mode 1 / Mode 2 / WOPI / anon
+  // share) — the existing whimsical fallback takes over.
+  const currentUser = useCurrentUser();
   const handleRef = useRef<BridgeHandle | null>(null);
   const docRef = useRef<Y.Doc | null>(null);
   // Cleanup for the charts ↔ Yjs bridge wired up when a doc connects.
@@ -113,12 +120,20 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     setRoomId(id);
     setRole(requestedRole);
 
-    // Resolve display name. Already set? Use it. Never prompted? Open
-    // the prompt with a generated suggestion. Prompted-and-dismissed?
-    // Fall through with a generated name (no second prompt).
+    // Resolve display name. Precedence:
+    //   1. Stored localStorage name (the user has previously joined a
+    //      room and set / accepted a name — keep it stable).
+    //   2. Personal-mode signed-in username (UX_AUDIT.md §4.4). We
+    //      ALSO write it through `setDisplayName` so the same identity
+    //      survives a sign-out → anonymous-join round trip.
+    //   3. Whimsical anon name + open the prompt.
     const stored = getDisplayName();
     if (stored) {
       setIdentity({ name: stored, color: colorForName(stored) });
+    } else if (currentUser) {
+      const name = currentUser.username;
+      setDisplayName(name);
+      setIdentity({ name, color: colorForName(name) });
     } else {
       const suggestion = suggestAnonName();
       setIdentity({ name: suggestion, color: colorForName(suggestion) });
