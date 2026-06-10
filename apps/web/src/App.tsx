@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { IWorkbookData } from '@univerjs/core';
+import type { IWorkbookData, ICommandInfo, IExecutionOptions } from '@univerjs/core';
+import { ICommandService } from '@univerjs/core';
 import { TitleBar } from './shell/TitleBar';
 import { Toolbar } from './shell/Toolbar';
 import { FormulaBar } from './shell/FormulaBar';
@@ -45,6 +46,7 @@ import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
 import { FileSourceProvider, useFileSource } from './file-source';
 import { AuthProvider, PersonalAuthGate } from './auth';
+import { useAuth } from './auth/auth-context';
 import { useVersionHistoryCapture } from './version-history/useVersionHistoryCapture';
 import { useTouchPan } from './touch/useTouchPan';
 import { MobileActionBar } from './shell/MobileActionBar';
@@ -421,50 +423,52 @@ export function App() {
                             <RouteWorkbookSync replaceWorkbook={replaceWorkbook} />
                             <EditTracker markUserEdited={markUserEdited} />
                             <PersonalAuthGate>
-                              {showHomeList ? (
-                                <MySpreadsheetsList />
-                              ) : (
-                                <CollabDriver>
-                                <div
-                                  className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
-                                  data-testid="app-shell"
-                                >
-                                  <TitleBar />
-                                  <Toolbar />
-                                  <AutosaveRestoreBanner />
-                                  <PreviewBanner />
-                                  {formulaBarVisible && <FormulaBar />}
-                                  <div className="grid-row">
-                                    <main className="grid-host" data-testid="grid-host">
-                                      <UniverSheet
-                                        revision={meta.revision}
-                                        initialSnapshot={initial}
-                                      />
-                                    </main>
-                                    {tablesPanelVisible && <TablesPanel />}
-                                    {outlinePanelVisible && <OutlinePanel />}
-                                    {chartsPanelVisible && <ChartsPanel />}
-                                    {historyPanelVisible && <VersionHistoryPanel />}
-                                    <PanelRail />
-                                  </div>
-                                  <MobileActionBar />
-                                  <SheetTabs />
-                                  <PanelMutex />
-                                  {shareRoomOpen && (
-                                    <CreateRoomDialog onClose={() => setShareRoomOpen(false)} />
-                                  )}
-                                </div>
-                              </CollabDriver>
-                              )}
-                              {/* HomeScreen overlay only renders on editor routes —
-                                  on /home + /templates the new MySpreadsheetsList
-                                  is the full surface, no overlay needed. */}
-                              {!showHomeList && (
-                                <HomeScreen
-                                  dismissed={homeDismissed}
-                                  onDismiss={() => setHomeDismissed(true)}
-                                />
-                              )}
+                              <RouteHost
+                                routeIsHome={showHomeList}
+                                home={<MySpreadsheetsList />}
+                                editor={
+                                  <>
+                                    <CollabDriver>
+                                      <div
+                                        className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
+                                        data-testid="app-shell"
+                                      >
+                                        <TitleBar />
+                                        <Toolbar />
+                                        <AutosaveRestoreBanner />
+                                        <PreviewBanner />
+                                        {formulaBarVisible && <FormulaBar />}
+                                        <div className="grid-row">
+                                          <main className="grid-host" data-testid="grid-host">
+                                            <UniverSheet
+                                              revision={meta.revision}
+                                              initialSnapshot={initial}
+                                            />
+                                          </main>
+                                          {tablesPanelVisible && <TablesPanel />}
+                                          {outlinePanelVisible && <OutlinePanel />}
+                                          {chartsPanelVisible && <ChartsPanel />}
+                                          {historyPanelVisible && <VersionHistoryPanel />}
+                                          <PanelRail />
+                                        </div>
+                                        <MobileActionBar />
+                                        <SheetTabs />
+                                        <PanelMutex />
+                                        {shareRoomOpen && (
+                                          <CreateRoomDialog onClose={() => setShareRoomOpen(false)} />
+                                        )}
+                                      </div>
+                                    </CollabDriver>
+                                    {/* HomeScreen overlay only on the editor
+                                        branch — the dedicated /home view doesn't
+                                        need an overlay. */}
+                                    <HomeScreen
+                                      dismissed={homeDismissed}
+                                      onDismiss={() => setHomeDismissed(true)}
+                                    />
+                                  </>
+                                }
+                              />
                               <LoadingOverlay />
                               <ChartLayer />
                               <SparklineLayer />
@@ -486,6 +490,48 @@ export function App() {
   );
 }
 
+/** Auth-aware route switch. Lives inside <PersonalAuthGate> so it can
+ *  read useAuth() — the App body itself sits ABOVE <AuthProvider> in
+ *  the tree and can't.
+ *
+ *  Two jobs:
+ *  1. Decide between MySpreadsheetsList (the /home file picker) and
+ *     the editor body. Personal-mode authenticated + route-is-home →
+ *     show the list; otherwise fall through to the editor. This keeps
+ *     non-personal deploys (Mode 1 / Mode 2 / Playwright / GitHub
+ *     Pages, where `auth.state.kind === 'disabled'`) rendering the
+ *     editor at `/` exactly as before.
+ *  2. Redirect `/` → `/home` when a personal account session exists.
+ *     `parseRoute` reports `/` as kind:'home'; we do the URL canonical-
+ *     isation here so refresh / share / bookmark all converge.
+ *
+ *  UX_AUDIT.md §1, §5. */
+function RouteHost({
+  routeIsHome,
+  home,
+  editor,
+}: {
+  routeIsHome: boolean;
+  home: ReactNode;
+  editor: ReactNode;
+}): ReactNode {
+  const auth = useAuth();
+  // `loading` counts as personal-active so we don't flash the editor
+  // shell during the brief auth-status probe on first paint.
+  const personalActive =
+    auth.state.kind === 'authenticated' || auth.state.kind === 'loading';
+  useEffect(() => {
+    if (
+      personalActive &&
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/'
+    ) {
+      navigate('/home', { replace: true });
+    }
+  }, [personalActive]);
+  return personalActive && routeIsHome ? home : editor;
+}
+
 /** Effect-only — listens for the first meaningful content mutation on
  *  the workbook and flips `meta.hasUserEdited`. UX_AUDIT.md §5: the
  *  Save handler uses this to skip create-saves of `/sheet/new` drafts
@@ -496,19 +542,22 @@ function EditTracker({ markUserEdited }: { markUserEdited: () => void }): ReactN
   const api = useUniverAPI();
   useEffect(() => {
     if (!api) return;
-    // Univer's command service is the canonical mutation stream.
-    // `onMutationExecutedForCollab` matches the autosave hook so we
-    // don't drift between which-events-count between the two
-    // consumers. eslint-disable any: the typings on Univer's facade
-    // call this a private API surface, but it's the same one the
-    // autosave hook reaches into; if it breaks they break together.
+    // Reach the command service via the facade's private `_injector` —
+    // same path useAutosave uses (apps/web/src/autosave/useAutosave.ts).
+    // The two hooks share this back door so they stay aligned on what
+    // "an edit" means; if Univer renames it, both break together and
+    // get fixed together.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const univer = (api as unknown as { getUniver(): any }).getUniver();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cmdSvc = univer?.__getInjector?.()?.get('ICommandService');
-    if (!cmdSvc) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sub = cmdSvc.onMutationExecutedForCollab((info: any, options: any) => {
+    const injector = (api as any)._injector as
+      | { get: (t: unknown) => unknown }
+      | undefined;
+    if (!injector) return;
+    const cmdSvc = injector.get(ICommandService) as {
+      onMutationExecutedForCollab: (
+        l: (info: ICommandInfo, options?: IExecutionOptions) => void,
+      ) => { dispose: () => void };
+    };
+    const sub = cmdSvc.onMutationExecutedForCollab((info, options) => {
       if (options?.fromCollab) return; // remote replays don't count
       const id = info?.id ?? '';
       // Same noisy-mutation filter as useAutosave so navigation /
@@ -517,7 +566,7 @@ function EditTracker({ markUserEdited }: { markUserEdited: () => void }): ReactN
       if (id === 'sheet.mutation.set-worksheet-active-operation') return;
       markUserEdited();
     });
-    return () => sub?.dispose?.();
+    return () => sub.dispose();
   }, [api, markUserEdited]);
   return null;
 }

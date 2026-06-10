@@ -1,7 +1,7 @@
 /**
  * Tiny path-based router for the personal-mode IA. UX_AUDIT.md §1, §5.
  *
- *   /                          → redirect /home
+ *   /                          → editor (non-personal) or redirect to /home (personal)
  *   /home                      → MySpreadsheets list
  *   /templates                 → template gallery
  *   /sheet/<id>                → editor for the saved workbook
@@ -60,7 +60,11 @@ export function parseRoute(pathname: string, search: string): Route {
     return { kind: 'templates', id: '', shareToken, pathname, search };
   }
 
-  // `/` and `/home` both land on the list — but only `/home` is canonical.
+  // `/home` is the canonical file picker. `/` is special: it's a "home OR
+  // editor" route — when a personal account is signed in, App redirects
+  // to `/home`; when auth is disabled (Mode 1 / Mode 2 / Playwright /
+  // GitHub Pages) it falls through to the editor. parseRoute reports
+  // `kind: 'home'` for both so the gate logic stays in one place.
   // Callers that hit `/` should redirect via navigate('/home') in their
   // mount effect.
   if (pathname === '/home' || pathname === '/') {
@@ -103,13 +107,10 @@ export function useRoute(): Route {
     };
   }, []);
 
-  // First-load redirect: `/` is not a canonical route; nudge to `/home`
-  // so refresh / share / bookmark all converge on one URL.
-  useEffect(() => {
-    if (route.pathname === '/') {
-      navigate('/home', { replace: true });
-    }
-  }, [route.pathname]);
+  // The `/` → `/home` redirect lives in App's auth-aware gate, NOT here.
+  // The router is auth-agnostic so non-personal deploys (test env, MIT
+  // GitHub Pages, WOPI) keep `/` rendering the editor; only when a
+  // personal account is active do we redirect to the file picker.
 
   return route;
 }
