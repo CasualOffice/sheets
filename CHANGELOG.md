@@ -8,6 +8,56 @@ Pre-v0.2.0 releases were tagged without a CHANGELOG file. The site
 (`https://schnsrw.live/changelog/`) carries longer-form release notes
 for v0.1.0+; the GitHub Releases page links to the same content.
 
+## [0.3.1] — 2026-06-11
+
+Patch release — fixes the docker image so personal mode (Phase C)
+actually boots.
+
+### Fixed
+
+- **`CASUAL_PERSONAL_MODE=single` / `multi` crashed the server on
+  first boot** with `SqliteError: unable to open database file`. The
+  named `casual-data` volume the docker-compose mounts at `/data` is
+  owned by root, but the server drops to `USER node` before bootstrap
+  — SQLite couldn't open `users.db` for write, the healthcheck never
+  passed, every signup attempt 502'd. Dockerfile now provisions
+  `/data` with `node:node` ownership before dropping privileges, so
+  the volume is writable as soon as the container boots
+  (`8d1de8d`).
+- **Default `CASUAL_PERSONAL_MODE` reverted from `single` to `none`**
+  in the docker-compose. The recent flip to `single` was meant to
+  surface Phase C to fresh users on `docker compose up`, but it
+  gated the anonymous-room coedit suite (every coedit-* e2e spec
+  failed under single-mode) and broke the live demo's default flow.
+  Personal mode is now opt-in via a one-line `.env` entry; README's
+  "Recommended" section walks through it (`c167646`).
+
+### Added — packages/sdk extraction (#56)
+
+- **`@schnsrw/casual-sheets@0.4.0`** publishes the xlsx import path
+  as `@schnsrw/casual-sheets/xlsx`. Drive (and any future host) can
+  load `.xlsx` into a Univer `IWorkbookData` snapshot via
+  `xlsxToWorkbookData(bytes)` instead of vendoring the parser. The
+  apps/web pipeline is unchanged — just imports the shared mappers
+  from the SDK instead of `./style-mapping`, `./constants`, etc.
+- The 12 import-side + shared files (parse-impl, style-mapping,
+  every `*-resource.ts`, pivot-passthrough) moved into
+  `packages/sdk/src/xlsx/`; the worker runs from a sibling
+  `parser.worker.js` via the same renderChunk pattern the docx
+  editor SDK shipped in 1.0.1.
+- Export-side stays in apps/web for now — Phase B of #56 covers
+  the outline / charts / pivots / sparklines extension-point design
+  before workbookDataToXlsx can move cleanly.
+
+### Build infra
+
+- CI's typecheck / e2e / e2e-prod / deploy-pages now build the SDK
+  before consuming it (apps/web imports `@schnsrw/casual-sheets/xlsx`
+  whose types resolve through `packages/sdk/dist/`). Dockerfile
+  does the same in the `build-web` stage. Without these, fresh
+  builds fail TS2307 because `packages/sdk/dist` is empty
+  (`4dc4dc4`, `01555d0`, `e6b4542`).
+
 ## [0.3.0] — 2026-06-08
 
 Minor release rolling up two major feature batches plus the
