@@ -12,9 +12,9 @@ A web-based **Excel-equivalent** with real-time collaborative editing, built on 
 
 ## What's out of scope (do not propose, do not build)
 
-- **Persistence / WOPI** — explicitly deferred. Don't add Postgres, S3, autosave, or version history.
+> **Note**: parts of this section are out of date — Phase C personal mode, Phase D WOPI, autosave, and version history have all shipped since this list was written. The remaining "do not build" entries below are still binding.
+
 - **AI / LLM features** — the user will plug in a self-hosted LLM later through Univer's command bus. Don't pre-design for it.
-- **Auth / sharing UI / permissions model** — anonymous sessions by room URL.
 - **Mobile** — supported as a **viewer + light editor** down to ~360 px (iPhone SE+). Open files, scroll, single-cell value edits, basic formatting via the menu strip + compact toolbar, sheet switching. NOT supported: chart insert dialogs, pivot field-list, complex formula composition, or any flow that needs hover + right-click on phone. Breakpoints live in `apps/web/src/styles.css` at `@media (max-width: 720px)` and `@media (max-width: 480px)`. iOS Safari requires input font-size ≥ 16 px to avoid focus-zoom; honour that on any input inside the chrome. Univer's canvas owns its own touch gestures — don't try to wrap them.
 - **Univer Pro features** — collab, xlsx I/O, charts, pivots, print, history are all paid in Univer's commercial offering. We are *not* using Univer Pro. We build the collab + xlsx layers ourselves on OSS.
 
@@ -72,11 +72,39 @@ If you find a feature is missing (charts, pivots, xlsx import/export), the answe
 
 ## Phase awareness
 
-Always know which phase we're in before writing code:
+Original phase plan (kept for historical context):
 
-- **Phase 0** (current) — spikes only. Throwaway code that proves a single risk.
-- **Phase 1** — single-player editor + Office shell.
-- **Phase 2** — Yjs collab.
-- **Phase 3** — presence.
+- ~~**Phase 0**~~ — spikes only. ✅ Done.
+- ~~**Phase 1**~~ — single-player editor + Office shell. ✅ Shipped.
+- ~~**Phase 2**~~ — Yjs collab. ✅ Shipped via Hocuspocus.
+- ~~**Phase 3**~~ — presence. ✅ Shipped (`PresenceLayer` + `AvatarStack`).
 
-Don't start Phase 1 code until Phase 0 spikes are decided.
+Subsequent phases (also shipped):
+
+- **Phase C — Personal mode** (single + multi). bcrypt + SQLite users
+  table, per-user file scoping, admin panel. See `docs/self-hosting/
+  personal-mode.md`.
+- **Phase D — WOPI** (Mode 2). JWT verifier + Lock/Unlock + refresh
+  ticker. See `docs/STORAGE_MODES.md`.
+- **M2 — Snapshot pipeline.** Client-push autosave via
+  `useFileSourceAutoSave` (Bun worker pool deferred — the client
+  push covers the practical case).
+
+## Current status (2026-06-12)
+
+- **Released**: v0.3.1 (Docker image + pnpm packages). Single-user
+  demo live at https://sheet.schnsrw.live/.
+- **Recent UX wave** (UX_AUDIT.md, all shipped 2026-06-11/12): path
+  router with `/home` file picker, mobile-responsive list, keyboard
+  shortcuts dialog, SaveStatusPill, ActivityPill, collab name pre-
+  fill, Ctrl+Shift+P command-palette alias, `formatShortcut` util
+  closing the Mac shortcut-rendering debt.
+- **Deferred / pending**: sharing-model implementation (design lives
+  in `docs/SHARING_MODEL.md`); per-entry retry handlers on
+  ActivityPill.
+- **CI**: green. Go toolchain pinned 1.25. Smoke + audit specs run
+  on every PR.
+
+When in doubt about what's shipped vs. pending, check `docs/UX_AUDIT.md`
+§5 (last refreshed 2026-06-12) — it tracks each item with the
+commit SHA that shipped it.
