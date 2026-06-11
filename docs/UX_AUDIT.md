@@ -387,10 +387,13 @@ has a profile-avatar URL but it doesn't surface in collab presence.
 
 ### Phase 4 — Shared infra
 
-14. ⏳ **Error → activity log + retry chips.** New surface. Needs a
-    design call: persistent sidebar (Notion-style) vs. modal log
-    (VS Code Output panel) vs. menu entry. Audit-estimated ~2 files
-    is light — closer to 4–5 with state container + retry plumbing.
+14. ✅ **ActivityPill — persistent error log.** Bell icon + unread
+    badge in TitleBar; popover lists last 25 errors newest-first with
+    Dismiss per entry + "Clear all". Toast → activity bridge via a
+    window `cd:activity-error` event so ToastContext stays unaware of
+    ActivityContext. v1 ships log + dismissal; per-entry retry
+    handlers deferred (needs per-call-site action context absent at
+    the toast layer). Commit `b99beec`.
 15. ✅ **Command-palette chord** — `Ctrl+Shift+P` (VS Code / Linear)
     aliased to the existing `CommandSearchDialog` (already bound to
     Alt+Q from Office). Three entry points, one dialog. Ctrl+K
