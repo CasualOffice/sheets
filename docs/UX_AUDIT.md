@@ -411,8 +411,11 @@ has a profile-avatar URL but it doesn't surface in collab presence.
 
 ### Phase 5 — Needs design pass (NOT code yet)
 
-18. **Multi-mode sharing permissions model.** §2.9. `docs/SHARING_MODEL.md`.
-19. **AI features hub.** §3.8. `docs/AI_HUB.md`.
+18. ✅ **Multi-mode sharing permissions model.** §2.9. Shipped as
+    `docs/SHARING_MODEL.md` — design only, no code. Commit `ea679a4`.
+19. **AI features hub.** §3.8. `docs/AI_HUB.md`. Lives in the doc
+    repo (sheet has no AI surfaces); deferred to the doc repo's own
+    docs sweep.
 
 ---
 
