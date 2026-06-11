@@ -133,6 +133,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
       setToasts((prev) => [...prev, normalized]);
 
+      // Bridge to ActivityContext for the persistent error log
+      // (UX_AUDIT.md §4.1 / Phase 4 #14). Toasts vanish after 3.5–6 s;
+      // the activity log keeps the failure surface around until the
+      // user dismisses it. Window-event so the toast layer stays
+      // unaware of the activity layer.
+      if (normalized.kind === 'error') {
+        window.dispatchEvent(
+          new CustomEvent('cd:activity-error', {
+            detail: { message: normalized.message },
+          }),
+        );
+      }
+
       if (normalized.duration > 0) {
         const handle = setTimeout(() => dismiss(id), normalized.duration);
         timersRef.current.set(id, handle);

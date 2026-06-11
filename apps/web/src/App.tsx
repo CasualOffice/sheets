@@ -28,6 +28,7 @@ import { LoadingContext, type LoadingCtxValue, type LoadingState } from './loadi
 import { BusyProvider } from './busy-context';
 import { ToastProvider } from './shell/toast/toast-context';
 import { SaveStatusProvider, useSaveStatus } from './shell/save-status-context';
+import { ActivityProvider } from './shell/activity-context';
 import { ToastContainer } from './shell/toast/ToastContainer';
 import { ChartsProvider } from './charts/charts-context';
 import { ChartLayer } from './charts/ChartLayer';
@@ -409,6 +410,7 @@ export function App() {
             <AuthProvider>
               <FileSourceProvider>
                 <ToastProvider>
+                  <ActivityProvider>
                   <SaveStatusProvider>
                   <BusyProvider>
                     <ChartsProvider>
@@ -482,6 +484,7 @@ export function App() {
                     </ChartsProvider>
                   </BusyProvider>
                   </SaveStatusProvider>
+                  </ActivityProvider>
                   <ToastContainer />
                 </ToastProvider>
               </FileSourceProvider>

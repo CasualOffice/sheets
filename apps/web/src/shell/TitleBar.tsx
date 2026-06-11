@@ -8,6 +8,7 @@ import { useTheme } from '../theme';
 import { Icon } from './Icon';
 import { BusyPill } from './BusyPill';
 import { SaveStatusPill } from './SaveStatusPill';
+import { ActivityPill } from './ActivityPill';
 import { MenuBar } from './MenuBar';
 import { NamePill } from './NamePill';
 import { AccountMenu } from '../auth/AccountMenu';
@@ -154,6 +155,7 @@ export function TitleBar() {
       <div className="titlebar__actions" data-testid="titlebar-actions">
         <BusyPill />
         <SaveStatusPill />
+        <ActivityPill />
         <AvatarStack />
         {collab.roomId && <NamePill />}
         {collab.roomId ? (
