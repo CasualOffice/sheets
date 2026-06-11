@@ -56,6 +56,15 @@ const mainConfig = defineConfig({
 // Embed-runtime — the in-iframe entry. Doc 16 §6. One self-contained
 // file the consumer copies into `{embedBasePath}/embed-runtime.js`
 // alongside `embed.html` (also copied below).
+//
+// Bundle EVERYTHING (react, react-dom, Univer) into the runtime — the
+// previous build externalised these expecting the consumer to provide
+// them via importmap. That broke browser loads because consumers like
+// drive (which only does `<iframe src="…/embed.html">`) have no
+// importmap; the bare `import 'react'` fails at runtime. The iframe
+// is its own runtime context — bundling react / Univer there does NOT
+// conflict with the host's copy. Trade-off: the runtime grows to
+// ~10MB+, downloaded once per iframe load (cached after).
 const embedRuntimeConfig = defineConfig({
   entry: { 'embed-runtime': 'src/embed-runtime/index.tsx' },
   outDir: 'dist/embed',
@@ -69,7 +78,9 @@ const embedRuntimeConfig = defineConfig({
   sourcemap: false,
   clean: false,
   minify: true,
-  external: ['react', 'react-dom', 'react-dom/client', /^@univerjs\//],
+  // Empty external list — bundle every bare import into the runtime.
+  external: [],
+  noExternal: [/.*/],
   plugins: [
     rewriteParserWorkerUrl,
     {
