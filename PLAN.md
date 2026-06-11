@@ -107,16 +107,32 @@ The first version-bumped release. v0.0.x was the "build a real editor end-to-end
 
 ---
 
+### ✅ Phase 7 — Personal mode + WOPI maturation (complete — v0.3.1)
+
+The "self-host platform" arc continued. v0.2 added personal accounts; v0.3 finished the WOPI bring-up + the IA refresh.
+
+- **Phase C — Personal mode (single + multi)** — `UserStore` + bcrypt + SQLite at `<root>/.casual/users.db`; HMAC-signed session token, 30-day TTL. Per-user file scoping (`local.PerUserStores` → `<root>/users/<userID>/`). Full per-user CRUD (`POST/GET/PUT/PATCH/DELETE /files{/<id>}`). `Profile` sidecar with `displayName / timezone / locale / avatarUrl / prefs`. `casual-docs` CLI (`reset-password / list-users / promote / demote`) + admin routes behind `RequireAdmin`. First signup auto-promotes; structured logs + request-id middleware throughout. UI: `PersonalAuthGate`, `UserMenu`, `ProfileSettingsDialog`. See `docs/self-hosting/personal-mode.md`.
+- **Phase D — WOPI (Mode 2)** — JWT verifier with JWKS cache (`alg`-confusion defence rejects HS\*). `GET /wopi/host` embed redirect; access_token threaded through the WS preflight. `host.Locker` capability with Lock/Unlock/RefreshLock; the room manager claims the host lock on first join, releases on drain. Per-room `RefreshLock` ticker (10 min default) so long sessions don't lose the host-side lock idle-out. `docID = base64url(wopiSrc)` keeps the gateway stateless.
+- **M2 — Snapshot pipeline (client-push)** — `DocxEditorRef.save()` produces serialized bytes client-side; `useFileSourceAutoSave` pushes through `FileSource.save()` on a schedule. The "server-side Bun worker pool" originally tracked in M2 is deferred — client push covers the practical case without adding a Bun runtime to the production Docker image. `AutosaveStatus` gives the host a Google-Docs-style indicator.
+- **Phase E — UX audit wave (2026-06-11/12)** — IA refresh + path router (`/home`, `/sheet/<id>`, `/sheet/new`), `MySpreadsheetsList` file picker (dedup by name, mobile-responsive with always-visible Delete on touch), URL rebinding on first save, empty-draft skip via `<EditTracker>`, AccountMenu Admin entry, `/r/<roomId>` auth-gate exemption, `document.title` route-driven, logout dirty-check, AccountMenu on /home, keyboard shortcuts cheat sheet + `formatShortcut` util (Mac sees ⌘, Win/Linux sees Ctrl), SaveStatusPill (Google-Docs "Saved X ago"), ActivityPill (persistent error log), Ctrl+Shift+P command-palette alias, collab display-name pre-fill from signed-in user. See `docs/UX_AUDIT.md` §5 — every item carries the SHA that shipped it.
+
 ## What's next
 
-### P7 — v0.2 expansion (planned)
+### P8 — Sharing model implementation (designed, not coded)
 
-- **OIDC + SAML backend** — UI shipped in v0.1, schema persists; v0.2 ships enforcement.
+Design lives in `docs/SHARING_MODEL.md`. Phasing:
+
+- **§6.1 Link tokens (single + multi)** — `POST /share/link` + token role enforcement in the join handshake + Link tab in share dialog. ~1–2 weeks.
+- **§6.2 Member ACLs (multi only)** — routes + Members tab + email lookup. ~1 week.
+- **§6.3 Audit log surface** — structured logs + admin-side log view. ~3 days.
+- **§6.4 Suggestion mode** — separate proposal, TBD.
+
+### P9 — Auth backends (carried from prior P7 plan)
+
+- **OIDC + SAML backend** — UI shipped in v0.1, schema persists; enforcement still pending.
 - **Webhook retry queue** — proper exponential backoff + dead-letter store.
-- **Horizontal scale-out** — sticky-session for `/yjs` WebSocket + cross-replica awareness backplane (Redis pub/sub).
-- **Real-device mobile pass** — Playwright iPhone 13 emulation got us to 7/7 mobile e2e; v0.2 adds physical-phone testing for pinch-zoom + virtual keyboard + landscape rotation behaviour.
 
-### P8 — Scale (deferred)
+### P10 — Scale-out (carried from prior P8 plan)
 
 - Op-log scale for multi-hour rooms (current Stage-6 compaction is fine for typical sessions; bound growth more aggressively when we see real pressure).
 - Horizontal scale-out beyond sticky sessions: stateless WebSocket via shared Yjs state, multi-region replication.
