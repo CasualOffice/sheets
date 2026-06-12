@@ -1,6 +1,6 @@
 {
   "name": "@schnsrw/casual-sheets",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Casual Sheets SDK — signing pipeline, iframe postMessage protocol, and CasualSheets React wrapper around Univer.",
   "type": "module",
   "license": "Apache-2.0",

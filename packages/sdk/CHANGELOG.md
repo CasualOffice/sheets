@@ -1,5 +1,17 @@
 # @schnsrw/casual-sheets
 
+## 0.5.4
+
+### Patch Changes
+
+- `noExternal: ['exceljs', /^@univerjs\//]` so the parser worker
+  bundles @univerjs/core (it imports LocaleType + CustomRangeType).
+  0.5.3 only added exceljs to noExternal; the worker still had
+  `import { ... } from "@univerjs/core"` as a bare specifier and
+  closed silently at load. The "OOM" error message the embed-runtime
+  emitted was misleading — it was just an unresolvable bare import
+  in a module-script worker.
+
 ## 0.5.3
 
 ### Patch Changes

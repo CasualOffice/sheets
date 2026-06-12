@@ -49,10 +49,23 @@ const mainConfig = defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
+  // Externalise everything except the worker's own deps. The library
+  // entries (index/signing/embed/sheets) keep react/univer external as
+  // the consumer's bundler resolves them at the host site. The parser
+  // worker is a special case — it has no module map at runtime in the
+  // iframe context, so its imports must be bundled. Specifying
+  // `@univerjs/core` in `noExternal` overrides the regex match.
   external: ['react', 'react-dom', /^@univerjs\//],
-  // Browser target — so exceljs (used by the xlsx parser worker) picks
-  // its browser fork and doesn't pull in Node's `stream` / `buffer` /
-  // `util` built-ins, which break at worker load time in iframe context.
+  // The parser worker imports exceljs (a `dependencies` entry,
+  // externalised by default) + `@univerjs/core` (for LocaleType +
+  // CustomRangeType enums). Both bundle into the worker. Without
+  // this, the module-script worker closes immediately at load time
+  // because the browser can't resolve the bare specifier — and
+  // `worker.onerror` fires with an empty message that the parse
+  // pipeline mistakenly attributes to OOM.
+  noExternal: ['exceljs', /^@univerjs\//],
+  // Browser target — so exceljs picks its browser fork and doesn't
+  // pull in Node's `stream` / `buffer` / `util` built-ins.
   platform: 'browser',
   target: 'es2020',
   plugins: [rewriteParserWorkerUrl],
