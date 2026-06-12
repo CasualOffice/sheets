@@ -1,5 +1,21 @@
 # @schnsrw/casual-sheets
 
+## 0.5.3
+
+### Patch Changes
+
+- Three fixes to make the iframe embed actually render:
+  1. `platform: 'browser'` on the main tsup config so the parser worker
+     bundles exceljs's browser fork (no Node `stream` / `buffer` / `util`
+     requires that broke worker init).
+  2. embed-runtime calls `transport.sendReady()` after `sendHello()`. The
+     host (CasualSheetsIframe) only sends its hello inside
+     `onEditorReady`; without an eager `casual.ready` from the iframe,
+     the handshake deadlocked and bytes never loaded.
+  3. New tsup plugin copies `dist/parser.worker.js` into `dist/embed/`
+     so the `new URL('./parser.worker.js', import.meta.url)` resolution
+     inside the runtime finds the worker under `{embedBasePath}/`.
+
 ## 0.5.2
 
 ### Patch Changes

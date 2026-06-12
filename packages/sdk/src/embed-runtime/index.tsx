@@ -84,6 +84,13 @@ export function mountEmbedded(opts: MountEmbeddedOptions): void {
   });
 
   transport.sendHello();
+  // Also send `casual.ready` so the host's `onEditorReady` fires without
+  // waiting for the host to send `casual.hello` first. The protocol's
+  // sendReady-on-receiving-hello path stays as a fallback for hosts that
+  // do send hello eagerly; this just kicks off the handshake on the
+  // iframe side so we don't deadlock when the host's strategy is to
+  // wait for `casual.ready`.
+  transport.sendReady();
 
   const reactRoot = createRoot(opts.root);
   reactRoot.render(<EmbeddedSheets transport={transport} docId={config.docId} />);

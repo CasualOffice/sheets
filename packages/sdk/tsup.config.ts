@@ -50,6 +50,11 @@ const mainConfig = defineConfig({
   sourcemap: true,
   clean: true,
   external: ['react', 'react-dom', /^@univerjs\//],
+  // Browser target — so exceljs (used by the xlsx parser worker) picks
+  // its browser fork and doesn't pull in Node's `stream` / `buffer` /
+  // `util` built-ins, which break at worker load time in iframe context.
+  platform: 'browser',
+  target: 'es2020',
   plugins: [rewriteParserWorkerUrl],
 });
 
@@ -95,6 +100,24 @@ const embedRuntimeConfig = defineConfig({
         try {
           await fs.mkdir('dist/embed', { recursive: true });
           await fs.copyFile('src/embed-runtime/embed.html', 'dist/embed/embed.html');
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err;
+        }
+      },
+    },
+    {
+      // The embed-runtime spawns the xlsx parser via
+      // `new Worker(new URL('./parser.worker.js', import.meta.url))`,
+      // which resolves to `<embedBasePath>/parser.worker.js`. The
+      // mainConfig emits parser.worker to `dist/`, but consumers only
+      // copy the `dist/embed/` tree to their public path — so the
+      // worker URL 404s at runtime. Copy the worker into
+      // `dist/embed/` so the relative path resolves.
+      name: 'copy-parser-worker-into-embed',
+      async buildEnd() {
+        try {
+          await fs.mkdir('dist/embed', { recursive: true });
+          await fs.copyFile('dist/parser.worker.js', 'dist/embed/parser.worker.js');
         } catch (err) {
           if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err;
         }
