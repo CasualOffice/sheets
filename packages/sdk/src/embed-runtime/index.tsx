@@ -102,11 +102,7 @@ export function mountEmbedded(opts: MountEmbeddedOptions): void {
 
   const reactRoot = createRoot(opts.root);
   reactRoot.render(
-    <EmbeddedSheets
-      transport={transport}
-      docId={config.docId}
-      initialViewMode={config.viewMode}
-    />,
+    <EmbeddedSheets transport={transport} docId={config.docId} initialViewMode={config.viewMode} />,
   );
 }
 
@@ -125,18 +121,26 @@ function EmbeddedSheets({
   const [data, setData] = useState<IWorkbookData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // viewMode is plumbed through but doesn't toggle Univer chrome in
-  // 0.5.x — enabling header/toolbar/footer requires the full
-  // sheets-ui plugin chain (sort/filter/drawing/comment/etc.) that
-  // the SDK doesn't bundle into the embed runtime. With those
-  // missing, registering UniverUIPlugin with toolbar:true silently
-  // wedges the workbench mount. For now both modes render the canvas
-  // only (cells are still editable via keyboard input — editing
-  // semantics don't depend on the toolbar). v0.6.x will gate the
-  // chrome behind explicit plugin registration so consumers that
-  // want the ribbon can opt in.
-  void initialViewMode;
-  const ui = { header: false, toolbar: false, footer: false, contextMenu: true };
+  const [viewMode, setViewMode] = useState<'preview' | 'editor'>(initialViewMode);
+  // Editor mode flips `header: true` so Univer's formula bar (A1 cell
+  // ref, fx button) and menubar render at the top of the iframe —
+  // visually distinct from preview's canvas-only surface. `toolbar` and
+  // `footer` stay off: Univer's ribbon and sheet-tabs slot resolve
+  // services (IRPCChannelService, sheet-drawing) at construction that
+  // the SDK doesn't bundle a worker for, and turning them on lights up
+  // `[redi]: Cannot find "Kb" registered by any injector` and the
+  // canvas never paints. Cells stay editable in editor mode via direct
+  // keyboard input on the focused cell.
+  const ui =
+    viewMode === 'editor'
+      ? { header: true, toolbar: false, footer: false, contextMenu: true }
+      : { header: false, toolbar: false, footer: false, contextMenu: true };
+
+  useEffect(() => {
+    transport.on({
+      onCommandSetViewMode: ({ viewMode: next }) => setViewMode(next),
+    });
+  }, [transport]);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,7 +209,9 @@ function EmbeddedSheets({
     );
   }
 
-  return <CasualSheets initialData={data} ui={ui} />;
+  // Force a remount when viewMode flips — CasualSheets locks the UI
+  // config at registerPlugin time and won't pick up new props.
+  return <CasualSheets key={viewMode} initialData={data} ui={ui} />;
 }
 
 function inferHostOrigin(): string | undefined {

@@ -1,5 +1,11 @@
 # @schnsrw/casual-sheets
 
+## 0.5.7
+
+### Patch Changes
+
+- embed-runtime: viewMode='editor' enables Univer's formula bar + menubar (A1 ref, fx, X/✓) so the embed is visually distinct from preview mode. Toolbar + footer stay off because their workbench-mount path resolves IRPCChannelService at construction (no worker bundled). Cells remain editable via direct keyboard input.
+
 ## 0.5.6
 
 ### Patch Changes
