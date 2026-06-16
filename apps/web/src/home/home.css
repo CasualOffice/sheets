@@ -93,11 +93,11 @@
 
 .home__title {
   margin: 0 0 10px;
-  font-family: var(--font-sans);
-  font-size: 44px;
+  font-family: var(--font-display);
+  font-size: var(--display-lg, 44px);
   line-height: 1.08;
-  font-weight: 700;
-  letter-spacing: -0.022em;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
   color: var(--color-text);
   /* A subtle gradient overlay on the title — gives the page its
      artistic edge without screaming. */

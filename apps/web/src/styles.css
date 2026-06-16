@@ -3,26 +3,37 @@
    from this file alone.
    ───────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Brand */
-  --color-accent: #0e7490; /* deep teal-cyan */
+  /* Brand — deep teal-cyan #0e7490. The fill of the document mark and
+     every focus ring, selection, and primary action. */
+  --color-accent: #0e7490;
   --color-accent-hover: #0c627a;
   --color-accent-active: #0a5266;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: #e2f0f4;
+  --color-accent-soft: #e6f3f7; /* tinted fill behind accent text */
+  --color-accent-bright: #1597ba; /* brighter cyan — gradient stop, highlights */
+  /* Premium gradient — used sparingly on the primary CTA + brand mark. */
+  --accent-gradient: linear-gradient(135deg, #1597ba 0%, #0e7490 100%);
 
   /* Neutrals — three-tone layering scale.
        zone 0 (white) — content surfaces (titlebar + menubar + formula bar + grid)
-       zone 1 (cool grey) — tool strips (toolbar)
-       zone 2 (warmer grey) — chrome strips (sheet tabs + status bar)
-     Each zone is visually distinct without needing hard borders. */
+       zone 1 (cool grey) — raised panels, wells, toolbar
+       zone 2 (cooler grey) — chrome strips (sheet tabs + status bar)
+     Whisper-light hairlines do most of the separating; surface-zone
+     contrast (not heavy lines) carries the rest, Linear/Notion style. */
   --color-bg: #ffffff;
   --color-surface: #ffffff; /* zone 0 */
-  --color-surface-alt: #eef0f4; /* zone 1 — clearly visible vs white */
-  --color-surface-strip: #e8eaed; /* zone 2 — distinct chrome strip */
-  --color-surface-raised: #ffffff;
-  --color-border: #d2d6dc;
-  --color-border-strong: #b9bec5;
-  --color-divider: #dadce0;
+  --color-surface-alt: #f4f6f9; /* zone 1 — raised panels, wells */
+  --color-surface-strip: #eef1f5; /* zone 2 — chrome strips */
+  --color-surface-raised: #ffffff; /* menus, popovers, dialogs */
+  --color-border: #e6e9ee; /* whisper hairline — controls + grid */
+  --color-border-strong: #cdd3db; /* visible dividers, input outlines */
+  --color-divider: #edeff3; /* chrome strip separators */
+
+  /* Glass + scrim — frosted chrome and premium modal backdrops. */
+  --color-glass: rgba(255, 255, 255, 0.72);
+  --color-glass-strong: rgba(255, 255, 255, 0.86);
+  --color-glass-border: rgba(255, 255, 255, 0.6);
+  --color-scrim: rgba(15, 23, 42, 0.38);
 
   --color-text: #201f1e;
   --color-text-secondary: #605e5c;
@@ -34,15 +45,38 @@
      icon glyphs remain legible without opacity tricks. */
   --color-text-disabled: #8a8886;
   --color-text-on-accent: #ffffff;
+  /* Accent on muted/quiet text — only used in a couple places, define
+     here so the dark override can shift it. */
+  --color-text-muted: #8a8886;
 
-  --color-hover: rgba(0, 0, 0, 0.05);
-  --color-pressed: rgba(0, 0, 0, 0.1);
+  /* Interaction states — slate-tinted overlays so they compose on any
+     surface zone, plus accent-tinted selection wells. */
+  --color-hover: rgba(15, 23, 42, 0.045);
+  --color-pressed: rgba(15, 23, 42, 0.09);
   --color-focus-ring: #0e7490;
-  --color-selected: rgba(14, 116, 144, 0.12);
-  --color-selected-strong: rgba(14, 116, 144, 0.22);
+  --color-selected: rgba(14, 116, 144, 0.11);
+  --color-selected-strong: rgba(14, 116, 144, 0.2);
 
-  /* Toolbar pill — neutral grey, matches Google's tint */
-  --color-toolbar-pill: #f1f3f4;
+  /* Toolbar pill — neutral cool well behind the active formula range. */
+  --color-toolbar-pill: #eef1f5;
+
+  /* Status / semantic — Tailwind 700-line, sourced from the home
+     template badge palette. Shared by cell badges, validation, banners. */
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-warning: #b45309;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+
+  /* Casual Office suite — sibling-product accents (used only for
+     cross-suite umbrella surfaces; this app always leads with teal). */
+  --suite-sheets: #0e7490;
+  --suite-editor: #6d28d9;
+  --suite-slides: #b91c1c;
+  --suite-desktop: #ea580c;
 
   /* Spacing scale (4px base) */
   --space-0: 0;
@@ -54,11 +88,14 @@
   --space-6: 16px;
   --space-7: 20px;
   --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
 
   /* Typography */
   --font-sans:
     'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --font-display: 'Manrope', 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -66,25 +103,41 @@
   --text-md: 14px;
   --text-lg: 16px;
 
+  --display-sm: 28px;
+  --display-md: 36px;
+  --display-lg: 44px;
+
   --leading-tight: 1.2;
   --leading-normal: 1.4;
+  --leading-relaxed: 1.6;
 
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
+  --weight-bold: 700;
 
-  /* Shape — keep two scales only, used consistently:
-     --radius-md for all interactive controls (buttons, selects, inputs),
-     --radius-lg for containers (dialogs, popovers, menus). */
-  --radius-sm: 4px; /* alias for backwards compat */
-  --radius-md: 4px;
-  --radius-lg: 8px;
-  --radius-pill: 20px;
+  --tracking-tight: -0.022em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
 
-  /* Elevation */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
-  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  /* Shape — consistent radius ladder. Controls 6px, containers 10px,
+     large surfaces (dialogs, command palette) 14px. Square grid cells
+     never take radius. */
+  --radius-sm: 4px; /* tiny chips, focus inset */
+  --radius-md: 6px; /* interactive controls (buttons, selects, inputs) */
+  --radius-lg: 10px; /* cards, menus, popovers */
+  --radius-xl: 14px; /* dialogs, command palette, large panels */
+  --radius-pill: 999px; /* toolbar pill, chips, avatars */
+
+  /* Elevation — four-step, slate-tinted, layered. Borders still carry
+     most separation; these float menus/dialogs with intent. shadow-4 is
+     reserved for the command palette and full modals. */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 1px rgba(16, 24, 40, 0.04);
+  --shadow-2: 0 2px 4px rgba(16, 24, 40, 0.06), 0 6px 16px -4px rgba(16, 24, 40, 0.1);
+  --shadow-3: 0 4px 8px rgba(16, 24, 40, 0.06), 0 16px 32px -8px rgba(16, 24, 40, 0.14);
+  --shadow-4: 0 8px 16px rgba(16, 24, 40, 0.08), 0 28px 56px -12px rgba(16, 24, 40, 0.22);
+  /* Soft accent glow — focus halos, active primary CTA. */
+  --glow-accent: 0 0 0 3px var(--color-accent-soft);
 
   /* Layout — title bar now hosts the menu bar inline (Google Docs
      pattern), so the two strips collapse into one 64 px chrome layer:
@@ -99,14 +152,16 @@
   --sheet-tabs-h: 28px;
   --statusbar-h: 24px;
 
-  /* Motion */
-  --motion-fast: 80ms;
-  --motion-base: 140ms;
+  /* Motion — one cohesive system so every surface eases the same way.
+     90 ms for hovers/wells, 160 ms for control state, 240 ms for overlay
+     entrances. Direct manipulation uses a decelerating ease-out; panels,
+     menus and dialogs enter on a gentle-overshoot ease-spring. */
+  --motion-fast: 90ms;
+  --motion-base: 160ms;
+  --motion-slow: 240ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* Accent on muted/quiet text — only used in a couple places, define
-     here so the dark override can shift it. */
-  --color-text-muted: #8a8886;
+  --ease-in-out: cubic-bezier(0.45, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -128,17 +183,25 @@ html[data-theme='dark'] :root,
   --color-accent: #22d3ee;
   --color-accent-hover: #3ddff5;
   --color-accent-active: #1cb8d4;
-  --color-accent-fg: #ffffff;
-  --color-accent-soft: rgba(34, 211, 238, 0.18);
+  --color-accent-fg: #07181c;
+  --color-accent-soft: rgba(34, 211, 238, 0.16);
+  --color-accent-bright: #38e0f5;
+  --accent-gradient: linear-gradient(135deg, #38e0f5 0%, #22d3ee 100%);
 
-  --color-bg: #1a1b1f;
-  --color-surface: #1f2024;
-  --color-surface-alt: #26282d;
-  --color-surface-strip: #2e3036;
-  --color-surface-raised: #2a2c31;
-  --color-border: #3a3c42;
-  --color-border-strong: #4a4d54;
-  --color-divider: #2a2c31;
+  /* Cool deep-slate surfaces — premium near-black, not flat grey. */
+  --color-bg: #14161a;
+  --color-surface: #1b1e23;
+  --color-surface-alt: #23262c;
+  --color-surface-strip: #2a2e35;
+  --color-surface-raised: #24282e;
+  --color-border: #32363d;
+  --color-border-strong: #424751;
+  --color-divider: #24272d;
+
+  --color-glass: rgba(28, 32, 38, 0.66);
+  --color-glass-strong: rgba(28, 32, 38, 0.85);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --color-scrim: rgba(5, 8, 12, 0.58);
 
   --color-text: #e6e6e6;
   --color-text-secondary: #b0b3ba;
@@ -154,10 +217,21 @@ html[data-theme='dark'] :root,
 
   --color-toolbar-pill: #2a2c31;
 
-  /* Stronger shadows to read on near-black */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-3: 0 8px 16px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.35);
+  /* Status — softened for near-black surfaces. */
+  --color-success: #4ade80;
+  --color-success-soft: rgba(74, 222, 128, 0.16);
+  --color-warning: #fbbf24;
+  --color-warning-soft: rgba(251, 191, 36, 0.16);
+  --color-danger: #f87171;
+  --color-danger-soft: rgba(248, 113, 113, 0.16);
+  --color-info: #60a5fa;
+  --color-info-soft: rgba(96, 165, 250, 0.16);
+
+  /* Deeper four-step shadow ladder to read on near-black. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.44), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.5), 0 6px 16px -4px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 4px 8px rgba(0, 0, 0, 0.5), 0 16px 32px -8px rgba(0, 0, 0, 0.62);
+  --shadow-4: 0 8px 16px rgba(0, 0, 0, 0.55), 0 28px 56px -12px rgba(0, 0, 0, 0.7);
 }
 
 /* Banner palettes get explicit dark variants — they use hardcoded
@@ -249,6 +323,102 @@ button {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
   border-radius: var(--radius-sm);
+  box-shadow: var(--glow-accent);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Motion primitives — reusable keyframes + utility classes so every
+   overlay enters the same way: menus pop, panels glide from their edge,
+   dialogs rise and scale, toasts slide up. Adopted from the Casual Sheets
+   design system. prefers-reduced-motion collapses to a fast fade.
+   ───────────────────────────────────────────────────────────────────────── */
+@keyframes cs-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cs-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes cs-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes cs-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes cs-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes cs-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cs-anim-fade {
+  animation: cs-fade-in var(--motion-base) var(--ease-out) both;
+}
+.cs-anim-pop {
+  animation: cs-pop-in var(--motion-base) var(--ease-spring) both;
+  transform-origin: top;
+}
+.cs-anim-rise {
+  animation: cs-rise-in var(--motion-slow) var(--ease-spring) both;
+}
+.cs-anim-panel {
+  animation: cs-slide-in-right var(--motion-slow) var(--ease-out) both;
+}
+.cs-anim-up {
+  animation: cs-slide-up var(--motion-base) var(--ease-out) both;
+}
+.cs-anim-scrim {
+  animation: cs-scrim-in var(--motion-fast) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-anim-fade,
+  .cs-anim-pop,
+  .cs-anim-rise,
+  .cs-anim-panel,
+  .cs-anim-up,
+  .cs-anim-scrim,
+  .dialog {
+    animation: cs-fade-in 1ms linear both;
+  }
 }
 
 /* Material Symbols Outlined — single source of icon truth.
@@ -308,6 +478,11 @@ button {
    App shell — strict grid, only the grid row stretches.
    ───────────────────────────────────────────────────────────────────────── */
 .app {
+  /* Inset around the floating sheet card. The titlebar/toolbar (zone 0)
+     stay full-bleed at the top; the formula bar, grid, and sheet tabs
+     are gathered into one card that floats on this tinted canvas. */
+  --card-pad: 10px;
+
   display: grid;
   /* Named-area layout. Auto-placement was shifting grid-row into the
      wrong track when the toolbar (or formula bar) is display:none —
@@ -337,7 +512,10 @@ button {
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
-  background: var(--color-bg);
+  /* Tinted canvas behind the floating sheet card. The full-bleed strips
+     above (titlebar/toolbar) paint over it; the card cells leave a
+     `--card-pad` ring of this colour showing through. */
+  background: var(--color-surface-alt);
 }
 
 .app--no-formula-bar {
@@ -384,6 +562,75 @@ button {
 }
 .app > .sheet-tabs {
   grid-area: sheettabs;
+}
+
+/* ── Floating sheet card ──────────────────────────────────────────────
+   The formula bar, grid row, mobile action bar, and sheet tabs collectively
+   form a single card that floats on the tinted `.app` canvas. We can't
+   wrap them in a real container (CSS grid areas pin each strip to its
+   row), so we paint the card by giving each cell matching margins +
+   per-edge borders + corner radii so they READ as one rounded surface.
+   Mobile drops back to full-bleed. */
+.app > .formula-bar,
+.app > .grid-row,
+.app > .mobile-bar,
+.app > .sheet-tabs {
+  margin-left: var(--card-pad);
+  margin-right: var(--card-pad);
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+}
+.app > .formula-bar {
+  margin-top: var(--card-pad);
+  border-top: 1px solid var(--color-border);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  /* Top-edge of the card lifts off the canvas with a single layered
+     shadow — the bottom-edge shadow lives on .sheet-tabs so the card
+     reads as one connected surface, not three. */
+  box-shadow: 0 -1px 0 rgba(16, 24, 40, 0.02);
+}
+.app > .sheet-tabs {
+  margin-bottom: var(--card-pad);
+  border-bottom: 1px solid var(--color-border);
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2);
+}
+/* Formula-bar-hidden variant: grid-row inherits the card's top edge. */
+.app--no-formula-bar > .grid-row {
+  margin-top: var(--card-pad);
+  border-top: 1px solid var(--color-border);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  box-shadow: 0 -1px 0 rgba(16, 24, 40, 0.02);
+}
+
+@media (max-width: 720px) {
+  .app {
+    --card-pad: 0px;
+  }
+  .app > .formula-bar,
+  .app > .grid-row,
+  .app > .mobile-bar,
+  .app > .sheet-tabs {
+    border-left: 0;
+    border-right: 0;
+  }
+  .app > .formula-bar,
+  .app--no-formula-bar > .grid-row {
+    border-top: 1px solid var(--color-divider);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    box-shadow: none;
+  }
+  .app > .sheet-tabs {
+    border-bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: none;
+  }
 }
 
 /* ── Menu bar (Google-Sheets style top dropdowns) ───────────────────────── */
@@ -464,11 +711,19 @@ button {
 }
 .toolbar__overflow--left {
   left: 0;
-  background: linear-gradient(to right, var(--color-surface-alt) 60%, rgba(244, 243, 242, 0));
+  background: linear-gradient(
+    to right,
+    var(--color-surface-alt) 60%,
+    color-mix(in srgb, var(--color-surface-alt) 0%, transparent)
+  );
 }
 .toolbar__overflow--right {
   right: 0;
-  background: linear-gradient(to left, var(--color-surface-alt) 60%, rgba(244, 243, 242, 0));
+  background: linear-gradient(
+    to left,
+    var(--color-surface-alt) 60%,
+    color-mix(in srgb, var(--color-surface-alt) 0%, transparent)
+  );
 }
 .toolbar__overflow:hover {
   color: var(--color-text);
@@ -745,12 +1000,19 @@ button {
   gap: 12px;
   height: var(--titlebar-h);
   padding: 0 16px;
-  background: var(--color-surface);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 100%),
+    var(--color-surface);
   color: var(--color-text);
   user-select: none;
   letter-spacing: 0;
   z-index: 4;
   border-bottom: 1px solid var(--color-divider);
+}
+[data-theme='dark'] .titlebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 100%),
+    var(--color-surface);
 }
 
 .titlebar > .titlebar__brand {
@@ -854,8 +1116,8 @@ button {
 }
 
 .titlebar__brand-icon {
-  width: 28px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: inline-block;
   flex-shrink: 0;
 }
@@ -913,7 +1175,7 @@ button {
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: var(--weight-semibold, 600);
 }
@@ -2275,15 +2537,20 @@ button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-3) 0 var(--space-5);
-  height: 100%;
+  padding: 0 var(--space-4);
+  height: 22px;
+  align-self: center;
+  margin: 0 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   color: var(--color-text-secondary);
   background: transparent;
-  border-right: 1px solid var(--color-divider);
   transition:
     background var(--motion-fast) var(--ease-out),
-    color var(--motion-fast) var(--ease-out);
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
   white-space: nowrap;
   user-select: none;
   font-weight: var(--weight-medium);
@@ -2297,10 +2564,11 @@ button {
 }
 
 .sheet-tab--active {
-  background: var(--color-surface);
-  color: var(--color-accent);
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  border-color: var(--color-border);
   font-weight: var(--weight-semibold);
-  box-shadow: inset 0 -2px 0 var(--color-accent);
+  box-shadow: var(--shadow-1);
 }
 
 .sheet-tab--dragging {
@@ -2621,6 +2889,13 @@ button {
      context. Without this, the Borders popover renders behind the formula
      input — Playwright catches it because pointer hit-tests pick the input. */
   z-index: 2000;
+  animation: cs-pop-in var(--motion-base) var(--ease-spring) both;
+  transform-origin: top;
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: cs-fade-in 1ms linear both;
+  }
 }
 
 .menu__item {
@@ -2961,12 +3236,14 @@ button {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.36);
+  background: var(--color-scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2000;
-  animation: backdrop-in 140ms var(--ease-out);
+  animation: backdrop-in var(--motion-fast) var(--ease-out);
 }
 
 @keyframes backdrop-in {
@@ -2986,11 +3263,13 @@ button {
   width: min(640px, 92vw);
   max-height: 86vh;
   background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-4);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: cs-rise-in var(--motion-slow) var(--ease-spring) both;
 }
 
 .dialog--narrow {
@@ -4352,21 +4631,28 @@ button {
 .btn-primary {
   height: 28px;
   padding: 0 var(--space-5);
-  background: var(--color-accent);
+  background: var(--accent-gradient);
+  background-color: var(--color-accent);
   color: var(--color-text-on-accent);
   border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out);
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .btn-primary:hover {
   background: var(--color-accent-hover);
+  box-shadow: var(--glow-accent);
 }
 .btn-primary:active {
   background: var(--color-accent-active);
+  transform: translateY(0.5px);
+  box-shadow: none;
 }
 
 .btn-secondary {
@@ -4375,15 +4661,18 @@ button {
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out);
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .btn-secondary:hover {
   background: var(--color-hover);
+  border-color: var(--color-text);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
