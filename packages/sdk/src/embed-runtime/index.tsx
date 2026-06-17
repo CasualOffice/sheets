@@ -57,6 +57,12 @@ export interface MountEmbeddedOptions {
 // <style> tag append.
 import '../styles';
 
+// Side-effect import: bring the @schnsrw/design-system tokens (colour,
+// typography, motion, fonts) into the iframe. The runtime now paints in
+// the design system's vocabulary out of the box; the `casual.command.set.theme`
+// envelope (handled below) flips between light and dark.
+import '@schnsrw/design-system/tokens.css';
+
 // Side-effect imports: augment the FUniver facade with the
 // `getActiveWorkbook` / `getActiveSheet` / `getActiveRange` chain
 // the toolbar bridge calls. The sheet SDK ships these on Univer's
@@ -90,12 +96,29 @@ export function mountEmbedded(opts: MountEmbeddedOptions): void {
 
   opts.root.setAttribute('data-view-mode', config.viewMode);
 
+  // Honour ?app=docs / ?app=sheet — controls the accent ramp (sheet teal vs
+  // docs cyan) via the @schnsrw/design-system editor-theme.css overrides.
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-app', config.app);
+  }
+
   transport.on({
     onCommandSetViewMode: ({ viewMode }) => {
       opts.root.setAttribute('data-view-mode', viewMode);
       // v0.5.x will toggle CasualSheets's `ui` prop in response;
       // v0.5.0 only updates the data attribute so iframe-side CSS
       // can react.
+    },
+    onCommandSetTheme: ({ theme }) => {
+      if (typeof document === 'undefined') return;
+      // `system` falls through to the OS preference via the CSS
+      // `color-scheme` declaration on :root — keep the html attribute
+      // clear so the design-system tokens stay in :root (light).
+      if (theme === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
     },
   });
 

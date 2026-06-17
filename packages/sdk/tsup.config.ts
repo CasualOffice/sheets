@@ -40,6 +40,7 @@ const mainConfig = defineConfig({
     signing: 'src/signing/index.ts',
     embed: 'src/embed/index.ts',
     sheets: 'src/sheets/index.ts',
+    shell: 'src/shell/index.ts',
     styles: 'src/styles.ts',
     xlsx: 'src/xlsx/index.ts',
     'parser.worker': 'src/xlsx/parser.worker.ts',
@@ -50,12 +51,11 @@ const mainConfig = defineConfig({
   sourcemap: true,
   clean: true,
   // Externalise everything except the worker's own deps. The library
-  // entries (index/signing/embed/sheets) keep react/univer external as
-  // the consumer's bundler resolves them at the host site. The parser
-  // worker is a special case — it has no module map at runtime in the
-  // iframe context, so its imports must be bundled. Specifying
-  // `@univerjs/core` in `noExternal` overrides the regex match.
-  external: ['react', 'react-dom', /^@univerjs\//],
+  // entries (index/signing/embed/sheets/shell) keep react/univer external
+  // because the consumer's bundler resolves them at the host site. The
+  // parser worker is a special case — it has no module map at runtime in
+  // the iframe context, so its imports must be bundled.
+  external: ['react', 'react-dom', '@schnsrw/design-system', /^@univerjs\//],
   // The parser worker imports exceljs (a `dependencies` entry,
   // externalised by default) + `@univerjs/core` (for LocaleType +
   // CustomRangeType enums). Both bundle into the worker. Without
