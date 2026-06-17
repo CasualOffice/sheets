@@ -719,8 +719,8 @@ function SelfHostBanner() {
     <div className="collab-banner" data-testid="collab-banner" role="status">
       <div className="collab-banner__body">
         <strong>Co-editing requires self-hosting.</strong>{' '}
-        The hosted demo at <code>sheet.schnsrw.live</code> is single-user. Run
-        Casual Sheets with Docker to get rooms — <a href="https://schnsrw.live/#work" rel="noopener">how to self-host →</a>
+        The hosted demo at <code>sheet.casualoffice.org</code> is single-user. Run
+        Casual Sheets with Docker to get rooms — <a href="https://casualoffice.org/#work" rel="noopener">how to self-host →</a>
       </div>
       <button
         type="button"

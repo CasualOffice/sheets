@@ -54,17 +54,17 @@ export function AboutDialog({ onClose }: Props) {
           <dt>Source</dt>
           <dd>
             <a
-              href="https://github.com/schnsrw/sheets"
+              href="https://github.com/CasualOffice/sheets"
               target="_blank"
               rel="noreferrer"
             >
-              github.com/schnsrw/sheets
+              github.com/CasualOffice/sheets
             </a>
           </dd>
           <dt>Self-host</dt>
           <dd>
             <code>docker run -p 3000:3000 schnsrw/casual-sheets</code> —{' '}
-            <a href="https://schnsrw.live/#work" target="_blank" rel="noreferrer">guide</a>
+            <a href="https://casualoffice.org/#work" target="_blank" rel="noreferrer">guide</a>
           </dd>
           <dt>Engine</dt>
           <dd>Univer 0.22.1 — 478 formula functions, ExcelJS for xlsx I/O</dd>

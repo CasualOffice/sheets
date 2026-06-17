@@ -5,7 +5,7 @@
  * matching form fields by `id`.
  */
 export function openBugReport(): void {
-  const url = new URL('https://github.com/schnsrw/sheets/issues/new');
+  const url = new URL('https://github.com/CasualOffice/sheets/issues/new');
   url.searchParams.set('template', 'bug.yml');
   url.searchParams.set('labels', 'bug');
   url.searchParams.set('url', location.href);

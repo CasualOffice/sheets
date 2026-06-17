@@ -2035,7 +2035,7 @@ export function MenuBar() {
           id: 'github',
           label: 'View on GitHub',
           icon: 'open_in_new',
-          onClick: () => window.open('https://github.com/schnsrw/sheets', '_blank'),
+          onClick: () => window.open('https://github.com/CasualOffice/sheets', '_blank'),
         },
       ],
     },
