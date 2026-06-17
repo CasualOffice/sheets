@@ -6,10 +6,10 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/schnsrw/sheets.git",
+    "url": "https://github.com/CasualOffice/sheets.git",
     "directory": "packages/sdk"
   },
-  "homepage": "https://github.com/schnsrw/sheets/tree/main/packages/sdk",
+  "homepage": "https://github.com/CasualOffice/sheets/tree/main/packages/sdk",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

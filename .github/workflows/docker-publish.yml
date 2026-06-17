@@ -117,9 +117,9 @@ jobs:
           labels: |
             org.opencontainers.image.title=Casual Sheets
             org.opencontainers.image.description=Excel-flavored web spreadsheet with real-time co-editing.
-            org.opencontainers.image.url=https://sheet.schnsrw.live/
-            org.opencontainers.image.source=https://github.com/schnsrw/sheets
-            org.opencontainers.image.documentation=https://schnsrw.live/docs/sheets/
+            org.opencontainers.image.url=https://sheets.casualoffice.org/
+            org.opencontainers.image.source=https://github.com/CasualOffice/sheets
+            org.opencontainers.image.documentation=https://casualoffice.org/docs/sheets/
             org.opencontainers.image.vendor=Sachin Sarwa
             org.opencontainers.image.licenses=Apache-2.0
 

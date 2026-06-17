@@ -53,10 +53,10 @@ jobs:
 
       - name: Build web
         env:
-          # Canonical URL is the apex of the subdomain — sheet.schnsrw.live/
+          # Canonical URL is the apex of the subdomain — sheets.casualoffice.org/
           # — so assets are root-relative. A small /sheets/ redirect (added
           # below) keeps the GitHub-provided URL working
-          # (schnsrw.github.io/sheets/ → 301 → sheet.schnsrw.live/sheets/
+          # (schnsrw.github.io/sheets/ → 301 → sheets.casualoffice.org/sheets/
           # → redirect → /).
           PAGES_BASE: /
         run: pnpm --filter @sheet/web build
@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           mkdir -p public/sheets
           cp -R apps/web/dist/. public/
-          echo "sheet.schnsrw.live" > public/CNAME
+          echo "sheets.casualoffice.org" > public/CNAME
           cat > public/sheets/index.html <<'HTML'
           <!doctype html>
           <html lang="en">
@@ -78,11 +78,11 @@ jobs:
               <meta charset="utf-8" />
               <title>Casual Sheets</title>
               <meta http-equiv="refresh" content="0; url=/" />
-              <link rel="canonical" href="https://sheet.schnsrw.live/" />
+              <link rel="canonical" href="https://sheets.casualoffice.org/" />
               <script>location.replace('/');</script>
             </head>
             <body>
-              <p>Redirecting to <a href="/">sheet.schnsrw.live</a>…</p>
+              <p>Redirecting to <a href="/">sheets.casualoffice.org</a>…</p>
             </body>
           </html>
           HTML

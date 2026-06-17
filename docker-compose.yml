@@ -70,7 +70,7 @@ services:
       CASUAL_LOCAL_PATH: ${CASUAL_LOCAL_PATH:-/data}
       # `none` (default) = anonymous WOPI / no-signup shape — the
       # pre-Phase-C behaviour, what the e2e suite and the live demo
-      # at sheet.schnsrw.live expect. Flip to `single` (first signup
+      # at sheets.casualoffice.org expect. Flip to `single` (first signup
       # mints the lone admin, signup closes) or `multi` (signup stays
       # open, per-user file isolation) via a `.env` entry to opt into
       # Phase C personal mode. The README's "Recommended: personal
