@@ -13,7 +13,7 @@
     "@e965/xlsx": "0.20.3",
     "@hocuspocus/provider": "^2.15.2",
     "@schnsrw/casual-sheets": "workspace:*",
-    "@schnsrw/design-system": "link:../../../design-system",
+    "@schnsrw/design-system": "^0.1.0",
     "@univerjs/core": "0.24.0",
     "@univerjs/design": "0.24.0",
     "@univerjs/docs": "0.24.0",
