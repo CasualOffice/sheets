@@ -168,7 +168,9 @@
     "casual-sheets"
   ],
   "dependencies": {
-    "@schnsrw/design-system": "link:../../../design-system",
     "exceljs": "4.4.0"
+  },
+  "optionalDependencies": {
+    "@schnsrw/design-system": "*"
   }
 }

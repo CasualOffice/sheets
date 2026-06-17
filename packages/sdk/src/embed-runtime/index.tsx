@@ -57,11 +57,16 @@ export interface MountEmbeddedOptions {
 // <style> tag append.
 import '../styles';
 
-// Side-effect import: bring the @schnsrw/design-system tokens (colour,
-// typography, motion, fonts) into the iframe. The runtime now paints in
-// the design system's vocabulary out of the box; the `casual.command.set.theme`
-// envelope (handled below) flips between light and dark.
-import '@schnsrw/design-system/tokens.css';
+// Bring the @schnsrw/design-system tokens into the iframe so the runtime
+// paints in the canonical vocabulary out of the box. tsup's `injectStyle`
+// pipeline currently doesn't follow bare-specifier CSS imports reliably,
+// so we inject the fonts via a runtime <link> and the tokens via a
+// critical-CSS <style>. The token literal duplicates `tokens/colors.css`
+// + `tokens/spacing.css` + `tokens/typography.css` + `tokens/motion.css`
+// + the editor-theme.css cyan override — keep them in sync if the
+// design-system package bumps its token values.
+import { injectDesignSystemTokens } from './design-system-bootstrap';
+injectDesignSystemTokens();
 
 // Side-effect imports: augment the FUniver facade with the
 // `getActiveWorkbook` / `getActiveSheet` / `getActiveRange` chain
