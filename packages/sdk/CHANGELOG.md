@@ -1,5 +1,26 @@
 # @schnsrw/casual-sheets
 
+## 0.7.0
+
+### Minor Changes
+
+- Sheet toolbar v0.7: rich format commands + read-back
+
+  Adds to the `casual.command.execute` union (host → editor):
+  - `set-font-family` ({ args.family })
+  - `set-font-size` ({ args.size })
+  - `set-text-color` / `reset-text-color` ({ args.color })
+  - `set-bg-color` / `reset-bg-color` ({ args.color })
+  - `merge` / `unmerge`
+
+  Widens `SelectionFormatStateData` (editor → host) with `fontFamily`,
+  `fontSize`, `textColor`, `bgColor` read off the active cell so hosts
+  can keep font / size pickers + colour swatches in sync without polling
+  Univer directly.
+
+  Fixes the v0.6 strikethrough command id (the bad `set-range-strike-through`
+  which doesn't exist; the canonical id is `set-range-stroke`).
+
 ## 0.6.0
 
 ### Minor Changes

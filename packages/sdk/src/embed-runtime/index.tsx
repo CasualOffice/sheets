@@ -241,17 +241,10 @@ function EmbeddedSheets({
           getActiveWorkbook(): { getActiveSheet(): SheetLike | null } | null;
         };
         transport.on({
-          onCommandExecute: ({ command }) => {
+          onCommandExecute: ({ command, args }) => {
             const id = SHEET_COMMAND_MAP[command];
             if (!id) return;
-            const params: object | undefined =
-              command === 'align-left'
-                ? { value: 'left' }
-                : command === 'align-center'
-                  ? { value: 'center' }
-                  : command === 'align-right'
-                    ? { value: 'right' }
-                    : undefined;
+            const params = buildCommandParams(command, args);
             try {
               void apiAny.executeCommand(id, params);
             } catch {
@@ -291,7 +284,7 @@ function EmbeddedSheets({
   );
 }
 
-/** Maps the small host-facing protocol union to Univer command ids the
+/** Maps the host-facing protocol union to Univer command ids the
  *  FUniver facade dispatches. Kept inline so the wire surface and the
  *  Univer integration evolve together. */
 const SHEET_COMMAND_MAP: Record<string, string> = {
@@ -300,11 +293,51 @@ const SHEET_COMMAND_MAP: Record<string, string> = {
   bold: 'sheet.command.set-range-bold',
   italic: 'sheet.command.set-range-italic',
   underline: 'sheet.command.set-range-underline',
-  strikethrough: 'sheet.command.set-range-strike-through',
+  // The canonical id is `set-range-stroke` (see sheets-ui's
+  // SetRangeStrickThroughCommand). 0.6 shipped the wrong id; fixed here.
+  strikethrough: 'sheet.command.set-range-stroke',
   'align-left': 'sheet.command.set-horizontal-text-align',
   'align-center': 'sheet.command.set-horizontal-text-align',
   'align-right': 'sheet.command.set-horizontal-text-align',
+  // v0.7 — rich format
+  'set-font-family': 'sheet.command.set-range-font-family',
+  'set-font-size': 'sheet.command.set-range-fontsize',
+  'set-text-color': 'sheet.command.set-range-text-color',
+  'reset-text-color': 'sheet.command.reset-range-text-color',
+  'set-bg-color': 'sheet.command.set-background-color',
+  'reset-bg-color': 'sheet.command.reset-background-color',
+  merge: 'sheet.command.add-worksheet-merge',
+  unmerge: 'sheet.command.remove-worksheet-merge',
 };
+
+/** Build the `params` object the Univer command expects. Most v0.6
+ *  toggles take no params (the command reads the current cell + flips
+ *  the bit). Align reads `{ value: 'left'|'center'|'right' }`, font /
+ *  size / colour read `{ value: <typed value> }`. Bad inputs are
+ *  filtered out so a stale host can't crash the iframe. */
+function buildCommandParams(
+  command: string,
+  args?: { family?: string; size?: number; color?: string },
+): object | undefined {
+  switch (command) {
+    case 'align-left':
+      return { value: 'left' };
+    case 'align-center':
+      return { value: 'center' };
+    case 'align-right':
+      return { value: 'right' };
+    case 'set-font-family':
+      return args?.family ? { value: args.family } : undefined;
+    case 'set-font-size':
+      return typeof args?.size === 'number' ? { value: args.size } : undefined;
+    case 'set-text-color':
+      return args?.color ? { value: args.color } : undefined;
+    case 'set-bg-color':
+      return args?.color ? { value: args.color } : undefined;
+    default:
+      return undefined;
+  }
+}
 
 interface CellLike {
   getFontWeight?: () => unknown;
@@ -312,6 +345,11 @@ interface CellLike {
   getUnderline?: () => unknown;
   getStrikethrough?: () => unknown;
   getHorizontalAlignment?: () => unknown;
+  getFontFamily?: () => unknown;
+  getFontSize?: () => unknown;
+  getFontColor?: () => unknown;
+  getBackground?: () => unknown;
+  getBackgroundColor?: () => unknown;
 }
 
 interface RangeLike {
@@ -333,6 +371,10 @@ function readFormatFlags(cell: unknown): {
   underline: boolean;
   strikethrough: boolean;
   align: 'left' | 'center' | 'right' | null;
+  fontFamily: string | null;
+  fontSize: number | null;
+  textColor: string | null;
+  bgColor: string | null;
 } {
   const c = cell as CellLike;
   const bold = String(c.getFontWeight?.() ?? '').toLowerCase() === 'bold';
@@ -342,7 +384,25 @@ function readFormatFlags(cell: unknown): {
   const ha = String(c.getHorizontalAlignment?.() ?? '').toLowerCase();
   const align: 'left' | 'center' | 'right' | null =
     ha === 'left' || ha === 'center' || ha === 'right' ? ha : null;
-  return { bold, italic, underline, strikethrough, align };
+  const ff = c.getFontFamily?.();
+  const fontFamily = typeof ff === 'string' && ff ? ff : null;
+  const fs = c.getFontSize?.();
+  const fontSize = typeof fs === 'number' && fs > 0 ? fs : null;
+  const tc = c.getFontColor?.();
+  const textColor = typeof tc === 'string' && tc ? tc : null;
+  const bg = c.getBackground?.() ?? c.getBackgroundColor?.();
+  const bgColor = typeof bg === 'string' && bg ? bg : null;
+  return {
+    bold,
+    italic,
+    underline,
+    strikethrough,
+    align,
+    fontFamily,
+    fontSize,
+    textColor,
+    bgColor,
+  };
 }
 
 function inferHostOrigin(): string | undefined {

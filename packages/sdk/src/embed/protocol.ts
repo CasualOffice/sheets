@@ -137,10 +137,11 @@ export interface CommandSetViewModeData {
  *  ship because the ribbon resolves IRPCChannelService at construction
  *  and that service needs a worker the SDK doesn't bundle.
  *
- *  v0.6 covers the small "always relevant" set; later versions extend
- *  the union with cell-format / sheet-management / data commands. */
+ *  v0.6 covered the toggle set; v0.7 adds the rich-format set (font,
+ *  size, colour, fill) + merge / unmerge. Arg-carrying commands read
+ *  the relevant field off `args` — every other command ignores it. */
 export interface CommandExecuteData {
-  command:
+  command: // v0.6 — toggle / nav (no args)
     | 'undo'
     | 'redo'
     | 'bold'
@@ -149,20 +150,49 @@ export interface CommandExecuteData {
     | 'strikethrough'
     | 'align-left'
     | 'align-center'
-    | 'align-right';
+    | 'align-right'
+    // v0.7 — rich format (args carry the value)
+    | 'set-font-family'
+    | 'set-font-size'
+    | 'set-text-color'
+    | 'reset-text-color'
+    | 'set-bg-color'
+    | 'reset-bg-color'
+    | 'merge'
+    | 'unmerge';
+  args?: {
+    /** Used by `set-font-family`. */
+    family?: string;
+    /** Used by `set-font-size`. Integer point size. */
+    size?: number;
+    /** Used by `set-text-color` and `set-bg-color`. Hex like `#1a73e8`. */
+    color?: string;
+  };
 }
 
 /** Editor → host: emitted whenever the selection's active cell's
  *  format flags change. Drive's toolbar mirrors this state in the
- *  button "pressed" indicators so the surface always reflects what
- *  the user would see in the cell. Light by design — only flags the
- *  toolbar needs. */
+ *  button "pressed" / value indicators so the surface always reflects
+ *  what the user would see in the cell. v0.7 widens the payload with
+ *  the rich-format read-back (fontFamily, fontSize, textColor, bgColor)
+ *  so the toolbar's font picker / size stepper / colour swatches stay
+ *  in sync without the host having to poll. */
 export interface SelectionFormatStateData {
   bold: boolean;
   italic: boolean;
   underline: boolean;
   strikethrough: boolean;
   align: 'left' | 'center' | 'right' | null;
+  /** Defined font family on the active cell, or null when the cell
+   *  inherits the workbook default. v0.7+. */
+  fontFamily: string | null;
+  /** Defined font size on the active cell, or null when the cell
+   *  inherits the workbook default. v0.7+. */
+  fontSize: number | null;
+  /** Hex text colour like `#1a73e8`, or null when default. v0.7+. */
+  textColor: string | null;
+  /** Hex background colour, or null when no fill is set. v0.7+. */
+  bgColor: string | null;
 }
 
 // ---------------------------------------------------------------
