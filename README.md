@@ -4,8 +4,8 @@
 
 **Open-source self-hosted web spreadsheet with `.xlsx` round-trip and real-time co-editing — an alternative to Google Sheets, Excel Online, and OnlyOffice you run on your own server.**
 
-[![CI](https://github.com/schnsrw/sheets/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/schnsrw/sheets/actions/workflows/ci.yml)
-[![Deploy](https://github.com/schnsrw/sheets/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/schnsrw/sheets/actions/workflows/deploy-pages.yml)
+[![CI](https://github.com/CasualOffice/sheets/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CasualOffice/sheets/actions/workflows/ci.yml)
+[![Deploy](https://github.com/CasualOffice/sheets/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/CasualOffice/sheets/actions/workflows/deploy-pages.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/schnsrw/casual-sheets?logo=docker)](https://hub.docker.com/r/schnsrw/casual-sheets)
 [![Image Size](https://img.shields.io/docker/image-size/schnsrw/casual-sheets/latest?logo=docker&label=image)](https://hub.docker.com/r/schnsrw/casual-sheets)
 [![E2E Tests](https://img.shields.io/badge/e2e-357%20passing-brightgreen?logo=playwright)](./tests/e2e)
@@ -13,7 +13,7 @@
 [![Version](https://img.shields.io/badge/version-v0.3.1-blue)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-[**Live Demo →**](https://sheet.schnsrw.live/) &nbsp;·&nbsp; [Docker Hub →](https://hub.docker.com/r/schnsrw/casual-sheets) &nbsp;·&nbsp; [Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Comparisons →](https://schnsrw.live/vs/)
+[**Live Demo →**](https://sheet.casualoffice.org/) &nbsp;·&nbsp; [Docker Hub →](https://hub.docker.com/r/schnsrw/casual-sheets) &nbsp;·&nbsp; [Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Comparisons →](https://casualoffice.org/vs/)
 
 </div>
 
@@ -22,11 +22,11 @@
 Casual Sheets is a **self-hostable, browser-based spreadsheet** that looks and behaves like Microsoft Excel — ribbon UI, formula bar, file-centric workflow — with **real-time multi-user co-editing** built in. Upload an `.xlsx` file, share a link, and edit together instantly. **No accounts, no Microsoft / Google login, no lock-in.** One Docker container, runs on a $5/mo VPS, scales to ~5 000 concurrent users on a $48/mo box (numbers [measured](./docs/LOAD_TEST.md), not hand-waved).
 
 **Compares to:**
-[Google Sheets](https://schnsrw.live/vs/sheets-vs-google-sheets/) ·
-[Excel Online](https://schnsrw.live/vs/sheets-vs-excel-online/) ·
-[OnlyOffice](https://schnsrw.live/vs/sheets-vs-onlyoffice/)
+[Google Sheets](https://casualoffice.org/vs/sheets-vs-google-sheets/) ·
+[Excel Online](https://casualoffice.org/vs/sheets-vs-excel-online/) ·
+[OnlyOffice](https://casualoffice.org/vs/sheets-vs-onlyoffice/)
 
-Built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0) — the OSS variant, **never the Pro package** — with a custom Office-style shell layered on top. Sister projects: [Casual Editor](https://github.com/schnsrw/docx) (`.docx`) and [Casual Slides](https://github.com/schnsrw/slides) (`.pptx`).
+Built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0) — the OSS variant, **never the Pro package** — with a custom Office-style shell layered on top. Sister projects: [Casual Editor](https://github.com/CasualOffice/docs) (`.docx`) and [Casual Slides](https://github.com/CasualOffice/slides) (`.pptx`).
 
 ---
 
@@ -198,15 +198,15 @@ The full env-var matrix (storage backends, networking, admin, JWT, webhooks, mor
 
 | Topic | Lives on the site at | Source in this repo |
 |---|---|---|
-| **Self-hosting overview** | [schnsrw.live/docs/sheets/self-hosting/](https://schnsrw.live/docs/sheets/self-hosting/) | [`docs/self-hosting/overview.md`](./docs/self-hosting/overview.md) |
-| Reverse-proxy recipes (nginx · Caddy · Traefik) | [/docs/sheets/self-hosting-reverse-proxy/](https://schnsrw.live/docs/sheets/self-hosting-reverse-proxy/) | [`docs/self-hosting/reverse-proxy.md`](./docs/self-hosting/reverse-proxy.md) |
-| TLS + custom domain | [/docs/sheets/self-hosting-tls/](https://schnsrw.live/docs/sheets/self-hosting-tls/) | [`docs/self-hosting/tls.md`](./docs/self-hosting/tls.md) |
-| CORS | [/docs/sheets/self-hosting-cors/](https://schnsrw.live/docs/sheets/self-hosting-cors/) | [`docs/self-hosting/cors.md`](./docs/self-hosting/cors.md) |
-| Scaling | [/docs/sheets/self-hosting-scaling/](https://schnsrw.live/docs/sheets/self-hosting-scaling/) | [`docs/self-hosting/scaling.md`](./docs/self-hosting/scaling.md) |
-| Backups | [/docs/sheets/self-hosting-backups/](https://schnsrw.live/docs/sheets/self-hosting-backups/) | [`docs/self-hosting/backups.md`](./docs/self-hosting/backups.md) |
-| **Customization overview** | [/docs/sheets/customization/](https://schnsrw.live/docs/sheets/customization/) | [`docs/customization/overview.md`](./docs/customization/overview.md) |
-| Auth — JWT, roles, permissions, features | [/docs/sheets/customization-auth/](https://schnsrw.live/docs/sheets/customization-auth/) | [`docs/customization/auth.md`](./docs/customization/auth.md) |
-| Webhooks — events, payload, signature verification | [/docs/sheets/customization-webhooks/](https://schnsrw.live/docs/sheets/customization-webhooks/) | [`docs/customization/webhooks.md`](./docs/customization/webhooks.md) |
+| **Self-hosting overview** | [casualoffice.org/docs/sheets/self-hosting/](https://casualoffice.org/docs/sheets/self-hosting/) | [`docs/self-hosting/overview.md`](./docs/self-hosting/overview.md) |
+| Reverse-proxy recipes (nginx · Caddy · Traefik) | [/docs/sheets/self-hosting-reverse-proxy/](https://casualoffice.org/docs/sheets/self-hosting-reverse-proxy/) | [`docs/self-hosting/reverse-proxy.md`](./docs/self-hosting/reverse-proxy.md) |
+| TLS + custom domain | [/docs/sheets/self-hosting-tls/](https://casualoffice.org/docs/sheets/self-hosting-tls/) | [`docs/self-hosting/tls.md`](./docs/self-hosting/tls.md) |
+| CORS | [/docs/sheets/self-hosting-cors/](https://casualoffice.org/docs/sheets/self-hosting-cors/) | [`docs/self-hosting/cors.md`](./docs/self-hosting/cors.md) |
+| Scaling | [/docs/sheets/self-hosting-scaling/](https://casualoffice.org/docs/sheets/self-hosting-scaling/) | [`docs/self-hosting/scaling.md`](./docs/self-hosting/scaling.md) |
+| Backups | [/docs/sheets/self-hosting-backups/](https://casualoffice.org/docs/sheets/self-hosting-backups/) | [`docs/self-hosting/backups.md`](./docs/self-hosting/backups.md) |
+| **Customization overview** | [/docs/sheets/customization/](https://casualoffice.org/docs/sheets/customization/) | [`docs/customization/overview.md`](./docs/customization/overview.md) |
+| Auth — JWT, roles, permissions, features | [/docs/sheets/customization-auth/](https://casualoffice.org/docs/sheets/customization-auth/) | [`docs/customization/auth.md`](./docs/customization/auth.md) |
+| Webhooks — events, payload, signature verification | [/docs/sheets/customization-webhooks/](https://casualoffice.org/docs/sheets/customization-webhooks/) | [`docs/customization/webhooks.md`](./docs/customization/webhooks.md) |
 
 The admin panel at **`/admin`** is the runtime UI for everything above — branding, storage backend selection, networking, room limits, auth providers (JWT live; OIDC + SAML stubbed for v0.2), webhook subscriptions, base path. Enable it by setting `CASUAL_ADMIN_USERNAME` + `CASUAL_ADMIN_PASSWORD` + `CASUAL_JWT_SECRET` on the container.
 
@@ -265,7 +265,7 @@ Then open `http://127.0.0.1:5273/r/<any-room-id>` in two tabs.
 Bootstrap the fork on a fresh checkout (full clone — depth-1 won't carry the history needed for fork commits):
 
 ```sh
-git clone git@github.com:schnsrw/univer-revamp.git vendor/univer
+git clone git@github.com:CasualOffice/univer-revamp.git vendor/univer
 ```
 
 ---
@@ -301,4 +301,4 @@ git clone git@github.com:schnsrw/univer-revamp.git vendor/univer
 
 Apache-2.0. See [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
 
-Our fork of Univer (`vendor/univer/` → [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp)) retains its upstream Apache-2.0 license. It is gitignored from this repo and is not part of this project's build today; modifications land in the fork repo independently. See [`docs/UNIVER_FORK_PERF.md`](./docs/UNIVER_FORK_PERF.md) for the active perf-improvement plan.
+Our fork of Univer (`vendor/univer/` → [`CasualOffice/univer-revamp`](https://github.com/CasualOffice/univer-revamp)) retains its upstream Apache-2.0 license. It is gitignored from this repo and is not part of this project's build today; modifications land in the fork repo independently. See [`docs/UNIVER_FORK_PERF.md`](./docs/UNIVER_FORK_PERF.md) for the active perf-improvement plan.
