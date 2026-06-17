@@ -19,11 +19,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./shell": {
-      "types": "./dist/shell.d.ts",
-      "import": "./dist/shell.js",
-      "require": "./dist/shell.cjs"
-    },
     "./signing": {
       "types": "./dist/signing.d.ts",
       "import": "./dist/signing.js",
@@ -168,7 +163,6 @@
     "casual-sheets"
   ],
   "dependencies": {
-    "@schnsrw/design-system": "link:../../../design-system",
     "exceljs": "4.4.0"
   }
 }

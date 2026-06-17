@@ -342,9 +342,6 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@schnsrw/design-system':
-        specifier: link:../../../design-system
-        version: link:../../../design-system
       '@univerjs/core':
         specifier: link:../../vendor/univer-revamp/packages/core
         version: link:../../vendor/univer-revamp/packages/core
