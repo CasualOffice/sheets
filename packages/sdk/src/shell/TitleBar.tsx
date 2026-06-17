@@ -78,7 +78,9 @@ export function TitleBar({
           ...style,
         }}
       >
-        <div style={{ height: 52, display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+        <div
+          style={{ height: 52, display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}
+        >
           <div
             style={{
               flex: 1,
@@ -125,9 +127,7 @@ export function TitleBar({
               onClick={onToggleTheme}
             />
           )}
-          {onShare && (
-            <Button variant="primary" size="sm" icon="group_add" onClick={onShare} />
-          )}
+          {onShare && <Button variant="primary" size="sm" icon="group_add" onClick={onShare} />}
         </div>
         {menus.length > 0 && (
           <div
@@ -234,9 +234,7 @@ export function TitleBar({
         )}
       </div>
 
-      {wide && onOpenPalette && (
-        <SearchPill onOpen={onOpenPalette} />
-      )}
+      {wide && onOpenPalette && <SearchPill onOpen={onOpenPalette} />}
 
       <div
         style={{
@@ -292,10 +290,7 @@ function MenuBar({ menus }: { menus: MenuDescriptor[] }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       {open && (
-        <div
-          onClick={() => setOpen(null)}
-          style={{ position: 'fixed', inset: 0, zIndex: 55 }}
-        />
+        <div onClick={() => setOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 55 }} />
       )}
       {menus.map((m) => (
         <div key={m.label} style={{ position: 'relative' }}>
@@ -320,9 +315,7 @@ function MenuBar({ menus }: { menus: MenuDescriptor[] }) {
             {m.label}
           </button>
           {open === m.label && (
-            <div
-              style={{ position: 'absolute', top: '100%', left: 0, marginTop: 3, zIndex: 60 }}
-            >
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 3, zIndex: 60 }}>
               <Menu
                 width={244}
                 items={m.items.map((entry) => {

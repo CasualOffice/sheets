@@ -12,8 +12,8 @@ the embed runtime.
   (the embed runtime and Drive both use them).
 - **Embed runtime imports `@schnsrw/design-system/tokens.css`** so the
   iframe paints in the canonical token vocabulary (Inter + JetBrains Mono
-  + Manrope + Material Symbols Outlined; teal accent for Sheets, cyan for
-  the docs editor variant).
+  - Manrope + Material Symbols Outlined; teal accent for Sheets, cyan for
+    the docs editor variant).
 - **Theme command wired** — the runtime now subscribes to
   `casual.command.set.theme` and flips `data-theme` on `<html>` to
   `light` / `dark`, or clears it for `system`. Hosts (like Drive) can

@@ -89,7 +89,10 @@ export function Toolbar({
   ...cb
 }: ToolbarProps) {
   const fontFamilyOptions: SelectOption[] = fontFamilies.map((f) => ({ value: f, label: f }));
-  const fontSizeOptions: SelectOption[] = fontSizes.map((n) => ({ value: String(n), label: String(n) }));
+  const fontSizeOptions: SelectOption[] = fontSizes.map((n) => ({
+    value: String(n),
+    label: String(n),
+  }));
   const numfmtOptions: SelectOption[] = numberFormats.map((n) => ({ value: n, label: n }));
 
   return (

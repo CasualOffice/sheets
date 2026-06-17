@@ -20,8 +20,7 @@ export interface StatusBarProps {
   style?: CSSProperties;
 }
 
-const formatNumber = (n: number): string =>
-  n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const formatNumber = (n: number): string => n.toLocaleString('en-US', { maximumFractionDigits: 2 });
 
 export function StatusBar({
   mode = 'Solo',
@@ -77,21 +76,11 @@ export function StatusBar({
           fontVariantNumeric: 'tabular-nums',
         }}
       >
-        {stats.sum != null && (
-          <Stat label="Sum" value={formatNumber(stats.sum)} />
-        )}
-        {!compact && stats.avg != null && (
-          <Stat label="Avg" value={formatNumber(stats.avg)} />
-        )}
-        {!compact && stats.numCount != null && (
-          <Stat label="Num" value={String(stats.numCount)} />
-        )}
-        {stats.count != null && (
-          <Stat label="Count" value={String(stats.count)} />
-        )}
-        {!compact && (
-          <ZoomSlider zoom={zoom} onChange={onZoomChange} />
-        )}
+        {stats.sum != null && <Stat label="Sum" value={formatNumber(stats.sum)} />}
+        {!compact && stats.avg != null && <Stat label="Avg" value={formatNumber(stats.avg)} />}
+        {!compact && stats.numCount != null && <Stat label="Num" value={String(stats.numCount)} />}
+        {stats.count != null && <Stat label="Count" value={String(stats.count)} />}
+        {!compact && <ZoomSlider zoom={zoom} onChange={onZoomChange} />}
       </div>
     </div>
   );
@@ -108,17 +97,18 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ZoomSlider({
-  zoom,
-  onChange,
-}: {
-  zoom: number;
-  onChange?: (next: number) => void;
-}) {
+function ZoomSlider({ zoom, onChange }: { zoom: number; onChange?: (next: number) => void }) {
   const pct = Math.max(0, Math.min(200, zoom));
   const left = (pct / 200) * 100;
   return (
-    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: onChange ? 'pointer' : 'default' }}>
+    <label
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        cursor: onChange ? 'pointer' : 'default',
+      }}
+    >
       <span
         style={{
           width: 64,
