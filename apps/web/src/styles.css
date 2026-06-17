@@ -1,7 +1,14 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   Design tokens — Office-inspired. Centralised so the whole UI restyles
-   from this file alone.
+   Phase 1 (design system adoption): canonical tokens, font-faces, and
+   motion utilities come from @schnsrw/design-system. The :root block
+   below KEEPS app-specific overrides for tokens whose values still
+   diverge from the design ramp (e.g. surface-alt #eef0f4 vs the
+   design's #f4f6f9); these win because they cascade after the import.
+   Tokens that sheet didn't previously define (--glow-accent,
+   --ease-spring, --motion-slow, --suite-*) inherit from the import.
    ───────────────────────────────────────────────────────────────────────── */
+@import '@schnsrw/design-system/tokens.css';
+
 :root {
   /* Brand */
   --color-accent: #0e7490; /* deep teal-cyan */
