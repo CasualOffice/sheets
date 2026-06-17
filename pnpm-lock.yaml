@@ -5,7 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@schnsrw/design-system': link:../design-system
   '@univerjs/action-recorder': link:vendor/univer-revamp/packages/action-recorder
   '@univerjs/core': link:vendor/univer-revamp/packages/core
   '@univerjs/data-validation': link:vendor/univer-revamp/packages/data-validation
@@ -343,9 +342,6 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@schnsrw/design-system':
-        specifier: link:../../../design-system
-        version: link:../../../design-system
       '@univerjs/core':
         specifier: link:../../vendor/univer-revamp/packages/core
         version: link:../../vendor/univer-revamp/packages/core
@@ -416,6 +412,10 @@ importers:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+    optionalDependencies:
+      '@schnsrw/design-system':
+        specifier: link:../../../design-system
+        version: link:../../../design-system
 
 packages:
 
