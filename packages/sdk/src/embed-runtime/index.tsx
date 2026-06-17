@@ -308,6 +308,16 @@ const SHEET_COMMAND_MAP: Record<string, string> = {
   'reset-bg-color': 'sheet.command.reset-background-color',
   merge: 'sheet.command.add-worksheet-merge',
   unmerge: 'sheet.command.remove-worksheet-merge',
+  // v0.8 — number formats + freeze + wrap
+  'numfmt-currency': 'sheet.command.numfmt.set.currency',
+  'numfmt-percent': 'sheet.command.numfmt.set.percent',
+  'numfmt-add-decimal': 'sheet.command.numfmt.add.decimal.command',
+  'numfmt-subtract-decimal': 'sheet.command.numfmt.subtract.decimal.command',
+  'numfmt-custom': 'sheet.command.numfmt.set.numfmt',
+  'wrap-toggle': 'sheet.command.set-text-wrap',
+  'freeze-first-row': 'sheet.command.set-first-row-frozen',
+  'freeze-first-column': 'sheet.command.set-first-column-frozen',
+  'freeze-none': 'sheet.command.set-selection-frozen',
 };
 
 /** Build the `params` object the Univer command expects. Most v0.6
@@ -317,7 +327,7 @@ const SHEET_COMMAND_MAP: Record<string, string> = {
  *  filtered out so a stale host can't crash the iframe. */
 function buildCommandParams(
   command: string,
-  args?: { family?: string; size?: number; color?: string },
+  args?: { family?: string; size?: number; color?: string; pattern?: string },
 ): object | undefined {
   switch (command) {
     case 'align-left':
@@ -334,6 +344,11 @@ function buildCommandParams(
       return args?.color ? { value: args.color } : undefined;
     case 'set-bg-color':
       return args?.color ? { value: args.color } : undefined;
+    case 'numfmt-custom':
+      return args?.pattern ? { value: args.pattern } : undefined;
+    case 'wrap-toggle':
+      // The set-text-wrap command toggles when called with no args.
+      return undefined;
     default:
       return undefined;
   }

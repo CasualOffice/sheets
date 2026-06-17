@@ -1,5 +1,20 @@
 # @schnsrw/casual-sheets
 
+## 0.8.0
+
+### Minor Changes
+
+- Sheet toolbar v0.8: number formats, freeze, wrap.
+
+  Adds to the `casual.command.execute` union:
+  - `numfmt-currency`, `numfmt-percent` — single-tap apply
+  - `numfmt-add-decimal`, `numfmt-subtract-decimal` — decimal stepper
+  - `numfmt-custom { args.pattern }` — Excel-style pattern (e.g. `"d-mmm-yy"`, `"#,##0.00"`)
+  - `wrap-toggle` — flip text wrap on the selection
+  - `freeze-first-row`, `freeze-first-column`, `freeze-none` — header freezing
+
+  All map onto canonical Univer command ids (`sheet.command.numfmt.set.currency`, `sheet.command.set-text-wrap`, `sheet.command.set-first-row-frozen`, etc.). No new format-state read-back yet — the host knows what it just dispatched, which is enough for v0.8's UX.
+
 ## 0.7.0
 
 ### Minor Changes

@@ -159,7 +159,17 @@ export interface CommandExecuteData {
     | 'set-bg-color'
     | 'reset-bg-color'
     | 'merge'
-    | 'unmerge';
+    | 'unmerge'
+    // v0.8 — number formats + freeze + wrap
+    | 'numfmt-currency'
+    | 'numfmt-percent'
+    | 'numfmt-add-decimal'
+    | 'numfmt-subtract-decimal'
+    | 'numfmt-custom'
+    | 'wrap-toggle'
+    | 'freeze-first-row'
+    | 'freeze-first-column'
+    | 'freeze-none';
   args?: {
     /** Used by `set-font-family`. */
     family?: string;
@@ -167,6 +177,9 @@ export interface CommandExecuteData {
     size?: number;
     /** Used by `set-text-color` and `set-bg-color`. Hex like `#1a73e8`. */
     color?: string;
+    /** Used by `numfmt-custom`. The Excel-style format string, e.g.
+     *  `"#,##0.00"`, `"$#,##0"`, `"0.00%"`, `"d-mmm-yy"`. v0.8+. */
+    pattern?: string;
   };
 }
 
