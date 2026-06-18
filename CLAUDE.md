@@ -21,8 +21,11 @@ A web-based **Excel-equivalent** with real-time collaborative editing, built on 
 ## Required reading before substantive work
 
 1. [`PLAN.md`](./PLAN.md) — phased plan and estimates.
-2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — how the pieces fit.
-3. [`docs/RESEARCH.md`](./docs/RESEARCH.md) — Univer technical brief with file path references.
+2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — how the pieces fit today.
+3. [`docs/SDK_ARCHITECTURE.md`](./docs/SDK_ARCHITECTURE.md) — **target** architecture: this repo's primary purpose is an embeddable editor SDK other engines attach to (the Excalidraw model: package *is* the editor, opt-in collab server, thin localStorage host).
+4. [`docs/SDK_MIGRATION_PIPELINE.md`](./docs/SDK_MIGRATION_PIPELINE.md) — phased path to that target (Phase 0 = Univer 0.25).
+5. [`docs/RESEARCH.md`](./docs/RESEARCH.md) — Univer technical brief with file path references.
+6. [`SKILLS.md`](./SKILLS.md) — build/test/verify/release/fork workflows. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution + verification gate.
 
 ## Hard rules
 
@@ -37,7 +40,8 @@ A web-based **Excel-equivalent** with real-time collaborative editing, built on 
 ### Pin Univer version
 
 - Per the research brief, Univer's `IWorkbookData` shape and plugin contracts change across minor versions, with strict version validation between plugins.
-- Pick one version (start: latest stable on npm, currently 0.22.x line) and pin **all** `@univerjs/*` packages to the exact same version. Never mix.
+- Pin **all** `@univerjs/*` packages to the exact same version. Never mix. Current pin: **0.24.0** (`apps/web/package.json` + `packages/sdk/package.json`).
+- **0.25 upgrade (Phase 0, in progress):** the vendored submodule `vendor/univer-revamp` (remote `CasualOffice/univer-revamp`) sits on branch `casual-sheets/0.24` with **six** custom commits on top of the `v0.24.0` release — 2 feature (paste-merge preservation, filtered-dropdown visibility) + 4 perf (font-cache LRU, merge-range row-bucket index, header hit-test index, setStylesCache span). No 0.25 exists in the fork. Upstream `dream-num/univer` tags `v0.25.0` (`36a3884c`). Upgrade = branch `casual-sheets/0.25` from upstream `v0.25.0`, cherry-pick the six commits, bump every pin `0.24.0 → 0.25.0`, re-audit the `pnpm.overrides` block, retest. See `docs/SDK_MIGRATION_PIPELINE.md` Phase 0.
 
 ### Use the collab hook Univer designed for it
 
@@ -54,6 +58,11 @@ A web-based **Excel-equivalent** with real-time collaborative editing, built on 
 ### Don't reach for Univer Pro
 
 If you find a feature is missing (charts, pivots, xlsx import/export), the answer is **build it on OSS or defer it**, not "use the Pro package." Pro is closed-source and out of scope.
+
+### Verify UI changes before pushing
+
+- **Every UI change must be driven through Playwright** (run the real app, observe the affected screen/flow) **and pass CI before it reaches origin.** Typecheck + unit alone is never sufficient for UI — regressions don't show up there, and the polished-UX bar requires seeing the rendered result.
+- Before any `git push`: run full local validation — `lint` + `format:check` + `typecheck` + `test:unit` + `build`, plus the relevant `test:e2e` Playwright config — then wait for green CI. Work in small batches (3–4 commits) so each verified slice is independently pushable.
 
 ## Stack conventions (once code starts)
 
@@ -104,6 +113,18 @@ Subsequent phases (also shipped):
   ActivityPill.
 - **CI**: green. Go toolchain pinned 1.25. Smoke + audit specs run
   on every PR.
+
+### Active direction (2026-06-19): SDK-first restructure
+
+The repo's primary purpose is an **embeddable editor SDK** other engines
+attach to — Excalidraw's model. Direction locked: promote the full
+editor into `@casualoffice/sheets` (today it only boots a minimal
+Univer; the real editor lives in `apps/web/src/UniverSheet.tsx` +
+`apps/web/src/shell/`), make storage (localStorage default) + collab
+opt-in adapters, slim `apps/web` to a thin SDK consumer, adopt
+`@schnsrw/design-system`. Sequenced behind a Univer 0.24→0.25 fork
+upgrade (Phase 0). Full plan: `docs/SDK_ARCHITECTURE.md` +
+`docs/SDK_MIGRATION_PIPELINE.md`.
 
 When in doubt about what's shipped vs. pending, check `docs/UX_AUDIT.md`
 §5 (last refreshed 2026-06-12) — it tracks each item with the

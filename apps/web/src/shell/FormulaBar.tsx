@@ -476,6 +476,12 @@ export function FormulaBar() {
     // if there's no recognizable ref under the caret.
     if (e.key === 'F4' && editing) {
       e.preventDefault();
+      // Univer 0.25 binds F4 → RepeatLastActionCommand at document level with a
+      // `whenSheetEditorFocused` precondition, which is true while the formula bar
+      // drives the background cell editor. Stop the native event so only our
+      // ref-under-caret cycling runs (Excel parity) — React's synthetic
+      // stopPropagation alone won't reach Univer's native listener.
+      e.nativeEvent.stopImmediatePropagation();
       const input = inputRef.current;
       if (!input) return;
       const caret = input.selectionStart ?? (draft ?? '').length;

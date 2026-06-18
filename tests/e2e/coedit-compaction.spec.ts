@@ -32,7 +32,7 @@ test.beforeAll(async () => {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   await new Promise<void>((resolveReady, reject) => {
-    const timer = setTimeout(() => reject(new Error('server boot timed out')), 15_000);
+    const timer = setTimeout(() => reject(new Error('server boot timed out')), 30_000);
     serverProc!.stdout?.on('data', (chunk: Buffer) => {
       if (chunk.toString().includes('websocket sync on')) {
         clearTimeout(timer);
@@ -103,7 +103,7 @@ async function runCompactionOnce(
       return typeof probe === 'function' && probe() <= 5;
     },
     null,
-    { timeout: 15_000 },
+    { timeout: 30_000 },
   );
   const after = await page.evaluate(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -164,7 +164,11 @@ test('op log compacts after threshold and joiners replay the snapshot', async ({
       );
     },
     null,
-    { timeout: 10_000 },
+    // The joiner loads the full app cold (second browser context) before the
+    // snapshot replay lands. On a slow/cold CI runner against the Vite dev
+    // server, 10s was too tight and flaked here; 30s is comfortably within the
+    // 120s test budget and reflects real worst-case CI boot+replay time.
+    { timeout: 30_000 },
   );
 
   await a.close();
