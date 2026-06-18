@@ -28,6 +28,13 @@ Upload `.xlsx` → open in browser → multiple users edit together, anonymously
 
 ## Phase status
 
+> **Active direction (2026-06-19):** the next body of work is the **SDK-first
+> restructure** — promote the full editor into `@casualoffice/sheets`, make
+> storage/collab opt-in adapters, slim `apps/web` to a thin host (the Excalidraw model),
+> behind a Univer 0.24→0.25 fork upgrade. Plan: [`docs/SDK_ARCHITECTURE.md`](./docs/SDK_ARCHITECTURE.md)
+> + [`docs/SDK_MIGRATION_PIPELINE.md`](./docs/SDK_MIGRATION_PIPELINE.md). The phases below
+> are the shipped product history.
+
 ### ✅ Phase 0 — Spikes (complete)
 All three technical risks proved out:
 - **Spike A (Yjs bridge)** — two browsers, edits visible in < 250 ms.
