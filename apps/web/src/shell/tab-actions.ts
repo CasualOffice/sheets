@@ -1,6 +1,6 @@
 import type { FUniver } from '@univerjs/core/facade';
 import type { FRange } from '@univerjs/sheets/facade';
-import { ensurePluginByName } from '../univer/lazy-plugins';
+import { ensurePluginByName } from '@casualoffice/sheets/univer';
 import {
   activateRange,
   activeRange,

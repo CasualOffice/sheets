@@ -19,7 +19,7 @@ import { useSetUniverAPI } from './use-univer';
 import { useLoading } from './loading-context';
 import { extendContextMenu } from './context-menu-extensions';
 import { registerPlugins } from './univer/plugins';
-import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from './univer/lazy-plugins';
+import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '@casualoffice/sheets/univer';
 import { installDevHelpers } from './univer/dev-helpers';
 import { disableUniverZoomShortcut } from './univer/disable-zoom-shortcut';
 import { registerPasteMergeHook } from './univer/paste-merge-hook';

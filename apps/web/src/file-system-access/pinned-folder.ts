@@ -49,7 +49,7 @@ export async function pinFolder(): Promise<PinnedRecord | null> {
   if (!isFsaSupported()) return null;
   try {
     const handle = await (
-      window as Window & {
+      window as unknown as {
         showDirectoryPicker: (opts?: {
           mode?: 'read' | 'readwrite';
         }) => Promise<FileSystemDirectoryHandle>;

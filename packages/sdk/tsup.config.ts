@@ -48,7 +48,10 @@ const mainConfig = defineConfig({
   dts: true,
   splitting: false,
   sourcemap: true,
-  clean: true,
+  // Cleaning is done once via the `build` script (rmSync dist) before tsup runs.
+  // Per-config clean:true here would race the parallel univer/embed configs and
+  // wipe their freshly-emitted dist files (e.g. univer.d.ts).
+  clean: false,
   // Externalise everything except the worker's own deps. The library
   // entries (index/signing/embed/sheets) keep react/univer external as
   // the consumer's bundler resolves them at the host site. The parser
@@ -69,6 +72,26 @@ const mainConfig = defineConfig({
   platform: 'browser',
   target: 'es2020',
   plugins: [rewriteParserWorkerUrl],
+});
+
+// `./univer` — the shared Univer wiring (lazy plugin loader, Phase 1 Batch 1).
+// MUST externalise @univerjs/react: unlike the parser worker (which bundles
+// @univerjs/core because the iframe has no module map), this entry is imported
+// by a host app that already ships its own @univerjs from the fork. Bundling
+// Univer here would put a SECOND copy in the host's graph and break redi DI with
+// duplicate-Identifier (Service2-suffix) errors. So everything @univerjs stays
+// external and resolves to the host's single copy at runtime — including the
+// lazy `import('@univerjs/...')` calls, which the host's bundler code-splits.
+const univerLibConfig = defineConfig({
+  entry: { univer: 'src/univer/index.ts' },
+  format: ['esm', 'cjs'],
+  dts: true,
+  splitting: false,
+  sourcemap: true,
+  clean: false,
+  external: ['react', 'react-dom', /^@univerjs\//],
+  platform: 'browser',
+  target: 'es2020',
 });
 
 // Embed-runtime — the in-iframe entry. Doc 16 §6. One self-contained
@@ -160,4 +183,4 @@ const embedRuntimeConfig = defineConfig({
   ],
 });
 
-export default [mainConfig, embedRuntimeConfig];
+export default [mainConfig, univerLibConfig, embedRuntimeConfig];

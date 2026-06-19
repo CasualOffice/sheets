@@ -2,7 +2,7 @@ import { CustomRangeType, type IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import { ISheetClipboardService } from '@univerjs/sheets-ui';
 import { SheetTableService } from '@univerjs/sheets-table';
-import { ensurePluginByName, type LazyPluginGroup } from './lazy-plugins';
+import { ensurePluginByName, type LazyPluginGroup } from '@casualoffice/sheets/univer';
 
 type HyperLinkDump = {
   subUnitId: string;

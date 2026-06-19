@@ -1,6 +1,6 @@
 import { BorderStyleTypes, BorderType } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
-import { ensurePluginByName } from '../univer/lazy-plugins';
+import { ensurePluginByName } from '@casualoffice/sheets/univer';
 
 /**
  * Imperative command dispatchers for Home-tab buttons.

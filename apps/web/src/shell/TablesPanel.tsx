@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
-import { ensurePluginByName } from '../univer/lazy-plugins';
+import { ensurePluginByName } from '@casualoffice/sheets/univer';
 import { Icon } from './Icon';
 import { TABLE_THEMES, formatAsTable, type TableThemeId } from './tab-actions';
 import { useBusy } from '../busy-context';

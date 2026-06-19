@@ -43,6 +43,11 @@
       "import": "./dist/xlsx.js",
       "require": "./dist/xlsx.cjs"
     },
+    "./univer": {
+      "types": "./dist/univer.d.ts",
+      "import": "./dist/univer.js",
+      "require": "./dist/univer.cjs"
+    },
     "./embed-runtime": {
       "import": "./dist/embed/embed-runtime.js"
     },
@@ -54,7 +59,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsup",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx 'src/**/*.unit.test.ts'"
   },
@@ -63,26 +68,44 @@
     "@univerjs/design": "^0.25.0",
     "@univerjs/docs": "^0.25.0",
     "@univerjs/docs-ui": "^0.25.0",
+    "@univerjs/drawing": "^0.25.0",
+    "@univerjs/drawing-ui": "^0.25.0",
     "@univerjs/engine-formula": "^0.25.0",
     "@univerjs/engine-render": "^0.25.0",
+    "@univerjs/find-replace": "^0.25.0",
     "@univerjs/sheets": "^0.25.0",
+    "@univerjs/sheets-conditional-formatting": "^0.25.0",
+    "@univerjs/sheets-conditional-formatting-ui": "^0.25.0",
+    "@univerjs/sheets-data-validation": "^0.25.0",
+    "@univerjs/sheets-data-validation-ui": "^0.25.0",
+    "@univerjs/sheets-drawing": "^0.25.0",
+    "@univerjs/sheets-drawing-ui": "^0.25.0",
+    "@univerjs/sheets-filter": "^0.25.0",
+    "@univerjs/sheets-filter-ui": "^0.25.0",
+    "@univerjs/sheets-find-replace": "^0.25.0",
     "@univerjs/sheets-formula": "^0.25.0",
     "@univerjs/sheets-formula-ui": "^0.25.0",
+    "@univerjs/sheets-hyper-link": "^0.25.0",
+    "@univerjs/sheets-hyper-link-ui": "^0.25.0",
+    "@univerjs/sheets-note": "^0.25.0",
+    "@univerjs/sheets-note-ui": "^0.25.0",
     "@univerjs/sheets-numfmt": "^0.25.0",
     "@univerjs/sheets-numfmt-ui": "^0.25.0",
+    "@univerjs/sheets-sort": "^0.25.0",
+    "@univerjs/sheets-sort-ui": "^0.25.0",
+    "@univerjs/sheets-table": "^0.25.0",
+    "@univerjs/sheets-table-ui": "^0.25.0",
+    "@univerjs/sheets-thread-comment": "^0.25.0",
+    "@univerjs/sheets-thread-comment-ui": "^0.25.0",
     "@univerjs/sheets-ui": "^0.25.0",
     "@univerjs/themes": "^0.25.0",
+    "@univerjs/thread-comment": "^0.25.0",
+    "@univerjs/thread-comment-ui": "^0.25.0",
     "@univerjs/ui": "^0.25.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    },
     "@univerjs/core": {
       "optional": true
     },
@@ -95,13 +118,49 @@
     "@univerjs/docs-ui": {
       "optional": true
     },
+    "@univerjs/drawing": {
+      "optional": true
+    },
+    "@univerjs/drawing-ui": {
+      "optional": true
+    },
     "@univerjs/engine-formula": {
       "optional": true
     },
     "@univerjs/engine-render": {
       "optional": true
     },
+    "@univerjs/find-replace": {
+      "optional": true
+    },
     "@univerjs/sheets": {
+      "optional": true
+    },
+    "@univerjs/sheets-conditional-formatting": {
+      "optional": true
+    },
+    "@univerjs/sheets-conditional-formatting-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-data-validation": {
+      "optional": true
+    },
+    "@univerjs/sheets-data-validation-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-drawing": {
+      "optional": true
+    },
+    "@univerjs/sheets-drawing-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-filter": {
+      "optional": true
+    },
+    "@univerjs/sheets-filter-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-find-replace": {
       "optional": true
     },
     "@univerjs/sheets-formula": {
@@ -110,10 +169,40 @@
     "@univerjs/sheets-formula-ui": {
       "optional": true
     },
+    "@univerjs/sheets-hyper-link": {
+      "optional": true
+    },
+    "@univerjs/sheets-hyper-link-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-note": {
+      "optional": true
+    },
+    "@univerjs/sheets-note-ui": {
+      "optional": true
+    },
     "@univerjs/sheets-numfmt": {
       "optional": true
     },
     "@univerjs/sheets-numfmt-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-sort": {
+      "optional": true
+    },
+    "@univerjs/sheets-sort-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-table": {
+      "optional": true
+    },
+    "@univerjs/sheets-table-ui": {
+      "optional": true
+    },
+    "@univerjs/sheets-thread-comment": {
+      "optional": true
+    },
+    "@univerjs/sheets-thread-comment-ui": {
       "optional": true
     },
     "@univerjs/sheets-ui": {
@@ -122,7 +211,19 @@
     "@univerjs/themes": {
       "optional": true
     },
+    "@univerjs/thread-comment": {
+      "optional": true
+    },
+    "@univerjs/thread-comment-ui": {
+      "optional": true
+    },
     "@univerjs/ui": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
       "optional": true
     }
   },
@@ -134,15 +235,39 @@
     "@univerjs/design": "0.25.0",
     "@univerjs/docs": "0.25.0",
     "@univerjs/docs-ui": "0.25.0",
+    "@univerjs/drawing": "0.25.0",
+    "@univerjs/drawing-ui": "0.25.0",
     "@univerjs/engine-formula": "0.25.0",
     "@univerjs/engine-render": "0.25.0",
+    "@univerjs/find-replace": "0.25.0",
     "@univerjs/sheets": "0.25.0",
+    "@univerjs/sheets-conditional-formatting": "0.25.0",
+    "@univerjs/sheets-conditional-formatting-ui": "0.25.0",
+    "@univerjs/sheets-data-validation": "0.25.0",
+    "@univerjs/sheets-data-validation-ui": "0.25.0",
+    "@univerjs/sheets-drawing": "0.25.0",
+    "@univerjs/sheets-drawing-ui": "0.25.0",
+    "@univerjs/sheets-filter": "0.25.0",
+    "@univerjs/sheets-filter-ui": "0.25.0",
+    "@univerjs/sheets-find-replace": "0.25.0",
     "@univerjs/sheets-formula": "0.25.0",
     "@univerjs/sheets-formula-ui": "0.25.0",
+    "@univerjs/sheets-hyper-link": "0.25.0",
+    "@univerjs/sheets-hyper-link-ui": "0.25.0",
+    "@univerjs/sheets-note": "0.25.0",
+    "@univerjs/sheets-note-ui": "0.25.0",
     "@univerjs/sheets-numfmt": "0.25.0",
     "@univerjs/sheets-numfmt-ui": "0.25.0",
+    "@univerjs/sheets-sort": "0.25.0",
+    "@univerjs/sheets-sort-ui": "0.25.0",
+    "@univerjs/sheets-table": "0.25.0",
+    "@univerjs/sheets-table-ui": "0.25.0",
+    "@univerjs/sheets-thread-comment": "0.25.0",
+    "@univerjs/sheets-thread-comment-ui": "0.25.0",
     "@univerjs/sheets-ui": "0.25.0",
     "@univerjs/themes": "0.25.0",
+    "@univerjs/thread-comment": "0.25.0",
+    "@univerjs/thread-comment-ui": "0.25.0",
     "@univerjs/ui": "0.25.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

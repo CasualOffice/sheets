@@ -359,33 +359,105 @@ importers:
       '@univerjs/docs-ui':
         specifier: link:../../vendor/univer-revamp/packages/docs-ui
         version: link:../../vendor/univer-revamp/packages/docs-ui
+      '@univerjs/drawing':
+        specifier: link:../../vendor/univer-revamp/packages/drawing
+        version: link:../../vendor/univer-revamp/packages/drawing
+      '@univerjs/drawing-ui':
+        specifier: link:../../vendor/univer-revamp/packages/drawing-ui
+        version: link:../../vendor/univer-revamp/packages/drawing-ui
       '@univerjs/engine-formula':
         specifier: link:../../vendor/univer-revamp/packages/engine-formula
         version: link:../../vendor/univer-revamp/packages/engine-formula
       '@univerjs/engine-render':
         specifier: link:../../vendor/univer-revamp/packages/engine-render
         version: link:../../vendor/univer-revamp/packages/engine-render
+      '@univerjs/find-replace':
+        specifier: link:../../vendor/univer-revamp/packages/find-replace
+        version: link:../../vendor/univer-revamp/packages/find-replace
       '@univerjs/sheets':
         specifier: link:../../vendor/univer-revamp/packages/sheets
         version: link:../../vendor/univer-revamp/packages/sheets
+      '@univerjs/sheets-conditional-formatting':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-conditional-formatting
+        version: link:../../vendor/univer-revamp/packages/sheets-conditional-formatting
+      '@univerjs/sheets-conditional-formatting-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-conditional-formatting-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-conditional-formatting-ui
+      '@univerjs/sheets-data-validation':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-data-validation
+        version: link:../../vendor/univer-revamp/packages/sheets-data-validation
+      '@univerjs/sheets-data-validation-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-data-validation-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-data-validation-ui
+      '@univerjs/sheets-drawing':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-drawing
+        version: link:../../vendor/univer-revamp/packages/sheets-drawing
+      '@univerjs/sheets-drawing-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-drawing-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-drawing-ui
+      '@univerjs/sheets-filter':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-filter
+        version: link:../../vendor/univer-revamp/packages/sheets-filter
+      '@univerjs/sheets-filter-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-filter-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-filter-ui
+      '@univerjs/sheets-find-replace':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-find-replace
+        version: link:../../vendor/univer-revamp/packages/sheets-find-replace
       '@univerjs/sheets-formula':
         specifier: link:../../vendor/univer-revamp/packages/sheets-formula
         version: link:../../vendor/univer-revamp/packages/sheets-formula
       '@univerjs/sheets-formula-ui':
         specifier: link:../../vendor/univer-revamp/packages/sheets-formula-ui
         version: link:../../vendor/univer-revamp/packages/sheets-formula-ui
+      '@univerjs/sheets-hyper-link':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-hyper-link
+        version: link:../../vendor/univer-revamp/packages/sheets-hyper-link
+      '@univerjs/sheets-hyper-link-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-hyper-link-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-hyper-link-ui
+      '@univerjs/sheets-note':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-note
+        version: link:../../vendor/univer-revamp/packages/sheets-note
+      '@univerjs/sheets-note-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-note-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-note-ui
       '@univerjs/sheets-numfmt':
         specifier: link:../../vendor/univer-revamp/packages/sheets-numfmt
         version: link:../../vendor/univer-revamp/packages/sheets-numfmt
       '@univerjs/sheets-numfmt-ui':
         specifier: link:../../vendor/univer-revamp/packages/sheets-numfmt-ui
         version: link:../../vendor/univer-revamp/packages/sheets-numfmt-ui
+      '@univerjs/sheets-sort':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-sort
+        version: link:../../vendor/univer-revamp/packages/sheets-sort
+      '@univerjs/sheets-sort-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-sort-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-sort-ui
+      '@univerjs/sheets-table':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-table
+        version: link:../../vendor/univer-revamp/packages/sheets-table
+      '@univerjs/sheets-table-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-table-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-table-ui
+      '@univerjs/sheets-thread-comment':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-thread-comment
+        version: link:../../vendor/univer-revamp/packages/sheets-thread-comment
+      '@univerjs/sheets-thread-comment-ui':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-thread-comment-ui
+        version: link:../../vendor/univer-revamp/packages/sheets-thread-comment-ui
       '@univerjs/sheets-ui':
         specifier: link:../../vendor/univer-revamp/packages/sheets-ui
         version: link:../../vendor/univer-revamp/packages/sheets-ui
       '@univerjs/themes':
         specifier: link:../../vendor/univer-revamp/packages/themes
         version: link:../../vendor/univer-revamp/packages/themes
+      '@univerjs/thread-comment':
+        specifier: link:../../vendor/univer-revamp/packages/thread-comment
+        version: link:../../vendor/univer-revamp/packages/thread-comment
+      '@univerjs/thread-comment-ui':
+        specifier: link:../../vendor/univer-revamp/packages/thread-comment-ui
+        version: link:../../vendor/univer-revamp/packages/thread-comment-ui
       '@univerjs/ui':
         specifier: link:../../vendor/univer-revamp/packages/ui
         version: link:../../vendor/univer-revamp/packages/ui

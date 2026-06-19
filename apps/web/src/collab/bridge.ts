@@ -8,7 +8,7 @@ import {
 } from '@univerjs/core';
 import { SetRangeValuesUndoMutationFactory } from '@univerjs/sheets';
 import { deepRewriteUnitId, rewriteJson1OpPathUnitId } from './bridge-helpers';
-import { ensurePluginByName, type LazyPluginGroup } from '../univer/lazy-plugins';
+import { ensurePluginByName, type LazyPluginGroup } from '@casualoffice/sheets/univer';
 import {
   classifyReplayError,
   pushDeadLetter,
