@@ -34,6 +34,7 @@ overrides:
   '@univerjs/sheets-filter': link:vendor/univer-revamp/packages/sheets-filter
   '@univerjs/sheets-filter-ui': link:vendor/univer-revamp/packages/sheets-filter-ui
   '@univerjs/sheets-find-replace': link:vendor/univer-revamp/packages/sheets-find-replace
+  '@univerjs/sheets-crosshair-highlight': link:vendor/univer-revamp/packages/sheets-crosshair-highlight
   '@univerjs/sheets-formula': link:vendor/univer-revamp/packages/sheets-formula
   '@univerjs/sheets-formula-ui': link:vendor/univer-revamp/packages/sheets-formula-ui
   '@univerjs/sheets-hyper-link': link:vendor/univer-revamp/packages/sheets-hyper-link
@@ -42,6 +43,7 @@ overrides:
   '@univerjs/sheets-note-ui': link:vendor/univer-revamp/packages/sheets-note-ui
   '@univerjs/sheets-numfmt': link:vendor/univer-revamp/packages/sheets-numfmt
   '@univerjs/sheets-numfmt-ui': link:vendor/univer-revamp/packages/sheets-numfmt-ui
+  '@univerjs/sheets-zen-editor': link:vendor/univer-revamp/packages/sheets-zen-editor
   '@univerjs/sheets-sort': link:vendor/univer-revamp/packages/sheets-sort
   '@univerjs/sheets-sort-ui': link:vendor/univer-revamp/packages/sheets-sort-ui
   '@univerjs/sheets-table': link:vendor/univer-revamp/packages/sheets-table
@@ -176,15 +178,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@casualoffice/sheets':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@e965/xlsx':
         specifier: 0.20.3
         version: 0.20.3
       '@hocuspocus/provider':
         specifier: ^2.15.2
         version: 2.15.3(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
-      '@casualoffice/sheets':
-        specifier: workspace:*
-        version: link:../../packages/sdk
       '@univerjs/core':
         specifier: link:../../vendor/univer-revamp/packages/core
         version: link:../../vendor/univer-revamp/packages/core
@@ -224,6 +226,9 @@ importers:
       '@univerjs/sheets-conditional-formatting-ui':
         specifier: link:../../vendor/univer-revamp/packages/sheets-conditional-formatting-ui
         version: link:../../vendor/univer-revamp/packages/sheets-conditional-formatting-ui
+      '@univerjs/sheets-crosshair-highlight':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-crosshair-highlight
+        version: link:../../vendor/univer-revamp/packages/sheets-crosshair-highlight
       '@univerjs/sheets-data-validation':
         specifier: link:../../vendor/univer-revamp/packages/sheets-data-validation
         version: link:../../vendor/univer-revamp/packages/sheets-data-validation
@@ -290,6 +295,9 @@ importers:
       '@univerjs/sheets-ui':
         specifier: link:../../vendor/univer-revamp/packages/sheets-ui
         version: link:../../vendor/univer-revamp/packages/sheets-ui
+      '@univerjs/sheets-zen-editor':
+        specifier: link:../../vendor/univer-revamp/packages/sheets-zen-editor
+        version: link:../../vendor/univer-revamp/packages/sheets-zen-editor
       '@univerjs/themes':
         specifier: link:../../vendor/univer-revamp/packages/themes
         version: link:../../vendor/univer-revamp/packages/themes

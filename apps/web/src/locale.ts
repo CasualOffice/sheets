@@ -21,6 +21,8 @@ import UniverThreadCommentUIEnUS from '@univerjs/thread-comment-ui/locale/en-US'
 import UniverSheetsThreadCommentUIEnUS from '@univerjs/sheets-thread-comment-ui/locale/en-US';
 import UniverDrawingUIEnUS from '@univerjs/drawing-ui/locale/en-US';
 import UniverSheetsDrawingUIEnUS from '@univerjs/sheets-drawing-ui/locale/en-US';
+import UniverSheetsCrosshairHighlightEnUS from '@univerjs/sheets-crosshair-highlight/locale/en-US';
+import UniverSheetsZenEditorEnUS from '@univerjs/sheets-zen-editor/locale/en-US';
 import UniverDocsUIEnUS from '@univerjs/docs-ui/locale/en-US';
 import UniverUIEnUS from '@univerjs/ui/locale/en-US';
 
@@ -43,6 +45,8 @@ const enUS = Tools.deepMerge(
   UniverSheetsThreadCommentUIEnUS,
   UniverDrawingUIEnUS,
   UniverSheetsDrawingUIEnUS,
+  UniverSheetsCrosshairHighlightEnUS,
+  UniverSheetsZenEditorEnUS,
   UniverDocsUIEnUS,
   UniverUIEnUS,
 );

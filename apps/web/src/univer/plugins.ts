@@ -12,6 +12,8 @@ import { UniverSheetsFormulaPlugin, CalculationMode } from '@univerjs/sheets-for
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
+import { UniverSheetsCrosshairHighlightPlugin } from '@univerjs/sheets-crosshair-highlight';
+import { UniverSheetsZenEditorPlugin } from '@univerjs/sheets-zen-editor';
 
 /**
  * Register the EAGER plugin set. These are the plugins every workbook
@@ -59,4 +61,12 @@ export function registerPlugins(univer: Univer, container: HTMLElement): void {
   univer.registerPlugin(UniverSheetsFormulaUIPlugin);
   univer.registerPlugin(UniverSheetsNumfmtPlugin);
   univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
+  // Excel-parity UX extras (Univer OSS plugins, surfaced via the right-click
+  // context menu — no custom-shell wiring needed):
+  //  - crosshair highlight: View → highlight the active row/column (off by
+  //    default; toggled from the context-menu footer).
+  //  - zen editor: immersive full-screen cell editor for long content,
+  //    opened from the cell context menu.
+  univer.registerPlugin(UniverSheetsCrosshairHighlightPlugin);
+  univer.registerPlugin(UniverSheetsZenEditorPlugin);
 }

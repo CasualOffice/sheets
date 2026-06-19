@@ -23,3 +23,5 @@ import '@univerjs/sheets-thread-comment-ui/lib/index.css';
 import '@univerjs/thread-comment-ui/lib/index.css';
 import '@univerjs/drawing-ui/lib/index.css';
 import '@univerjs/sheets-drawing-ui/lib/index.css';
+import '@univerjs/sheets-crosshair-highlight/lib/index.css';
+import '@univerjs/sheets-zen-editor/lib/index.css';

@@ -72,8 +72,15 @@ editors), Vue/web-component adapters. The doc editor is **not** Univer-based.
 **Exit criteria:** each wired plugin verified via Playwright (Excel-parity behavior),
 CI green. Crosshair + zen-editor first.
 
-**Milestone M0.5:** crosshair-highlight + zen-editor shipped; graphics/watermark/
-action-recorder evaluated.
+**Status (2026-06-19):** ✅ crosshair-highlight + zen-editor wired (eager, context-menu
+triggers) — `tests/e2e/univer-extras.spec.ts`. ⏸️ graphics/watermark/action-recorder
+**deferred**: not drop-ins. `sheets-graphics` is a render primitive with no standalone
+UI (overlaps our custom sparklines); `watermark` + `action-recorder` target Univer's
+ribbon (which we hide) and need custom-shell triggers + product UX — each becomes its own
+scoped feature PR.
+
+**Milestone M0.5:** ✅ crosshair-highlight + zen-editor shipped; the other three scoped
+out to dedicated PRs.
 
 ## Phase 1 — Promote the full editor into the SDK  *(G1, G2)*
 
