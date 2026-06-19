@@ -26,6 +26,7 @@ A web-based **Excel-equivalent** with real-time collaborative editing, built on 
 4. [`docs/SDK_MIGRATION_PIPELINE.md`](./docs/SDK_MIGRATION_PIPELINE.md) — phased path to that target (Phase 0 = Univer 0.25).
 5. [`docs/RESEARCH.md`](./docs/RESEARCH.md) — Univer technical brief with file path references.
 6. [`SKILLS.md`](./SKILLS.md) — build/test/verify/release/fork workflows. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution + verification gate.
+7. [`docs/RELEASING.md`](./docs/RELEASING.md) — the **two independent release lines**: Docker app (`casualoffice/sheets`, `vX.Y.Z` tags, latest 0.3.1) vs npm SDK (`@casualoffice/sheets`, Changesets, latest 0.8.0). They version separately — don't conflate them.
 
 ## Hard rules
 

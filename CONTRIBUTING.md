@@ -49,6 +49,14 @@ Smaller batches keep red intervals short and root-cause obvious.
 - Keep PRs scoped to one batch; link the doc/phase they advance
   (`docs/SDK_MIGRATION_PIPELINE.md`).
 
+## Releases
+
+This repo has **two independent release lines** — the **Docker app**
+(`casualoffice/sheets`, `vX.Y.Z` git tags) and the **npm SDK**
+(`@casualoffice/sheets`, Changesets). They version separately and don't track
+each other. Read [`docs/RELEASING.md`](./docs/RELEASING.md) before cutting or
+citing a release — it's the source of truth for which version means what.
+
 ## Where things live
 
 | Area | Path |
@@ -59,3 +67,4 @@ Smaller batches keep red intervals short and root-cause obvious.
 | Univer fork (submodule) | `vendor/univer-revamp` |
 | Architecture (current / target) | `docs/ARCHITECTURE.md` / `docs/SDK_ARCHITECTURE.md` |
 | Migration plan | `docs/SDK_MIGRATION_PIPELINE.md` |
+| Release model (Docker vs SDK) | `docs/RELEASING.md` |
