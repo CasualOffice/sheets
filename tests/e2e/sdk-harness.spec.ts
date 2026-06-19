@@ -72,6 +72,32 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(out.ok).toBe(true);
   });
 
+  test('onChange streams a debounced snapshot after an edit', async ({ page }) => {
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const before = w.__sdkHarnessChangeCount ?? 0;
+      w.__sdkHarnessAPI.univer
+        .getActiveWorkbook()
+        .getActiveSheet()
+        .getRange(5, 5)
+        .setValue('changed');
+      // Default debounce is 400ms; wait past it, then read the captured snapshot.
+      for (let i = 0; i < 30; i++) {
+        if ((w.__sdkHarnessChangeCount ?? 0) > before) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const snap = w.__sdkHarnessLastSnapshot;
+      const cell = snap?.sheets?.[Object.keys(snap.sheets)[0]]?.cellData?.[5]?.[5];
+      return {
+        fired: (w.__sdkHarnessChangeCount ?? 0) > before,
+        value: cell?.v,
+      };
+    });
+    expect(out.fired).toBe(true);
+    expect(out.value).toBe('changed');
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

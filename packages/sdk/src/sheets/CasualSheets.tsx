@@ -27,10 +27,13 @@
 
 import { useEffect, useRef, type CSSProperties } from 'react';
 import {
+  ICommandService,
   LocaleType,
   LogLevel,
   Univer,
   UniverInstanceType,
+  type ICommandInfo,
+  type IExecutionOptions,
   type IWorkbookData,
   type ILocales,
 } from '@univerjs/core';
@@ -61,6 +64,17 @@ export interface CasualSheetsProps {
    *  surface (snapshot I/O, xlsx import, selection, command dispatch).
    *  The raw FUniver facade is on `api.univer` as the escape hatch. */
   onReady?: (api: CasualSheetsAPI) => void;
+  /** Debounced stream of workbook snapshots, emitted after edits
+   *  settle. This is the "host persists it" half of the Excalidraw
+   *  model — the editor stays storage-unaware and the host writes the
+   *  snapshot wherever it likes (localStorage, server, …). Driven by
+   *  Univer's mutation hook (`onMutationExecutedForCollab`), not UI
+   *  events, so it captures every edit including programmatic ones.
+   *  May fire for background/structural mutations too; treat each call
+   *  as "current state, persist if you care". */
+  onChange?: (snapshot: IWorkbookData) => void;
+  /** Debounce window for `onChange`, in ms. Default 400. */
+  onChangeDebounceMs?: number;
   /** Locale identifier. Defaults to `LocaleType.EN_US`. */
   locale?: LocaleType;
   /** Locale string bundle. Optional — Univer's default English
@@ -102,6 +116,8 @@ const DEFAULT_UI = {
 export function CasualSheets({
   initialData,
   onReady,
+  onChange,
+  onChangeDebounceMs = 400,
   locale = LocaleType.EN_US,
   locales,
   logLevel = LogLevel.WARN,
@@ -112,6 +128,12 @@ export function CasualSheets({
   testId = 'casual-sheets',
 }: CasualSheetsProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // Keep the latest onChange callable without re-subscribing (the effect
+  // mounts once). The subscription itself is only wired when onChange was
+  // present at mount.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const hasOnChange = useRef(!!onChange).current;
 
   useEffect(() => {
     const container = hostRef.current;
@@ -150,7 +172,33 @@ export function CasualSheets({
     const api = createCasualSheetsAPI(FUniver.newAPI(univer));
     onReady?.(api);
 
+    // Debounced snapshot stream → onChange. Subscribed AFTER createUnit so the
+    // initial unit-creation mutations don't fire a spurious first emit. Uses the
+    // mutation hook (CLAUDE.md hard rule), never UI events.
+    let changeTimer: ReturnType<typeof setTimeout> | null = null;
+    let changeSub: { dispose: () => void } | undefined;
+    if (hasOnChange) {
+      const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
+        ._injector;
+      const cmdSvc = injector?.get(ICommandService) as
+        | {
+            onMutationExecutedForCollab: (
+              l: (info: ICommandInfo, options?: IExecutionOptions) => void,
+            ) => { dispose: () => void };
+          }
+        | undefined;
+      changeSub = cmdSvc?.onMutationExecutedForCollab(() => {
+        if (changeTimer) clearTimeout(changeTimer);
+        changeTimer = setTimeout(() => {
+          const snap = api.getSnapshot();
+          if (snap) onChangeRef.current?.(snap);
+        }, onChangeDebounceMs);
+      });
+    }
+
     return () => {
+      if (changeTimer) clearTimeout(changeTimer);
+      changeSub?.dispose();
       // Defer disposal off the React render phase — Univer owns its
       // own React root, and a synchronous unmount mid-render warns
       // and leaves the canvas detached.
