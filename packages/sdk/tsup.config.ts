@@ -21,10 +21,7 @@ const rewriteParserWorkerUrl: Plugin = {
   // worker plugin output.
   async renderChunk(code) {
     if (!code.includes('parser.worker.ts')) return null;
-    const rewritten = code.replace(
-      /["']\.\/parser\.worker\.ts["']/g,
-      `'./parser.worker.js'`,
-    );
+    const rewritten = code.replace(/["']\.\/parser\.worker\.ts["']/g, `'./parser.worker.js'`);
     return { code: rewritten };
   },
 };
@@ -42,36 +39,47 @@ const mainConfig = defineConfig({
     sheets: 'src/sheets/index.ts',
     styles: 'src/styles.ts',
     xlsx: 'src/xlsx/index.ts',
-    'parser.worker': 'src/xlsx/parser.worker.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
   splitting: false,
   sourcemap: true,
   // Cleaning is done once via the `build` script (rmSync dist) before tsup runs.
-  // Per-config clean:true here would race the parallel univer/embed configs and
-  // wipe their freshly-emitted dist files (e.g. univer.d.ts).
+  // Per-config clean:true here would race the parallel worker/univer/embed
+  // configs and wipe their freshly-emitted dist files (e.g. univer.d.ts).
   clean: false,
-  // Externalise everything except the worker's own deps. The library
-  // entries (index/signing/embed/sheets) keep react/univer external as
-  // the consumer's bundler resolves them at the host site. The parser
-  // worker is a special case — it has no module map at runtime in the
-  // iframe context, so its imports must be bundled. Specifying
-  // `@univerjs/core` in `noExternal` overrides the regex match.
+  // Library entries (index/signing/embed/sheets/xlsx) MUST externalise @univerjs
+  // (+ react). These are imported by host apps that already ship their own
+  // @univerjs (the fork). Bundling Univer here would put a SECOND redi/@univerjs
+  // copy in the host graph → "[redi]: loading scripts of redi more than once" +
+  // LocaleService failures (rendering CasualSheets in a Univer-having host broke
+  // exactly this way). The host resolves @univerjs to its single copy. exceljs is
+  // a real `dependencies` entry — externalised by default so the consumer
+  // resolves one copy too. Only the workers (separate configs below) bundle these
+  // because a module worker has no import map at runtime.
   external: ['react', 'react-dom', /^@univerjs\//],
-  // The parser worker imports exceljs (a `dependencies` entry,
-  // externalised by default) + `@univerjs/core` (for LocaleType +
-  // CustomRangeType enums). Both bundle into the worker. Without
-  // this, the module-script worker closes immediately at load time
-  // because the browser can't resolve the bare specifier — and
-  // `worker.onerror` fires with an empty message that the parse
-  // pipeline mistakenly attributes to OOM.
-  noExternal: ['exceljs', /^@univerjs\//],
-  // Browser target — so exceljs picks its browser fork and doesn't
-  // pull in Node's `stream` / `buffer` / `util` built-ins.
   platform: 'browser',
   target: 'es2020',
+  // Rewrites the './parser.worker.ts' URL in the xlsx code to the built '.js'
+  // sibling emitted by workerConfig.
   plugins: [rewriteParserWorkerUrl],
+});
+
+// Workers — bundled, separate from the library entries. A module worker has no
+// import map at runtime (iframe / Worker context), so its imports MUST be inlined.
+// This is the one place @univerjs + exceljs are bundled; the library entries
+// above keep them external to avoid duplicating redi in the host.
+const workerConfig = defineConfig({
+  entry: { 'parser.worker': 'src/xlsx/parser.worker.ts' },
+  format: ['esm', 'cjs'],
+  dts: false,
+  splitting: false,
+  sourcemap: true,
+  clean: false,
+  external: ['react', 'react-dom'],
+  noExternal: ['exceljs', /^@univerjs\//],
+  platform: 'browser',
+  target: 'es2020',
 });
 
 // `./univer` — the shared Univer wiring (lazy plugin loader, Phase 1 Batch 1).
@@ -183,4 +191,4 @@ const embedRuntimeConfig = defineConfig({
   ],
 });
 
-export default [mainConfig, univerLibConfig, embedRuntimeConfig];
+export default [mainConfig, workerConfig, univerLibConfig, embedRuntimeConfig];
