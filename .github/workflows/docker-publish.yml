@@ -151,6 +151,13 @@ jobs:
         # (the README rendered on the Hub page). Idempotent — re-runs
         # on every publish so the description stays in lockstep with
         # whatever the latest release ships.
+        #
+        # Best-effort: the image is already pushed by the time this runs. The
+        # Docker Hub *description* API needs account-password-level auth, not the
+        # push access token, so with a PAT it returns 403 Forbidden — which must
+        # NOT fail the publish. Keep it non-blocking; fix the README sync
+        # separately (a token with description scope, or run it manually).
+        continue-on-error: true
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
