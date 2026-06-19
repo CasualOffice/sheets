@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CasualSheets } from '@casualoffice/sheets/sheets';
 import '@casualoffice/sheets/styles';
 import { emptyWorkbook } from '../snapshot';
+import { LOCALES } from '../locale';
 import type { FUniver } from '@univerjs/core/facade';
 
 /**
@@ -23,6 +24,7 @@ export function SdkHarness() {
     <div data-testid="sdk-harness" style={{ position: 'fixed', inset: 0 }}>
       <CasualSheets
         initialData={data}
+        locales={LOCALES}
         onReady={(api: FUniver) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessAPI = api;

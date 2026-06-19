@@ -123,32 +123,21 @@ export function CasualSheets({
     const uiOpts = { ...DEFAULT_UI, ...ui, container };
 
     univer.registerPlugin(UniverRenderEnginePlugin);
-    // Formula plugins use `notExecuteFormula: true` so they don't try
-    // to spin up an UniverRPCMainThreadPlugin worker — which the SDK
-    // doesn't bundle. apps/web's chain (the reference) wires a real
-    // RPC formula worker; embed consumers can opt into that in a
-    // future revision by passing their own `plugins` extension.
-    //
-    // `UniverSheetsFormulaUIPlugin` was dropped from this chain
-    // because its mount path resolves `IRPCChannelService` via
-    // Univer's DI, and with no RPC main-thread plugin registered the
-    // resolve fails with "[redi]: Expect 1 dependency item(s) for
-    // id IRPCChannelService but get 0" — a console error that the
-    // strict iframe verify suite caught. Cells remain editable
-    // without the formula-bar autocomplete UI.
-    univer.registerPlugin(UniverFormulaEnginePlugin, { notExecuteFormula: true });
+    // Formula compute runs on the MAIN THREAD (no RPC worker). The library build
+    // externalises @univerjs (see tsup.config.ts), so the host provides a single
+    // redi/@univerjs copy — the duplicate-redi that previously made the formula
+    // plugins fail (and which the SDK worked around by dropping them) is gone.
+    // apps/web offloads compute to a worker for perf on huge sheets, but a worker
+    // shipped inside a published package is brittle to bundle in arbitrary hosts;
+    // main-thread keeps the SDK editor self-contained. SDK restructure Batch 2.
+    univer.registerPlugin(UniverFormulaEnginePlugin);
     univer.registerPlugin(UniverUIPlugin, uiOpts);
     univer.registerPlugin(UniverDocsPlugin);
     univer.registerPlugin(UniverDocsUIPlugin);
-    univer.registerPlugin(UniverSheetsPlugin, { notExecuteFormula: true });
+    univer.registerPlugin(UniverSheetsPlugin);
     univer.registerPlugin(UniverSheetsUIPlugin);
-    // UniverSheetsFormulaPlugin + UniverSheetsFormulaUIPlugin both
-    // resolve IRPCChannelService at construction. With no
-    // UniverRPCMainThreadPlugin registered (the SDK doesn't ship a
-    // formula worker) Univer's DI throws "[redi]: Expect 1 dependency
-    // item(s) for id IRPCChannelService". Cells stay editable without
-    // these — formula computation is the lost capability, which the
-    // 0.5.x SDK already disables via notExecuteFormula:true.
+    univer.registerPlugin(UniverSheetsFormulaPlugin);
+    univer.registerPlugin(UniverSheetsFormulaUIPlugin);
     univer.registerPlugin(UniverSheetsNumfmtPlugin);
     univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
 

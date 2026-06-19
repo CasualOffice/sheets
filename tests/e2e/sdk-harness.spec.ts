@@ -20,23 +20,25 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
 
   test('boots and renders the grid (clean DI, no duplicate Univer)', async ({ page }) => {
     await expect(page.getByTestId('sdk-harness')).toBeVisible();
-    // Univer renders the grid onto a <canvas> a frame or two after onReady; its
-    // presence means the plugin graph constructed without a redi throw.
-    await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 });
+    // Univer renders the grid onto a sized <canvas> a frame or two after onReady;
+    // a non-zero-size canvas means the render engine + plugin graph constructed
+    // with no redi throw. (Don't use .first()/toBeVisible — the formula UI adds
+    // 0-size overlay canvases that aren't the grid.)
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('canvas')).some((c) => c.clientWidth > 0),
+      null,
+      { timeout: 30_000 },
+    );
   });
 
-  // Enabled by Batch 2b (wire the formula worker + RPC into CasualSheets). The
-  // SDK editor currently ships with the formula engine disabled
-  // (notExecuteFormula:true; the formula plugins are dropped to avoid the
-  // IRPCChannelService DI throw), so =1+2 stays uncomputed until then.
-  test.fixme('formula engine computes (=1+2 → 3)', async ({ page }) => {
+  test('formula engine computes (=1+2 → 3)', async ({ page }) => {
     const result = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const api = (window as any).__sdkHarnessAPI;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ws: any = api.getActiveWorkbook().getActiveSheet();
       ws.getRange(0, 0).setValue({ f: '=1+2' });
-      // Formula compute runs through the worker — poll for the result.
+      // Main-thread compute is near-synchronous, but poll to be safe.
       for (let i = 0; i < 100; i++) {
         const v = ws.getRange(0, 0).getValue();
         if (v === 3 || v === '3') return v;
