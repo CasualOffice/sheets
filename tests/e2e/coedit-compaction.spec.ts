@@ -18,7 +18,14 @@ import { waitForUniver } from './_helpers';
  */
 
 test.describe.configure({ mode: 'serial', retries: 3 });
-test.setTimeout(120_000);
+// This spec drives a heavy collab flow (220 mutations → op-log compaction →
+// a second browser context replaying the snapshot) against the Vite dev server
+// under 2-worker CI contention. The per-step waits below are deliberately
+// generous: the flow is correct (passes locally in ~6s and on faster CI runs)
+// but on a slow/contended runner any single step can drift past a tight budget,
+// which is what made this the lone flaky failure in main's e2e job. Give the
+// whole test plenty of room rather than tuning one wait at a time.
+test.setTimeout(360_000);
 
 const SERVER_PORT = 3060;
 const WS_URL = `ws://127.0.0.1:${SERVER_PORT}/yjs`;
@@ -32,7 +39,7 @@ test.beforeAll(async () => {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   await new Promise<void>((resolveReady, reject) => {
-    const timer = setTimeout(() => reject(new Error('server boot timed out')), 30_000);
+    const timer = setTimeout(() => reject(new Error('server boot timed out')), 60_000);
     serverProc!.stdout?.on('data', (chunk: Buffer) => {
       if (chunk.toString().includes('websocket sync on')) {
         clearTimeout(timer);
@@ -83,7 +90,7 @@ async function runCompactionOnce(
       return typeof probe === 'function' && probe() >= 200;
     },
     null,
-    { timeout: 30_000 },
+    { timeout: 90_000 },
   );
   const before = await page.evaluate(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,7 +110,7 @@ async function runCompactionOnce(
       return typeof probe === 'function' && probe() <= 5;
     },
     null,
-    { timeout: 30_000 },
+    { timeout: 90_000 },
   );
   const after = await page.evaluate(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,7 +175,7 @@ test('op log compacts after threshold and joiners replay the snapshot', async ({
     // snapshot replay lands. On a slow/cold CI runner against the Vite dev
     // server, 10s was too tight and flaked here; 30s is comfortably within the
     // 120s test budget and reflects real worst-case CI boot+replay time.
-    { timeout: 30_000 },
+    { timeout: 90_000 },
   );
 
   await a.close();
