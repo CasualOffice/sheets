@@ -1,6 +1,7 @@
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { AdminApp } from './admin/AdminApp';
+import { SdkHarness } from './sdk-harness/SdkHarness';
 import './styles.css';
 
 // Pathname-based routing — mirrors the home/collab pattern in App.tsx.
@@ -9,6 +10,10 @@ import './styles.css';
 // and editor reloads the page, which is fine because the admin panel
 // is configuration, not a hot path.
 const isAdminRoute = window.location.pathname.startsWith('/admin');
+// Dev/test-only: mount the SDK's <CasualSheets> editor in isolation so Playwright
+// can exercise the published component directly (the app otherwise renders its own
+// UniverSheet). See apps/web/src/sdk-harness/SdkHarness.tsx.
+const isSdkHarness = window.location.pathname === '/sdk-harness';
 
 // Note: React.StrictMode is intentionally NOT used.
 // Univer mounts its own internal React root inside the container we hand it.
@@ -18,5 +23,5 @@ const isAdminRoute = window.location.pathname.startsWith('/admin');
 // same pattern most heavy editor SDKs (Monaco, Univer, Lexical with portals)
 // document. Restore StrictMode only at child boundaries that don't host Univer.
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  isAdminRoute ? <AdminApp /> : <App />,
+  isSdkHarness ? <SdkHarness /> : isAdminRoute ? <AdminApp /> : <App />,
 );
