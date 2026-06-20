@@ -374,6 +374,9 @@ importers:
       '@univerjs/find-replace':
         specifier: link:../../vendor/univer-revamp/packages/find-replace
         version: link:../../vendor/univer-revamp/packages/find-replace
+      '@univerjs/rpc':
+        specifier: link:../../vendor/univer-revamp/packages/rpc
+        version: link:../../vendor/univer-revamp/packages/rpc
       '@univerjs/sheets':
         specifier: link:../../vendor/univer-revamp/packages/sheets
         version: link:../../vendor/univer-revamp/packages/sheets
