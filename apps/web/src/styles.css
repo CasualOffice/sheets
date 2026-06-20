@@ -763,11 +763,13 @@ button {
   font-weight: var(--weight-medium, 500);
   color: var(--color-text);
   background: var(--color-surface);
-  border: 1px solid var(--color-focus-ring);
+  border: 1px solid var(--color-accent);
   border-radius: var(--radius-md);
   padding: 2px var(--space-3);
   min-width: 220px;
   outline: none;
+  /* DS input focus signature: soft 3px accent-soft glow (Phase 4). */
+  box-shadow: var(--glow-accent);
 }
 
 .titlebar__spacer {
@@ -813,8 +815,9 @@ button {
   align-items: center;
   gap: 6px;
   padding: 4px 10px 4px 6px;
-  border-radius: 999px;
-  background: var(--color-surface-alt);
+  border-radius: var(--radius-pill);
+  /* DS Pill neutral well (Phase 4). */
+  background: var(--color-toolbar-pill);
   color: var(--color-text);
   font: inherit;
   font-size: 12px;
@@ -2279,10 +2282,12 @@ button {
   font: inherit;
   color: var(--color-text);
   background: var(--color-surface);
-  border: 1px solid var(--color-focus-ring);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
   outline: none;
   min-width: 80px;
+  /* DS input focus signature: soft 3px accent-soft glow (Phase 4). */
+  box-shadow: var(--glow-accent);
 }
 
 .sheet-tabs__add {
