@@ -224,6 +224,12 @@ function EmbeddedSheets({
       key={viewMode}
       initialData={data}
       ui={ui}
+      // The embed runtime is bundled as ONE self-contained file (tsup
+      // `noExternal: /.*/`). Lazy plugins would emit per-feature dynamic
+      // chunks into dist/embed/, breaking that single-file deployment, so the
+      // iframe ships the minimal editor. Hosts that need feature plugins use
+      // the React `<CasualSheets>` component directly (lazyPlugins defaults on).
+      lazyPlugins={false}
       onReady={(api) => {
         // Wire host → editor command.execute (Drive's custom toolbar
         // calls this for bold / italic / undo / …). Maps the small

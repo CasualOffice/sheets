@@ -7,10 +7,13 @@
  * `CasualSheetsAPI` imperative ref via `onReady` (raw FUniver facade
  * available at `api.univer`).
  *
+ * Feature plugins (conditional formatting, data validation, drawings,
+ * sort, filter, hyperlinks, tables, comments, find/replace) load lazily
+ * by default (`lazyPlugins`): eagerly before mount for whatever the
+ * snapshot already uses, idle-loaded otherwise. Pass `lazyPlugins={false}`
+ * for the minimal editor.
+ *
  * Intentionally NOT included (host can layer on top via FUniver):
- *   - Lazy plugin loading (conditional formatting, drawings, sort,
- *     filter, hyperlinks, tables, comments, find/replace, …). Host
- *     calls `univer.registerPlugin(...)` after `onReady`.
  *   - Formula compute via Web Worker — `notExecuteFormula: false`
  *     is the default; the formula engine runs on the main thread.
  *     Host wires `UniverRPCMainThreadPlugin` + a worker URL itself
@@ -53,6 +56,7 @@ import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
+import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
 
 export interface CasualSheetsProps {
   /** Workbook snapshot to mount. Read once on initial mount; change
@@ -75,6 +79,14 @@ export interface CasualSheetsProps {
   onChange?: (snapshot: IWorkbookData) => void;
   /** Debounce window for `onChange`, in ms. Default 400. */
   onChangeDebounceMs?: number;
+  /** Lazy-load the feature plugins (conditional formatting, data
+   *  validation, hyperlinks, notes, tables, comments, drawings, sort,
+   *  filter, find/replace). Default `true`: plugins whose data is in
+   *  `initialData` load eagerly before mount (so nothing is dropped on
+   *  open), the rest idle-load after first paint. Set `false` for the
+   *  minimal editor (render + formula + numfmt only) — the embed-iframe
+   *  build does this to stay a single self-contained bundle. */
+  lazyPlugins?: boolean;
   /** Locale identifier. Defaults to `LocaleType.EN_US`. */
   locale?: LocaleType;
   /** Locale string bundle. Optional — Univer's default English
@@ -118,6 +130,7 @@ export function CasualSheets({
   onReady,
   onChange,
   onChangeDebounceMs = 400,
+  lazyPlugins = true,
   locale = LocaleType.EN_US,
   locales,
   logLevel = LogLevel.WARN,
@@ -167,38 +180,66 @@ export function CasualSheets({
     univer.registerPlugin(UniverSheetsNumfmtPlugin);
     univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
 
-    univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialData);
+    // Register the lazy-loader's holder so the eager/idle loaders can reach this
+    // univer. CasualSheets uses its own (bundled) copy of the loader — the
+    // exported `@casualoffice/sheets/univer` is @internal and only the host app's
+    // legacy UniverSheet consumes it, so there's no cross-instance state to share.
+    if (lazyPlugins) setUniverForLazyLoad(univer);
 
-    const api = createCasualSheetsAPI(FUniver.newAPI(univer));
-    onReady?.(api);
-
-    // Debounced snapshot stream → onChange. Subscribed AFTER createUnit so the
-    // initial unit-creation mutations don't fire a spurious first emit. Uses the
-    // mutation hook (CLAUDE.md hard rule), never UI events.
+    let cancelled = false;
     let changeTimer: ReturnType<typeof setTimeout> | null = null;
     let changeSub: { dispose: () => void } | undefined;
-    if (hasOnChange) {
-      const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
-        ._injector;
-      const cmdSvc = injector?.get(ICommandService) as
-        | {
-            onMutationExecutedForCollab: (
-              l: (info: ICommandInfo, options?: IExecutionOptions) => void,
-            ) => { dispose: () => void };
-          }
-        | undefined;
-      changeSub = cmdSvc?.onMutationExecutedForCollab(() => {
-        if (changeTimer) clearTimeout(changeTimer);
-        changeTimer = setTimeout(() => {
-          const snap = api.getSnapshot();
-          if (snap) onChangeRef.current?.(snap);
-        }, onChangeDebounceMs);
-      });
-    }
+
+    void (async () => {
+      // Eager-load any feature plugin whose data already lives in initialData
+      // (CF rules, tables, hyperlinks, …) BEFORE createUnit — Univer's resource
+      // manager silently drops keys for plugins that aren't registered when it
+      // reads the snapshot. Skipped entirely when lazyPlugins is false.
+      if (lazyPlugins) {
+        await eagerLoadForSnapshot(univer, initialData);
+        if (cancelled) return;
+      }
+
+      univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialData);
+
+      const api = createCasualSheetsAPI(FUniver.newAPI(univer));
+      onReady?.(api);
+
+      // Debounced snapshot stream → onChange. Subscribed AFTER createUnit so the
+      // initial unit-creation mutations don't fire a spurious first emit. Uses the
+      // mutation hook (CLAUDE.md hard rule), never UI events.
+      if (hasOnChange) {
+        const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
+          ._injector;
+        const cmdSvc = injector?.get(ICommandService) as
+          | {
+              onMutationExecutedForCollab: (
+                l: (info: ICommandInfo, options?: IExecutionOptions) => void,
+              ) => { dispose: () => void };
+            }
+          | undefined;
+        changeSub = cmdSvc?.onMutationExecutedForCollab(() => {
+          if (changeTimer) clearTimeout(changeTimer);
+          changeTimer = setTimeout(() => {
+            const snap = api.getSnapshot();
+            if (snap) onChangeRef.current?.(snap);
+          }, onChangeDebounceMs);
+        });
+        // If we unmounted during the eager-load await, cleanup already ran with
+        // changeSub still undefined — dispose this late subscription.
+        if (cancelled) changeSub?.dispose();
+      }
+
+      // Idle-load the remaining feature plugins so Insert / Data / Format actions
+      // are ready when the user reaches them.
+      if (lazyPlugins) idleLoadAll(univer);
+    })();
 
     return () => {
+      cancelled = true;
       if (changeTimer) clearTimeout(changeTimer);
       changeSub?.dispose();
+      if (lazyPlugins) setUniverForLazyLoad(null);
       // Defer disposal off the React render phase — Univer owns its
       // own React root, and a synchronous unmount mid-render warns
       // and leaves the canvas detached.

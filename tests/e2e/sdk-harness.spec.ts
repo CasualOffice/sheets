@@ -98,6 +98,24 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(out.value).toBe('changed');
   });
 
+  test('lazy plugins idle-load (conditional-formatting command registers)', async ({ page }) => {
+    // lazyPlugins defaults on; idleLoadAll registers the feature plugins after
+    // first paint. The CF "add-conditional-rule" command is a stable marker that
+    // the conditional-formatting plugin actually loaded into the editor.
+    const has = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hasCommand = (window as any).__sdkHarnessHasCommand as
+        | ((id: string) => boolean)
+        | undefined;
+      for (let i = 0; i < 60; i++) {
+        if (hasCommand?.('sheet.command.add-conditional-rule')) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return hasCommand?.('sheet.command.add-conditional-rule') ?? false;
+    });
+    expect(has).toBe(true);
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

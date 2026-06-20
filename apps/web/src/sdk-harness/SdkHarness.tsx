@@ -3,7 +3,7 @@ import { CasualSheets, type CasualSheetsAPI } from '@casualoffice/sheets/sheets'
 import '@casualoffice/sheets/styles';
 import { emptyWorkbook } from '../snapshot';
 import { LOCALES } from '../locale';
-import type { IWorkbookData } from '@univerjs/core';
+import { ICommandService, type IWorkbookData } from '@univerjs/core';
 
 /**
  * Dev-only harness that mounts the SDK's `<CasualSheets>` editor in isolation
@@ -29,6 +29,17 @@ export function SdkHarness() {
         onReady={(api: CasualSheetsAPI) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessAPI = api;
+          // Expose hasCommand so specs can check lazy plugins registered without
+          // importing redi tokens into page context.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__sdkHarnessHasCommand = (id: string) => {
+            const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
+              ._injector;
+            const svc = injector?.get(ICommandService) as
+              | { hasCommand(id: string): boolean }
+              | undefined;
+            return svc?.hasCommand(id) ?? false;
+          };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessReady = true;
         }}
