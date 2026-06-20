@@ -1459,9 +1459,8 @@ button {
   background: var(--color-surface);
   overflow: hidden;
   z-index: 1;
-  /* Rounded floating canvas card on the desk — same radius / hairline /
-     shadow as the side panel so neither is the odd one out (Phase 4). */
-  border: 1px solid var(--color-border);
+  /* Rounded floating canvas card — borderless, defined by the soft shadow
+     alone (matches the borderless toolbar; cleaner, more modern). */
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
 }
@@ -5977,9 +5976,8 @@ button {
 .side-panel,
 .charts-panel,
 .outline-panel {
-  /* Rounded floating card; the .grid-row desk gap provides the separation
-     (no own margin — keeps the gap uniform with the canvas card). */
-  border: 1px solid var(--color-border);
+  /* Rounded floating card — borderless, soft shadow only (matches the
+     toolbar + canvas); the desk gap provides the separation. */
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
   overflow: hidden;
@@ -6062,4 +6060,20 @@ button {
   padding-top: var(--space-1);
   padding-bottom: var(--space-1);
   justify-content: center;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Dark mode: soft shadows muddy into a dark halo on dark surfaces and don't
+   define edges. The floating cards (toolbar, canvas, panels) switch to a
+   subtle hairline border and drop the shadow — clean definition in dark,
+   while light mode stays borderless + shadow-driven.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-theme='dark'] .toolbar,
+[data-theme='dark'] .grid-host,
+[data-theme='dark'] .tables-panel,
+[data-theme='dark'] .side-panel,
+[data-theme='dark'] .charts-panel,
+[data-theme='dark'] .outline-panel {
+  border: 1px solid var(--color-border);
+  box-shadow: none;
 }
