@@ -5829,3 +5829,23 @@ button {
     animation: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Floating side panels (Phase 4 — UI-kit "smooth & separated" feel).
+   Docked panels were flush rectangles glued to the canvas with hard
+   border-top/border-left. The design-system look is a rounded card that
+   floats off the canvas: a margin gap separates it from the grid + rail,
+   a single hairline + soft shadow lifts it, and the radius clips the
+   header/rows. Slide-in motion stays (set per-panel above). The ribbon and
+   other strips are intentionally NOT touched by this pass.
+   ───────────────────────────────────────────────────────────────────────── */
+.tables-panel,
+.side-panel,
+.charts-panel,
+.outline-panel {
+  margin: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
