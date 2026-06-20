@@ -314,11 +314,30 @@ export function CasualSheets({
     );
   }
 
+  // The built-in chrome components read their colours from `--cs-chrome-*` CSS
+  // vars (with light fallbacks). Set them on the wrapper so the toolbar / formula
+  // bar / status bar flip with `appearance` — reactive via the prop. (Hosts can
+  // still override any of these vars themselves.)
+  const dark = appearance === 'dark';
+  const chromeVars = {
+    '--cs-chrome-bg': dark ? '#1f2329' : '#f8f9fa',
+    '--cs-chrome-fg': dark ? '#e5e7eb' : '#1f2329',
+    '--cs-chrome-muted': dark ? '#9ca3af' : '#6b7280',
+    '--cs-chrome-border': dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)',
+    '--cs-chrome-input-bg': dark ? '#2a2e35' : '#ffffff',
+  } as CSSProperties;
+
   return (
     <div
       className={className}
       data-testid={testId}
-      style={{ ...DEFAULT_STYLE, ...style, display: 'flex', flexDirection: 'column' }}
+      style={{
+        ...DEFAULT_STYLE,
+        ...chromeVars,
+        ...style,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <Toolbar getApi={() => apiRef.current} />
       <FormulaBar api={chromeApi} />

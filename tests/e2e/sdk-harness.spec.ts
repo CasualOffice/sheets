@@ -269,6 +269,21 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('[data-stat="average"]')).toHaveText('Average: 2');
   });
 
+  test('chrome flips to dark with appearance="dark"', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal&appearance=dark');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const bg = await page
+      .getByTestId('casual-sheets-toolbar')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    // Dark chrome bg is #1f2329 → rgb(31, 35, 41), not the light #f8f9fa.
+    expect(bg).toBe('rgb(31, 35, 41)');
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
