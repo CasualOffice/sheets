@@ -107,6 +107,7 @@ interface CasualSheetsAPI {
   loadSnapshot(data: IWorkbookData): void; // dispose unit + remount a new one
   getSelection(): RangeRef | null; // { unitId, sheetId, range }
   executeCommand(id: string, params?: object): Promise<boolean>;
+  setTheme(appearance: 'light' | 'dark'): void; // imperative light/dark
   univer: FUniver; // escape hatch — NOT semver-covered
 }
 ```
@@ -184,10 +185,8 @@ These are designed in [`SDK_ARCHITECTURE.md`](./SDK_ARCHITECTURE.md) and land in
 follow-up releases; the type never advertises a method that throws, so they
 appear here, not on `CasualSheetsAPI`:
 
-- `importXlsx` / `exportXlsx` on the API (today: use `@casualoffice/sheets/xlsx`
-  - `loadSnapshot`; export converter is being lifted out of the host app).
-- `setTheme(theme)` on the API — imperative light/dark switch (today: the
-  reactive `appearance` prop already does runtime light/dark).
+- `importXlsx` / `exportXlsx` on the API. Today: use `@casualoffice/sheets/xlsx`
+  with `loadSnapshot`; the export converter is being lifted out of the host app.
 - `attachCollab({ room, server })` — wire collab from the API (today: the
   `apps/server` integration above).
 - `chrome="full" | "minimal" | "none"` + slotted Office chrome — the full
