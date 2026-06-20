@@ -146,6 +146,27 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('.univer-dark')).toHaveCount(0);
   });
 
+  test('CasualSheetsAPI: setTheme flips dark mode imperatively', async ({ page }) => {
+    // Default mount is light; drive dark via the API ref.
+    const result = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const before = w.__sdkHarnessIsDark?.();
+      w.__sdkHarnessAPI.setTheme('dark');
+      for (let i = 0; i < 20; i++) {
+        if (w.__sdkHarnessIsDark?.() === true) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const afterDark = w.__sdkHarnessIsDark?.();
+      w.__sdkHarnessAPI.setTheme('light');
+      const afterLight = w.__sdkHarnessIsDark?.();
+      return { before, afterDark, afterLight };
+    });
+    expect(result.before).toBe(false);
+    expect(result.afterDark).toBe(true);
+    expect(result.afterLight).toBe(false);
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

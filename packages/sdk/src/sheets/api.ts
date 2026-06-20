@@ -17,8 +17,6 @@
  *     to ~200KB of parser code for hosts that never open a file. The xlsx-I/O
  *     batch wires it as its own chunk (and lifts the export converter out of
  *     apps/web — the SDK xlsx module is import-only today).
- *   - setTheme    — runtime light/dark switch needs IThemeService wiring + a
- *     dark theme bundle; the `theme` prop covers mount-time theming for now.
  *   - attachCollab — belongs to the storage/collab adapter phase (Phase 2);
  *     the editor ships collab-unaware until then.
  */
@@ -29,6 +27,7 @@
 // type augmentation this file relies on. Without it, FUniver is the bare core
 // facade and these methods exist neither at type-check nor at runtime.
 import '@univerjs/sheets/facade';
+import { ThemeService } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import type { IRange, IWorkbookData } from '@univerjs/core';
 
@@ -54,6 +53,10 @@ export interface CasualSheetsAPI {
   /** Dispatch a Univer command by id. Resolves to the command's boolean
    *  result. */
   executeCommand(id: string, params?: object): Promise<boolean>;
+  /** Imperative light/dark switch — the API equivalent of the reactive
+   *  `appearance` prop. Flips Univer's `ThemeService.setDarkMode` (canvas
+   *  colours + the `univer-dark` class Univer applies to the document root). */
+  setTheme(appearance: 'light' | 'dark'): void;
   /** The FUniver facade — documented escape hatch, NOT covered by semver. */
   univer: FUniver;
 }
@@ -90,6 +93,16 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
 
     executeCommand(id, params) {
       return univerAPI.executeCommand(id, params) as Promise<boolean>;
+    },
+
+    setTheme(appearance) {
+      const dark = appearance === 'dark';
+      const injector = (univerAPI as unknown as { _injector?: { get(t: unknown): unknown } })
+        ._injector;
+      const themeService = injector?.get(ThemeService) as
+        | { setDarkMode(b: boolean): void; darkMode: boolean }
+        | undefined;
+      if (themeService && themeService.darkMode !== dark) themeService.setDarkMode(dark);
     },
   };
 }
