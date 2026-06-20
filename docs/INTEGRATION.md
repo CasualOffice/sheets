@@ -124,7 +124,7 @@ interface CasualSheetsAPI {
 ### Persistence pattern — the host stores, the SDK never does
 
 The SDK **owns no storage**. It hands you the workbook data on **change / save /
-exit**; *you* persist it wherever you want (your backend, a WOPI host, a file —
+exit**; _you_ persist it wherever you want (your backend, a WOPI host, a file —
 or `localStorage` if you're a backendless demo). `loadSnapshot` reads it back.
 
 ```tsx
@@ -137,10 +137,10 @@ or `localStorage` if you're a backendless demo). `loadSnapshot` reads it back.
 ```
 
 `localStorage` is a perfectly good target **for a host that has no backend** (it's
-what our Pages demo uses) — but that's *your* choice as the host, not something the
+what our Pages demo uses) — but that's _your_ choice as the host, not something the
 SDK does.
 
-In the `<iframe>` embed the *same three signals* arrive as `postMessage`
+In the `<iframe>` embed the _same three signals_ arrive as `postMessage`
 envelopes instead of callbacks — one shape, two surfaces. Wire them with
 `EmbedHostTransport` (exported from `@casualoffice/sheets/embed`):
 
@@ -195,11 +195,44 @@ resources). Accepts loss on charts, drawings, pivots, sparklines.
 ## Collaboration (opt-in)
 
 The editor ships **collab-unaware** — no socket, no presence, no server until
-you add one. Real-time co-editing is a separate service (`apps/server`,
-Hocuspocus + Yjs) that attaches around the editor; the integration hook is
-`ICommandService.onMutationExecutedForCollab` (see
-[`CO-EDITING.md`](./CO-EDITING.md)). Without it you have a fully functional
-single-user editor.
+you add one. Without it you have a fully functional single-user editor.
+
+Turn on real-time co-editing with one call after `onReady`, against a Hocuspocus
+
+- Yjs server (the bundled `apps/server`, or your own):
+
+```ts
+import { attachCollab } from '@casualoffice/sheets/collab';
+
+let collab;
+<CasualSheets
+  initialData={data}
+  onReady={(api) => {
+    collab = attachCollab(api, {
+      room: 'doc-42',
+      server: 'wss://your-host/yjs',
+      // password, role: 'view' | 'write', token, onSnapshot, onStatus all optional
+      onStatus: (s) => console.log('collab status:', s), // 'connecting' | 'live' | 'offline'
+    });
+  }}
+/>;
+// leaving the room (always before unmount):
+collab?.detach();
+```
+
+`attachCollab` returns a `CollabHandle` — `{ doc, provider, bridge, status(), detach() }`.
+The `provider.awareness` is your hook for presence (cursors, avatars); `doc` is the
+raw Yjs document for any extra shared state. Build that UI on top — the SDK ships
+the transport + mutation bridge, not the presence chrome.
+
+Under the hood the bridge uses the only correct Univer hook,
+`ICommandService.onMutationExecutedForCollab`, applies remote mutations with
+`fromCollab` (echo-loop prevention), and guards `__splitChunk__` (see
+[`CO-EDITING.md`](./CO-EDITING.md)).
+
+> **Peer deps:** `attachCollab` needs `yjs` and `@hocuspocus/provider` from the
+> host (declared `optional` peers) so there's a **single** Yjs copy in the graph —
+> two copies break `Y.Doc` identity and awareness.
 
 In collaborative mode the realtime transport carries live edits, but the
 **authoritative document is persisted through your host integration (WOPI or
@@ -226,7 +259,3 @@ appear here, not on `CasualSheetsAPI`:
 
 - `importXlsx` / `exportXlsx` on the API. Today: use `@casualoffice/sheets/xlsx`
   with `loadSnapshot`; the export converter is being lifted out of the host app.
-- `attachCollab({ room, server })` — wire collab from the API (today: the
-  `apps/server` integration above).
-- `chrome="full" | "minimal" | "none"` + slotted Office chrome — the full
-  ribbon/formula-bar shell promoted into the SDK.

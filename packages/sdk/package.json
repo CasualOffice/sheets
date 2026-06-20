@@ -34,6 +34,11 @@
       "import": "./dist/sheets.js",
       "require": "./dist/sheets.cjs"
     },
+    "./collab": {
+      "types": "./dist/collab.d.ts",
+      "import": "./dist/collab.js",
+      "require": "./dist/collab.cjs"
+    },
     "./styles": {
       "import": "./dist/styles.js",
       "require": "./dist/styles.cjs"
@@ -103,7 +108,9 @@
     "@univerjs/thread-comment-ui": "^0.25.0",
     "@univerjs/ui": "^0.25.0",
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "yjs": "^13.6.0",
+    "@hocuspocus/provider": "^2.15.0"
   },
   "peerDependenciesMeta": {
     "@univerjs/core": {
@@ -225,6 +232,12 @@
     },
     "react-dom": {
       "optional": true
+    },
+    "yjs": {
+      "optional": true
+    },
+    "@hocuspocus/provider": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -273,7 +286,9 @@
     "react-dom": "^19.0.0",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "yjs": "^13.6.21",
+    "@hocuspocus/provider": "^2.15.2"
   },
   "publishConfig": {
     "access": "public"
