@@ -368,6 +368,50 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(bg).toBe('rgb(42, 46, 53)');
   });
 
+  test('chrome toolbar: wrap text applies', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).setValue('x');
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.locator('[data-action="wrap-text"]').click();
+    const wrapped = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        if (style?.tb === 3) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    });
+    expect(wrapped).toBe(true);
+  });
+
+  test('chrome menu bar: View menu renders (freeze)', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.locator('[data-menu="view"]').click();
+    await expect(page.getByTestId('cs-menuitem-freeze')).toBeVisible();
+  });
+
   test('chrome color picker: text color applies + popover closes', async ({ page }) => {
     await page.goto('/sdk-harness?chrome=minimal');
     await page.waitForFunction(

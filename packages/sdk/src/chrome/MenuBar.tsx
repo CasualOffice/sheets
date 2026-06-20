@@ -17,7 +17,7 @@ import type { CasualSheetsAPI } from '../sheets/api';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
 
-type MenuId = 'edit' | 'insert' | 'format' | 'data';
+type MenuId = 'edit' | 'insert' | 'format' | 'data' | 'view';
 
 interface MenuItem {
   /** Stable id — drives the per-item testid `cs-menuitem-<id>`. */
@@ -44,6 +44,9 @@ const MENUS: Menu[] = [
     items: [
       { id: 'undo', label: 'Undo', command: 'univer.command.undo', icon: 'undo' },
       { id: 'redo', label: 'Redo', command: 'univer.command.redo', icon: 'redo' },
+      { id: 'cut', label: 'Cut', command: 'univer.command.cut', icon: 'content_cut' },
+      { id: 'copy', label: 'Copy', command: 'univer.command.copy', icon: 'content_copy' },
+      { id: 'paste', label: 'Paste', command: 'univer.command.paste', icon: 'content_paste' },
     ],
   },
   {
@@ -61,6 +64,18 @@ const MENUS: Menu[] = [
         label: 'Insert column left',
         command: 'sheet.command.insert-col-before',
         icon: 'add_column_left',
+      },
+      {
+        id: 'delete-row',
+        label: 'Delete row',
+        command: 'sheet.command.remove-row',
+        icon: 'delete',
+      },
+      {
+        id: 'delete-col',
+        label: 'Delete column',
+        command: 'sheet.command.remove-col',
+        icon: 'delete',
       },
     ],
   },
@@ -80,6 +95,18 @@ const MENUS: Menu[] = [
         label: 'Underline',
         command: 'sheet.command.set-range-underline',
         icon: 'format_underlined',
+      },
+      {
+        id: 'wrap-text',
+        label: 'Wrap text',
+        command: 'sheet.command.set-text-wrap',
+        icon: 'wrap_text',
+      },
+      {
+        id: 'clear-format',
+        label: 'Clear formatting',
+        command: 'sheet.command.clear-selection-format',
+        icon: 'format_clear',
       },
     ],
   },
@@ -104,6 +131,30 @@ const MENUS: Menu[] = [
         label: 'Toggle filter',
         command: 'sheet.command.smart-toggle-filter',
         icon: 'filter_alt',
+      },
+    ],
+  },
+  {
+    id: 'view',
+    label: 'View',
+    items: [
+      {
+        id: 'freeze',
+        label: 'Freeze panes',
+        command: 'sheet.command.set-selection-frozen',
+        icon: 'table_view',
+      },
+      {
+        id: 'unfreeze',
+        label: 'Unfreeze panes',
+        command: 'sheet.command.cancel-frozen',
+        icon: 'grid_off',
+      },
+      {
+        id: 'toggle-gridlines',
+        label: 'Toggle gridlines',
+        command: 'sheet.command.toggle-gridlines',
+        icon: 'grid_on',
       },
     ],
   },

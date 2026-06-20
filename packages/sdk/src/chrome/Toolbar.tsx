@@ -26,6 +26,8 @@ interface ActiveStyle {
   underline: boolean;
   strike: boolean;
   ht: number; // HorizontalAlign of the active cell (0 = unset)
+  vt: number; // VerticalAlign of the active cell (0 = unset)
+  tb: number; // WrapStrategy of the active cell (0 = unset, 3 = wrap)
   ff: string;
   fs: number;
 }
@@ -36,6 +38,8 @@ const NO_STYLE: ActiveStyle = {
   underline: false,
   strike: false,
   ht: 0,
+  vt: 0,
+  tb: 0,
   ff: '',
   fs: 0,
 };
@@ -53,6 +57,8 @@ function readActiveStyle(api: CasualSheetsAPI): ActiveStyle {
     underline: s?.ul?.s === 1,
     strike: s?.st?.s === 1,
     ht: typeof s?.ht === 'number' ? s.ht : 0,
+    vt: typeof s?.vt === 'number' ? s.vt : 0,
+    tb: typeof s?.tb === 'number' ? s.tb : 0,
     ff: typeof s?.ff === 'string' ? s.ff : '',
     fs: typeof s?.fs === 'number' ? s.fs : 0,
   };
@@ -70,6 +76,8 @@ interface ToolbarAction {
 }
 
 // HorizontalAlign enum (@univerjs/core): LEFT=1, CENTER=2, RIGHT=3.
+// VerticalAlign enum (@univerjs/core): TOP=1, MIDDLE=2, BOTTOM=3.
+// WrapStrategy enum (@univerjs/core): OVERFLOW=1, CLIP=2, WRAP=3.
 const GROUPS: ToolbarAction[][] = [
   [
     { id: 'undo', label: 'Undo', command: 'univer.command.undo', icon: 'undo' },
@@ -121,6 +129,36 @@ const GROUPS: ToolbarAction[][] = [
   ],
   [
     {
+      id: 'align-top',
+      label: 'Align top',
+      command: 'sheet.command.set-vertical-text-align',
+      icon: 'vertical_align_top',
+      params: { value: 1 },
+    },
+    {
+      id: 'align-middle',
+      label: 'Align middle',
+      command: 'sheet.command.set-vertical-text-align',
+      icon: 'vertical_align_center',
+      params: { value: 2 },
+    },
+    {
+      id: 'align-bottom',
+      label: 'Align bottom',
+      command: 'sheet.command.set-vertical-text-align',
+      icon: 'vertical_align_bottom',
+      params: { value: 3 },
+    },
+    {
+      id: 'wrap-text',
+      label: 'Wrap text',
+      command: 'sheet.command.set-text-wrap',
+      icon: 'wrap_text',
+      params: { value: 3 },
+    },
+  ],
+  [
+    {
       id: 'merge',
       label: 'Merge cells',
       command: 'sheet.command.add-worksheet-merge-all',
@@ -157,6 +195,14 @@ const GROUPS: ToolbarAction[][] = [
       label: 'Decrease decimals',
       command: 'sheet.command.numfmt.subtract.decimal.command',
       icon: 'decimal_decrease',
+    },
+  ],
+  [
+    {
+      id: 'clear-format',
+      label: 'Clear formatting',
+      command: 'sheet.command.clear-selection-format',
+      icon: 'format_clear',
     },
   ],
 ];
@@ -228,6 +274,14 @@ function isActive(id: string, s: ActiveStyle): boolean {
       return s.ht === 2;
     case 'align-right':
       return s.ht === 3;
+    case 'align-top':
+      return s.vt === 1;
+    case 'align-middle':
+      return s.vt === 2;
+    case 'align-bottom':
+      return s.vt === 3;
+    case 'wrap-text':
+      return s.tb === 3;
     default:
       return false;
   }
