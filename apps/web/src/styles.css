@@ -175,10 +175,12 @@ button {
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
-  /* The whole editor body is a "desk" — toolbar, formula bar, canvas, and
-     panels float on it as rounded cards. Titlebar + sheet tabs stay flush. */
-  background: var(--color-bg);
-  --editor-desk: color-mix(in srgb, var(--color-surface-strip), var(--color-text) 7%);
+  /* One consistent chrome colour everywhere (matches the footer's grey):
+     titlebar, toolbar, formula bar, the desk behind the canvas, and the
+     sheet-tabs/status strips all use --editor-desk. Only the content cards
+     (canvas + side panels) are white. */
+  background: var(--editor-desk);
+  --editor-desk: var(--color-surface-strip);
   /* App-scoped: taller formula bar than the DS default (26px) — at 26 the
      bar reads cramped and a floating treatment would backfire. Scoped to
      .app so the shared DS token (and the SDK) are untouched. */
@@ -278,13 +280,15 @@ button {
   display: flex;
   align-items: stretch;
   height: var(--toolbar-h);
-  background: var(--color-surface);
+  background: var(--editor-desk);
   padding: 0;
-  /* Floating rounded "menu" card on the white top — distinguished by the
-     soft shadow alone, no border (cleaner; header is borderless too). */
+  /* Floating rounded "menu" card on the grey chrome — same grey as the
+     titlebar/formula bar; a hairline + soft shadow define it (grey-on-grey
+     needs the border to read). */
   margin: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-1);
   z-index: 2;
   /* As a CSS Grid row of `.app`, default `min-width: auto` keeps this
      element at the min-content size of its descendants — which on a
@@ -594,7 +598,7 @@ button {
   gap: 12px;
   height: var(--titlebar-h);
   padding: 0 16px;
-  background: var(--color-surface);
+  background: var(--editor-desk);
   color: var(--color-text);
   user-select: none;
   letter-spacing: 0;
@@ -1193,7 +1197,7 @@ button {
   display: flex;
   align-items: stretch;
   height: var(--formula-bar-h);
-  background: var(--color-surface);
+  background: var(--editor-desk);
   z-index: 2;
 }
 
@@ -5345,7 +5349,9 @@ button {
 }
 .autosave-banner__btn--primary {
   background: var(--color-warning);
-  color: #fff;
+  /* white on the dark-orange warning in light; auto-flips to dark on the
+     lighter yellow warning in dark mode so "Restore" stays readable. */
+  color: var(--color-text-on-accent);
   border-color: var(--color-warning);
 }
 .autosave-banner__btn--primary:hover {
@@ -5386,7 +5392,7 @@ button {
 }
 .preview-banner__btn--primary {
   background: var(--color-info);
-  color: #fff;
+  color: var(--color-text-on-accent);
   border-color: var(--color-info);
 }
 .preview-banner__btn--primary:hover {
