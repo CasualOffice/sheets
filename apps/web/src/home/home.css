@@ -21,7 +21,7 @@
   z-index: 80;
   isolation: isolate;
   display: flex;
-  flex-direction: column;
+  flex-direction: row; /* sidebar + content (Phase 4 app shell) */
   background: var(--color-bg);
   overflow: hidden;
   /* Subtle ambient gradient — gives the page its own atmosphere
@@ -863,5 +863,261 @@
   }
   .home__grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Home app shell (Phase 4) — collapsible left sidebar + content pane.
+   Replaces the single-column hero. The sidebar floats a brand + New + nav;
+   the content pane switches view (Home / Templates / Recent / Shared /
+   Account). Inspired by the design-system: rounded controls, hairline
+   separation, accent rationed to the active item.
+   ═══════════════════════════════════════════════════════════════════════ */
+.home__sidebar {
+  flex: 0 0 248px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-divider);
+  overflow: hidden;
+  transition: flex-basis var(--motion-base) var(--ease-out);
+}
+.home--collapsed .home__sidebar {
+  flex-basis: 64px;
+}
+
+.home__sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-2);
+}
+.home__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  font-family: var(--font-display, var(--font-sans));
+  font-weight: var(--weight-bold, 700);
+  color: var(--color-text);
+}
+.home__brand-mark {
+  flex: 0 0 auto;
+}
+.home__brand-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--text-md);
+  letter-spacing: var(--tracking-tight, -0.01em);
+}
+.home--collapsed .home__brand-name {
+  display: none;
+}
+.home__collapse {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+.home__collapse:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.home--collapsed .home__sidebar-top {
+  justify-content: center;
+}
+.home--collapsed .home__brand {
+  display: none;
+}
+
+.home__new .home__new-label {
+  white-space: nowrap;
+}
+.home--collapsed .home__new-label {
+  display: none;
+}
+
+.home__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home__nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 38px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+.home__nav-item:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.home__nav-item--on {
+  background: var(--color-selected);
+  color: var(--color-accent);
+}
+.home__nav-item .icon {
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+.home__nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home--collapsed .home__nav-label {
+  display: none;
+}
+.home--collapsed .home__nav-item {
+  justify-content: center;
+  padding: 0;
+}
+.home__sidebar-foot {
+  margin-top: auto;
+}
+
+/* Content pane */
+.home__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.home__page-head {
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-8) 64px var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.home__page-title {
+  margin: 0;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: var(--display-sm, 28px);
+  font-weight: var(--weight-bold, 700);
+  letter-spacing: var(--tracking-tight, -0.02em);
+  color: var(--color-text);
+}
+.home__page-sub {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+}
+.home__page-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.home__filters {
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 64px var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.home__section-link {
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.home__section-link:hover {
+  background: var(--color-hover);
+}
+
+/* Empty / placeholder state (Shared, Account, no-recents) */
+.home__emptystate {
+  max-width: 520px;
+  margin: 8vh auto 0;
+  padding: 0 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+}
+.home__emptystate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.home__emptystate-icon .icon {
+  font-size: 32px;
+}
+.home__emptystate-title {
+  margin: 0;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+.home__emptystate-body {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+/* On phones the sidebar collapses to icons by default. */
+@media (max-width: 720px) {
+  .home__sidebar {
+    flex-basis: 60px;
+  }
+  .home__sidebar .home__brand-name,
+  .home__sidebar .home__nav-label,
+  .home__new-label {
+    display: none;
+  }
+  .home__page-head,
+  .home__filters {
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
   }
 }

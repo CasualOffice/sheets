@@ -25,17 +25,19 @@ test.describe('home screen', () => {
   test('renders the gallery on a blank Untitled workbook', async ({ page }) => {
     const home = page.getByTestId('home-screen');
     await expect(home).toBeVisible();
-    await expect(home.getByText('Start something today.')).toBeVisible();
-    // Featured templates appear both in the hero strip and in their
-    // category section, so locate the first match.
+    // New app-shell IA: the landing "Home" view shows the Featured strip
+    // (Personal Budget is featured). The full per-category gallery lives in
+    // the Templates view, reached from the sidebar nav.
+    await expect(page.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
     await expect(page.getByTestId('tpl-card-personal-budget').first()).toBeVisible();
+    await page.getByTestId('home-nav-templates').click();
     await expect(page.getByTestId('tpl-card-invoice').first()).toBeVisible();
   });
 
   test('search filters template cards', async ({ page }) => {
+    // Search now lives in the Templates view (sidebar nav).
+    await page.getByTestId('home-nav-templates').click();
     await page.getByTestId('home-search').fill('invoice');
-    // Featured strip hides while a search is active; invoice now shows
-    // once in the results grid.
     await expect(page.getByTestId('tpl-card-invoice')).toHaveCount(1);
     await expect(page.getByTestId('tpl-card-personal-budget')).toHaveCount(0);
   });

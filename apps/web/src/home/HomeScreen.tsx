@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { IWorkbookData } from '@univerjs/core';
+import { Button } from '@schnsrw/design-system';
+import sheetsMark from '@schnsrw/design-system/assets/casual-sheets-mark.svg';
 import { Icon } from '../shell/Icon';
 import { useWorkbook } from '../use-workbook';
 import { useLoading } from '../loading-context';
@@ -16,17 +18,30 @@ import { usePinnedFolder } from '../file-system-access/usePinnedFolder';
 import './home.css';
 
 /**
- * The first thing a user sees when they land with an empty workbook —
- * a curated template gallery + their recent files. Replaces the older
- * `RecentFilesLanding` overlay: same gate condition (Untitled + early
- * revision), but the surface is now a full home page with hero + grid
- * instead of a small floating card.
+ * Landing surface for a blank workbook — a Drive/Notion-style app shell:
+ * a collapsible left sidebar (brand, New, nav, account) beside a content
+ * pane that switches view (Home / Templates / Recent / Shared / Account).
+ * Replaces the older single-column hero gallery. Same gate condition
+ * (Untitled + early revision); the editor stays mounted behind so picking
+ * a template dissolves straight into a ready workbook.
  *
  * Templates are real .xlsx files under `public/templates/` — picking a
- * card runs the standard xlsx parse worker and swaps the workbook in
- * place. The overlay self-dismisses because the workbook is no longer
- * blank after a successful pick.
+ * card runs the standard xlsx parse worker and swaps the workbook in place.
  */
+type HomeView = 'home' | 'templates' | 'recent' | 'shared' | 'account';
+
+const VIEW_META: Record<HomeView, { title: string; sub: string; icon: string }> = {
+  home: { title: 'Home', sub: 'Jump back in, or start something new.', icon: 'home' },
+  templates: {
+    title: 'Templates',
+    sub: 'A starting point designed for real work.',
+    icon: 'grid_view',
+  },
+  recent: { title: 'Recent', sub: 'Files from your last sessions.', icon: 'history' },
+  shared: { title: 'Shared', sub: 'Work on a file with other people, live.', icon: 'group' },
+  account: { title: 'Account', sub: 'Your profile and preferences.', icon: 'account_circle' },
+};
+
 export function HomeScreen({
   dismissed,
   onDismiss,
@@ -41,13 +56,8 @@ export function HomeScreen({
   const pinned = usePinnedFolder();
 
   const isBlank = wb.meta.name === 'Untitled' && wb.meta.revision <= 1;
-  // Suppress the home in collab rooms — the URL is the authoritative
-  // signal here (collab context hydrates async, but Hocuspocus will
-  // shortly replace the workbook with the room's snapshot and the home
-  // would just flash). Matches CollabDriver's readRoomFromLocation():
-  //   /r/:id           — canonical room URL
-  //   /?room=:id        — query fallback
-  // Same pattern the e2e prod-bundle specs use to enter rooms.
+  // Suppress the home in collab rooms — the URL is the authoritative signal
+  // (collab context hydrates async; Hocuspocus shortly replaces the workbook).
   const inCollabRoom =
     typeof window !== 'undefined' &&
     (/^\/r\/[\w-]{4,}\/?$/.test(window.location.pathname) ||
@@ -55,6 +65,8 @@ export function HomeScreen({
 
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'All'>('All');
+  const [view, setView] = useState<HomeView>('home');
+  const [collapsed, setCollapsed] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -96,15 +108,10 @@ export function HomeScreen({
     return () => window.removeEventListener('keydown', onKey);
   }, [visible, onDismiss]);
 
-  // Show on a blank Untitled workbook, until the user picks something
-  // (template, Blank, or explicit close). Once dismissed it stays gone
-  // for this session — re-entry will land via File → New later.
   if (!visible) return null;
 
   const pick = async (t: Template) => {
     if (t.id === 'blank') {
-      // Blank pick keeps the workbook Untitled; explicit dismiss flips
-      // the gate so the home goes away.
       wb.replaceWorkbook(emptyWorkbook(), null);
       onDismiss();
       return;
@@ -122,7 +129,6 @@ export function HomeScreen({
       loading.set({ phase: 'mounting' });
       wb.replaceWorkbook(data, 'xlsx');
       onDismiss();
-      // LoadingOverlay closes itself when the workbook swap completes.
       loading.set(null);
     } catch (err) {
       console.error('[home] template open failed', err);
@@ -138,10 +144,6 @@ export function HomeScreen({
   const onOpenRecent = async (rec: RecentEntry) => {
     try {
       const opened = await fileSource.openRecent(rec.id);
-      // Pass the server identity through so the next Save can do an
-      // in-place PUT with If-Match instead of creating a duplicate.
-      // Browser source leaves these null → save falls back to its
-      // download / FSA flow.
       wb.replaceWorkbook(
         opened.data,
         opened.sourceFormat,
@@ -181,34 +183,123 @@ export function HomeScreen({
     void fileSource.forgetRecent(rec.id);
   };
 
+  const goTemplates = () => {
+    setQuery('');
+    setActiveCategory('All');
+    setView('templates');
+  };
+
+  const navItems: { id: HomeView; label: string; icon: string }[] = [
+    { id: 'home', label: 'Home', icon: 'home' },
+    { id: 'recent', label: 'Recent', icon: 'history' },
+    { id: 'templates', label: 'Templates', icon: 'grid_view' },
+    { id: 'shared', label: 'Shared', icon: 'group' },
+  ];
+
+  const navButton = (it: { id: HomeView; label: string; icon: string }) => (
+    <button
+      key={it.id}
+      type="button"
+      className={`home__nav-item${view === it.id ? ' home__nav-item--on' : ''}`}
+      onClick={() => setView(it.id)}
+      title={it.label}
+      aria-current={view === it.id ? 'page' : undefined}
+      data-testid={`home-nav-${it.id}`}
+    >
+      <Icon name={it.icon} />
+      <span className="home__nav-label">{it.label}</span>
+    </button>
+  );
+
   return (
-    <div className="home" data-testid="home-screen" aria-label="Start a new spreadsheet">
-      <button
-        type="button"
-        className="home__close"
-        aria-label="Close home"
-        title="Close (Esc)"
-        onClick={onDismiss}
-        data-testid="home-close"
-      >
-        <Icon name="close" />
-      </button>
-      <div className="home__scroll">
-        <IdbQuotaBanner />
-        <ReopenBanner recents={recents} onOpen={onOpenRecent} />
-        <header className="home__hero">
-          <div className="home__hero-glow" aria-hidden />
-          <div className="home__hero-inner">
-            <div className="home__brand">
-              <Icon name="grid_on" />
-              <span>Casual Sheets</span>
+    <div
+      className={`home${collapsed ? ' home--collapsed' : ''}`}
+      data-testid="home-screen"
+      aria-label="Start a new spreadsheet"
+    >
+      {/* ── Sidebar ─────────────────────────────────────────────── */}
+      <aside className="home__sidebar">
+        <div className="home__sidebar-top">
+          <span className="home__brand">
+            <img src={sheetsMark} alt="" className="home__brand-mark" width={26} height={33} />
+            <span className="home__brand-name">Casual Sheets</span>
+          </span>
+          <button
+            type="button"
+            className="home__collapse"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            data-testid="home-collapse"
+          >
+            <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} />
+          </button>
+        </div>
+
+        <div className="home__new">
+          <Button
+            variant="primary"
+            icon="add"
+            full
+            onClick={() => void pick(TEMPLATES.find((t) => t.id === 'blank') ?? TEMPLATES[0])}
+            data-testid="home-new"
+          >
+            <span className="home__new-label">New spreadsheet</span>
+          </Button>
+        </div>
+
+        <nav className="home__nav" aria-label="Home navigation">
+          {navItems.map(navButton)}
+        </nav>
+
+        <div className="home__sidebar-foot">
+          {navButton({ id: 'account', label: 'Account', icon: 'account_circle' })}
+        </div>
+      </aside>
+
+      {/* ── Content ─────────────────────────────────────────────── */}
+      <main className="home__main">
+        <button
+          type="button"
+          className="home__close"
+          aria-label="Close home"
+          title="Close (Esc)"
+          onClick={onDismiss}
+          data-testid="home-close"
+        >
+          <Icon name="close" />
+        </button>
+
+        <div className="home__scroll">
+          <IdbQuotaBanner />
+          <ReopenBanner recents={recents} onOpen={onOpenRecent} />
+
+          <header className="home__page-head">
+            <div className="home__page-headings">
+              <h1 className="home__page-title">{VIEW_META[view].title}</h1>
+              <p className="home__page-sub">{VIEW_META[view].sub}</p>
             </div>
-            <h1 className="home__title">Start something today.</h1>
-            <p className="home__lede">
-              Pick a template designed for the way you actually work — or open a file from your
-              computer.
-            </p>
-            <div className="home__hero-actions">
+            <div className="home__page-actions">
+              <Button
+                variant="secondary"
+                icon="folder_open"
+                onClick={() => void openFileFromDisk()}
+                data-testid="home-open-file"
+              >
+                Open file
+              </Button>
+              <PinFolderControl
+                state={pinned.state}
+                onPin={() => void pinned.pin()}
+                onReconnect={() => void pinned.reconnect()}
+                onUnpin={() => void pinned.unpin()}
+              />
+            </div>
+          </header>
+
+          {/* Templates search + categories — only on the Templates view. */}
+          {view === 'templates' && (
+            <div className="home__filters">
               <div className="home__search">
                 <Icon name="search" />
                 <input
@@ -219,22 +310,6 @@ export function HomeScreen({
                   data-testid="home-search"
                 />
               </div>
-              <button
-                type="button"
-                className="home__open-file"
-                onClick={() => void openFileFromDisk()}
-                data-testid="home-open-file"
-              >
-                <Icon name="folder_open" />
-                <span>Open file</span>
-              </button>
-              <PinFolderControl
-                state={pinned.state}
-                onPin={() => void pinned.pin()}
-                onReconnect={() => void pinned.reconnect()}
-                onUnpin={() => void pinned.unpin()}
-              />
-
               <div className="home__cats">
                 <button
                   type="button"
@@ -255,134 +330,229 @@ export function HomeScreen({
                 ))}
               </div>
             </div>
-          </div>
-        </header>
+          )}
 
-        {query.trim() === '' && activeCategory === 'All' && (
-          <section className="home__section home__section--featured">
-            <div className="home__section-head">
-              <h2>Featured</h2>
-              <span className="home__section-hint">A few picks to get going.</span>
-            </div>
-            <div className="home__featured-row">
-              {featured.map((t) => (
-                <TemplateCard key={t.id} template={t} size="lg" onPick={pick} />
-              ))}
-            </div>
-          </section>
-        )}
+          {/* ── HOME view ── */}
+          {view === 'home' && (
+            <>
+              <section className="home__section">
+                <div className="home__section-head">
+                  <h2>Featured</h2>
+                  <button type="button" className="home__section-link" onClick={goTemplates}>
+                    Browse all templates
+                  </button>
+                </div>
+                <div className="home__featured-row">
+                  {featured.map((t) => (
+                    <TemplateCard key={t.id} template={t} size="lg" onPick={pick} />
+                  ))}
+                </div>
+              </section>
 
-        {query.trim() !== '' || activeCategory !== 'All' ? (
-          <section className="home__section">
-            <div className="home__section-head">
-              <h2>{query.trim() ? `Results for "${query.trim()}"` : activeCategory}</h2>
-              <span className="home__section-hint">
-                {filtered.length} template{filtered.length === 1 ? '' : 's'}
-              </span>
-            </div>
-            {filtered.length === 0 ? (
-              <div className="home__empty">No templates match. Try a different keyword.</div>
-            ) : (
-              <div className="home__grid">
-                {filtered.map((t) => (
-                  <TemplateCard key={t.id} template={t} onPick={pick} />
-                ))}
-              </div>
-            )}
-          </section>
-        ) : (
-          <>
-            {CATEGORIES.map((cat) => {
-              const items = byCategory.get(cat) ?? [];
-              if (items.length === 0) return null;
-              return (
-                <section key={cat} className="home__section">
-                  <div className="home__section-head">
-                    <h2>{cat}</h2>
-                    <span className="home__section-hint">{items.length} templates</span>
-                  </div>
+              {recents.length > 0 && (
+                <RecentsSection
+                  recents={recents.slice(0, 6)}
+                  onOpenRecent={onOpenRecent}
+                  onDeleteRecent={onDeleteRecent}
+                  hint="Pick up where you left off."
+                />
+              )}
+            </>
+          )}
+
+          {/* ── TEMPLATES view ── */}
+          {view === 'templates' &&
+            (query.trim() !== '' || activeCategory !== 'All' ? (
+              <section className="home__section">
+                <div className="home__section-head">
+                  <h2>{query.trim() ? `Results for "${query.trim()}"` : activeCategory}</h2>
+                  <span className="home__section-hint">
+                    {filtered.length} template{filtered.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {filtered.length === 0 ? (
+                  <div className="home__empty">No templates match. Try a different keyword.</div>
+                ) : (
                   <div className="home__grid">
-                    {items.map((t) => (
+                    {filtered.map((t) => (
                       <TemplateCard key={t.id} template={t} onPick={pick} />
                     ))}
                   </div>
-                </section>
-              );
-            })}
-          </>
-        )}
-
-        {(pinned.state.kind === 'granted' || pinned.state.kind === 'prompt') && (
-          <PinnedFolderSection
-            state={pinned.state}
-            onReconnect={() => void pinned.reconnect()}
-            onOpenFile={async (file) => {
-              loading.set({ fileName: file.name, sizeBytes: file.size, phase: 'reading' });
-              try {
-                await loadSpreadsheetFile(file, null, wb.replaceWorkbook, (phase) =>
-                  loading.set({ phase }),
+                )}
+              </section>
+            ) : (
+              CATEGORIES.map((cat) => {
+                const items = byCategory.get(cat) ?? [];
+                if (items.length === 0) return null;
+                return (
+                  <section key={cat} className="home__section">
+                    <div className="home__section-head">
+                      <h2>{cat}</h2>
+                      <span className="home__section-hint">{items.length} templates</span>
+                    </div>
+                    <div className="home__grid">
+                      {items.map((t) => (
+                        <TemplateCard key={t.id} template={t} onPick={pick} />
+                      ))}
+                    </div>
+                  </section>
                 );
-                onDismiss();
-                loading.set(null);
-              } catch (err) {
-                console.error('[home] pinned-folder open failed', err);
-                loading.set({
-                  fileName: file.name,
-                  phase: 'reading',
-                  error: err instanceof Error ? err.message : 'Could not open this file.',
-                });
-              }
-            }}
-          />
-        )}
+              })
+            ))}
 
-        {recents.length > 0 && (
-          <section className="home__section home__section--recents">
-            <div className="home__section-head">
-              <h2>
-                <Icon name="history" /> Recent files
-              </h2>
-              <span className="home__section-hint">From your last sessions.</span>
-            </div>
-            <ul className="home__recents">
-              {recents.map((rec) => (
-                <li key={rec.id} className="home__recent">
-                  <button
-                    type="button"
-                    className="home__recent-open"
-                    onClick={() => onOpenRecent(rec)}
-                    data-testid="home-recent-open"
-                  >
-                    <span className="home__recent-icon">
-                      <Icon name="description" />
-                    </span>
-                    <span className="home__recent-text">
-                      <span className="home__recent-name">{rec.name}</span>
-                      <span className="home__recent-meta">
-                        {formatSize(rec.size)} · {formatTime(rec.modifiedAt)}
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="home__recent-delete"
-                    title="Remove from recent"
-                    onClick={() => onDeleteRecent(rec)}
-                  >
-                    <Icon name="close" size="sm" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+          {/* ── RECENT view ── */}
+          {view === 'recent' && (
+            <>
+              {(pinned.state.kind === 'granted' || pinned.state.kind === 'prompt') && (
+                <PinnedFolderSection
+                  state={pinned.state}
+                  onReconnect={() => void pinned.reconnect()}
+                  onOpenFile={async (file) => {
+                    loading.set({ fileName: file.name, sizeBytes: file.size, phase: 'reading' });
+                    try {
+                      await loadSpreadsheetFile(file, null, wb.replaceWorkbook, (phase) =>
+                        loading.set({ phase }),
+                      );
+                      onDismiss();
+                      loading.set(null);
+                    } catch (err) {
+                      console.error('[home] pinned-folder open failed', err);
+                      loading.set({
+                        fileName: file.name,
+                        phase: 'reading',
+                        error: err instanceof Error ? err.message : 'Could not open this file.',
+                      });
+                    }
+                  }}
+                />
+              )}
+              {recents.length > 0 ? (
+                <RecentsSection
+                  recents={recents}
+                  onOpenRecent={onOpenRecent}
+                  onDeleteRecent={onDeleteRecent}
+                />
+              ) : (
+                <EmptyState
+                  icon="history"
+                  title="No recent files yet"
+                  body="Files you open or create will show up here."
+                  cta="Browse templates"
+                  onCta={goTemplates}
+                />
+              )}
+            </>
+          )}
 
-        <footer className="home__foot">
-          <span>
-            Drop an Excel / ODS / CSV file anywhere, or use <strong>File → Open</strong>.
-          </span>
-        </footer>
+          {/* ── SHARED view ── */}
+          {view === 'shared' && (
+            <EmptyState
+              icon="group"
+              title="Collaborate in real time"
+              body="Open a spreadsheet, then use Share to start a room — anyone with the link can co-edit live, cursors and all."
+              cta="Start a blank spreadsheet"
+              onCta={() => void pick(TEMPLATES.find((t) => t.id === 'blank') ?? TEMPLATES[0])}
+            />
+          )}
+
+          {/* ── ACCOUNT view ── */}
+          {view === 'account' && (
+            <EmptyState
+              icon="account_circle"
+              title="Account & preferences"
+              body="Sign-in, theme, and storage preferences live in the editor's account menu (top-right). This space will host them here soon."
+              cta="Open a blank spreadsheet"
+              onCta={() => void pick(TEMPLATES.find((t) => t.id === 'blank') ?? TEMPLATES[0])}
+            />
+          )}
+
+          <footer className="home__foot">
+            <span>
+              Drop an Excel / ODS / CSV file anywhere, or use <strong>File → Open</strong>.
+            </span>
+          </footer>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function RecentsSection({
+  recents,
+  onOpenRecent,
+  onDeleteRecent,
+  hint = 'From your last sessions.',
+}: {
+  recents: RecentEntry[];
+  onOpenRecent: (rec: RecentEntry) => void;
+  onDeleteRecent: (rec: RecentEntry) => void;
+  hint?: string;
+}) {
+  return (
+    <section className="home__section home__section--recents">
+      <div className="home__section-head">
+        <h2>
+          <Icon name="history" /> Recent files
+        </h2>
+        <span className="home__section-hint">{hint}</span>
       </div>
+      <ul className="home__recents">
+        {recents.map((rec) => (
+          <li key={rec.id} className="home__recent">
+            <button
+              type="button"
+              className="home__recent-open"
+              onClick={() => onOpenRecent(rec)}
+              data-testid="home-recent-open"
+            >
+              <span className="home__recent-icon">
+                <Icon name="description" />
+              </span>
+              <span className="home__recent-text">
+                <span className="home__recent-name">{rec.name}</span>
+                <span className="home__recent-meta">
+                  {formatSize(rec.size)} · {formatTime(rec.modifiedAt)}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="home__recent-delete"
+              title="Remove from recent"
+              onClick={() => onDeleteRecent(rec)}
+            >
+              <Icon name="close" size="sm" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  body,
+  cta,
+  onCta,
+}: {
+  icon: string;
+  title: string;
+  body: string;
+  cta: string;
+  onCta: () => void;
+}) {
+  return (
+    <div className="home__emptystate" data-testid="home-emptystate">
+      <span className="home__emptystate-icon">
+        <Icon name={icon} />
+      </span>
+      <h2 className="home__emptystate-title">{title}</h2>
+      <p className="home__emptystate-body">{body}</p>
+      <Button variant="primary" onClick={onCta}>
+        {cta}
+      </Button>
     </div>
   );
 }
@@ -431,7 +601,6 @@ function PinFolderControl({
       </button>
     );
   }
-  // granted
   return (
     <div className="home__pin home__pin--granted" data-testid="home-pinned-folder">
       <Icon name="folder_special" />
