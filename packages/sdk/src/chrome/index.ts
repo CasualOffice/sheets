@@ -6,3 +6,4 @@
  * from `apps/web/src/shell/` here in later slices, behind `chrome="full"`.
  */
 export { Toolbar, type ToolbarProps } from './Toolbar';
+export { FormulaBar, type FormulaBarProps } from './FormulaBar';

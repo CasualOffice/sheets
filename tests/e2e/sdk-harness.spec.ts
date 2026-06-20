@@ -205,8 +205,43 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(isBold).toBe(true);
   });
 
-  test('chrome defaults to none (no toolbar)', async ({ page }) => {
+  test('chrome defaults to none (no toolbar/formula bar)', async ({ page }) => {
     await expect(page.getByTestId('casual-sheets-toolbar')).toHaveCount(0);
+    await expect(page.getByTestId('casual-sheets-formula-bar')).toHaveCount(0);
+  });
+
+  test('chrome formula bar: name box tracks selection + edit commits', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId('casual-sheets-formula-bar')).toBeVisible();
+    // Select B2 (row 1, col 1) — the name box should show "B2".
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(1, 1).activate();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    await expect(page.getByTestId('casual-sheets-name-box')).toHaveText('B2');
+    // Type a formula into the bar and commit with Enter → B2 computes to 5.
+    const input = page.getByTestId('casual-sheets-formula-input');
+    await input.fill('=2+3');
+    await input.press('Enter');
+    const value = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 30; i++) {
+        const v = api.univer.getActiveWorkbook().getActiveSheet().getRange(1, 1).getValue();
+        if (v === 5 || v === '5') return v;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return api.univer.getActiveWorkbook().getActiveSheet().getRange(1, 1).getValue();
+    });
+    expect(Number(value)).toBe(5);
   });
 
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
