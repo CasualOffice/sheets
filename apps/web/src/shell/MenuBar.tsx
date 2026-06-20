@@ -993,10 +993,7 @@ export function MenuBar() {
     // bug that prompted this audit. Once `hasUserEdited` flips, every
     // subsequent Save runs normally — including a "save as empty doc"
     // after they delete every cell, since that delete itself counts.
-    if (
-      (workbook.meta.serverFileId ?? null) === null &&
-      workbook.meta.hasUserEdited !== true
-    ) {
+    if ((workbook.meta.serverFileId ?? null) === null && workbook.meta.hasUserEdited !== true) {
       toast.info('Nothing to save yet — type something first.');
       return;
     }
@@ -1468,6 +1465,13 @@ export function MenuBar() {
           label: ui.formulaBarVisible ? 'Hide formula bar' : 'Show formula bar',
           icon: 'functions',
           onClick: ui.toggleFormulaBar,
+        },
+        {
+          kind: 'item',
+          id: 'toggle-compact-ribbon',
+          label: ui.ribbonCompact ? '✓ Compact ribbon' : 'Compact ribbon',
+          icon: 'density_small',
+          onClick: ui.toggleRibbonCompact,
         },
         {
           kind: 'item',
@@ -2073,9 +2077,7 @@ export function MenuBar() {
 
       {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
 
-      {showShortcuts && (
-        <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />
-      )}
+      {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 
       {showCommandSearch && (
         <CommandSearchDialog

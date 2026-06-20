@@ -6019,3 +6019,31 @@ button {
   border-color: var(--color-accent);
   box-shadow: var(--glow-accent);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Compact ribbon view (View → Compact ribbon) — Google-Sheets-style single
+   dense row. Opt-in + persisted; Full (2-row) is the default so nothing
+   regresses. Reuses the mobile single-row mechanism: drop --toolbar-h to a
+   single 40px row, hide row 2, fold the lead big-buttons to icon-only.
+   ───────────────────────────────────────────────────────────────────────── */
+.app[data-ribbon='compact'] {
+  --toolbar-h: 40px;
+}
+.app[data-ribbon='compact'] .toolbar .ribbon__group-row[data-row='2'] {
+  display: none;
+}
+.app[data-ribbon='compact'] .toolbar .btn__big-label,
+.app[data-ribbon='compact'] .toolbar .btn__big-chevron {
+  display: none;
+}
+.app[data-ribbon='compact'] .toolbar .btn--big {
+  flex-direction: row;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 var(--space-2);
+}
+.app[data-ribbon='compact'] .toolbar .ribbon__group {
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  justify-content: center;
+}

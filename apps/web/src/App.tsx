@@ -121,6 +121,13 @@ export function App() {
     };
   }, []);
   const [formulaBarVisible, setFormulaBarVisible] = useState(true);
+  const [ribbonCompact, setRibbonCompact] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cs-ribbon') === 'compact';
+    } catch {
+      return false;
+    }
+  });
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
   const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
   const [chartsPanelVisible, setChartsPanelVisible] = useState(false);
@@ -337,6 +344,17 @@ export function App() {
     () => ({
       formulaBarVisible,
       toggleFormulaBar: () => setFormulaBarVisible((v) => !v),
+      ribbonCompact,
+      toggleRibbonCompact: () =>
+        setRibbonCompact((v) => {
+          const next = !v;
+          try {
+            localStorage.setItem('cs-ribbon', next ? 'compact' : 'full');
+          } catch {
+            /* storage blocked — toggle still applies for the session */
+          }
+          return next;
+        }),
       // Side panels are mutually exclusive — opening one auto-closes
       // the others. Three of them open at once would squeeze the grid
       // into a strip and competing context (which one am I editing?).
@@ -413,6 +431,7 @@ export function App() {
     }),
     [
       formulaBarVisible,
+      ribbonCompact,
       tablesPanelVisible,
       outlinePanelVisible,
       chartsPanelVisible,
@@ -455,6 +474,7 @@ export function App() {
                                         <CollabDriver>
                                           <div
                                             className={`app${formulaBarVisible ? '' : ' app--no-formula-bar'}`}
+                                            data-ribbon={ribbonCompact ? 'compact' : 'full'}
                                             data-testid="app-shell"
                                           >
                                             <TitleBar />

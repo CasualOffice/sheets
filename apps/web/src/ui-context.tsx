@@ -3,6 +3,10 @@ import { createContext } from 'react';
 export type UICtxValue = {
   formulaBarVisible: boolean;
   toggleFormulaBar: () => void;
+  /** Compact ribbon view (View → Compact ribbon) — Google-Sheets-style
+   *  single-row toolbar. Opt-in, persisted; Full (2-row) is the default. */
+  ribbonCompact: boolean;
+  toggleRibbonCompact: () => void;
   tablesPanelVisible: boolean;
   toggleTablesPanel: () => void;
   outlinePanelVisible: boolean;
