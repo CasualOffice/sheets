@@ -28,7 +28,13 @@
  * styles from this entry if the host doesn't reach the styles export.
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import {
   ICommandService,
   LocaleType,
@@ -81,6 +87,13 @@ export interface CasualSheetsProps {
   onChange?: (snapshot: IWorkbookData) => void;
   /** Debounce window for `onChange`, in ms. Default 400. */
   onChangeDebounceMs?: number;
+  /** Explicit save — fired when the user presses Ctrl/Cmd+S inside the editor
+   *  (the browser's save dialog is suppressed). The host persists the snapshot.
+   *  Part of the "host owns storage" contract: the SDK never writes a store. */
+  onSave?: (snapshot: IWorkbookData) => void;
+  /** Fired once when the editor unmounts, with the final snapshot — the host's
+   *  last chance to persist before the workbook is disposed. */
+  onExit?: (snapshot: IWorkbookData) => void;
   /** Lazy-load the feature plugins (conditional formatting, data
    *  validation, hyperlinks, notes, tables, comments, drawings, sort,
    *  filter, find/replace). Default `true`: plugins whose data is in
@@ -148,6 +161,8 @@ export function CasualSheets({
   onReady,
   onChange,
   onChangeDebounceMs = 400,
+  onSave,
+  onExit,
   lazyPlugins = true,
   locale = LocaleType.EN_US,
   locales,
@@ -167,6 +182,12 @@ export function CasualSheets({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const hasOnChange = useRef(!!onChange).current;
+  // Latest save/exit callbacks, called via refs so they fire without re-running
+  // the boot effect. onExit is read in cleanup; onSave on the Ctrl/Cmd+S handler.
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
   // The live FUniver facade, captured at mount so the reactive appearance
   // effect can reach Univer's ThemeService without re-running boot.
   const apiRef = useRef<CasualSheetsAPI | null>(null);
@@ -275,6 +296,12 @@ export function CasualSheets({
       cancelled = true;
       if (changeTimer) clearTimeout(changeTimer);
       changeSub?.dispose();
+      // Last-chance persist: emit the final snapshot before the workbook is
+      // disposed (disposal is deferred via microtask below, so it's still alive).
+      if (onExitRef.current) {
+        const snap = apiRef.current?.getSnapshot();
+        if (snap) onExitRef.current(snap);
+      }
       apiRef.current = null;
       setChromeApi(null);
       if (lazyPlugins) setUniverForLazyLoad(null);
@@ -299,6 +326,16 @@ export function CasualSheets({
     applyAppearance(api, container, appearance);
   }, [appearance]);
 
+  // Ctrl/Cmd+S anywhere in the editor → onSave (suppress the browser dialog).
+  // Capture phase so we beat Univer's own key handling on the canvas.
+  const onKeyDownCapture = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      const snap = apiRef.current?.getSnapshot();
+      if (snap) onSaveRef.current?.(snap);
+    }
+  };
+
   // chrome="none" (default) keeps the exact bare-grid shape existing consumers
   // rely on (embed-runtime, hosts that bring their own shell). Any other level
   // wraps the grid in a flex column with the built-in chrome above it; the grid
@@ -307,6 +344,7 @@ export function CasualSheets({
     return (
       <div
         ref={hostRef}
+        onKeyDownCapture={onKeyDownCapture}
         style={{ ...DEFAULT_STYLE, ...style }}
         className={className}
         data-testid={testId}
@@ -337,6 +375,7 @@ export function CasualSheets({
     <div
       className={className}
       data-testid={testId}
+      onKeyDownCapture={onKeyDownCapture}
       style={{
         ...DEFAULT_STYLE,
         ...chromeVars,
