@@ -3,6 +3,7 @@ import {
   cloneElement,
   isValidElement,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -48,7 +49,22 @@ type Props = {
 export function Tooltip({ label, shortcut, children, side = 'bottom', delay = 150 }: Props) {
   const child = Children.only(children);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  // Clamped horizontal centre — the tip is centred on the trigger via
+  // translateX(-50%), so for right-edge triggers (zoom controls, panel rail)
+  // the raw centre pushes half the tip off-screen. After it renders we measure
+  // its width and pull the centre back inside the viewport (8px gutter).
+  const [clampedLeft, setClampedLeft] = useState<number | null>(null);
+  const tipRef = useRef<HTMLSpanElement>(null);
   const timerRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!coords || !tipRef.current) return;
+    const half = tipRef.current.offsetWidth / 2;
+    const min = half + 8;
+    const max = window.innerWidth - half - 8;
+    const next = Math.min(Math.max(coords.left, min), max);
+    if (next !== clampedLeft) setClampedLeft(next);
+  }, [coords, clampedLeft]);
 
   // Clean up the pending-show timer on unmount so we don't try to setState on
   // a gone component (e.g. the user clicks a button that conditionally
@@ -94,6 +110,7 @@ export function Tooltip({ label, shortcut, children, side = 'bottom', delay = 15
       timerRef.current = null;
     }
     setCoords(null);
+    setClampedLeft(null);
   };
 
   const onMouseEnter = (e: ReactMouseEvent<HTMLElement>) => {
@@ -118,7 +135,7 @@ export function Tooltip({ label, shortcut, children, side = 'bottom', delay = 15
     onMouseLeave,
     onFocus,
     onBlur,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
   return (
@@ -127,10 +144,11 @@ export function Tooltip({ label, shortcut, children, side = 'bottom', delay = 15
       {coords &&
         createPortal(
           <span
+            ref={tipRef}
             role="tooltip"
             data-testid="tooltip"
             className={`tooltip tooltip--${side}${shortcut ? ' tooltip--with-shortcut' : ''}`}
-            style={{ top: coords.top, left: coords.left }}
+            style={{ top: coords.top, left: clampedLeft ?? coords.left }}
           >
             <span className="tooltip__label">{label}</span>
             {shortcut && (
