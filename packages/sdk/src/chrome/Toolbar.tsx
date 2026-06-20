@@ -8,14 +8,54 @@
  *
  * Covered: font family/size · undo/redo · bold/italic/underline/strikethrough ·
  * horizontal align · merge/unmerge · number formats (currency/percent/decimals).
- * Follow-ups: text/fill colour pickers (need a swatch popover) and reflecting the
- * active cell's state (active toggles, current font) via selection sync.
+ * Reflects the active cell — toggles light up, dropdowns show the current font —
+ * via a command-execution subscription. Follow-up: text/fill colour pickers
+ * (need a swatch popover).
  */
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { ICommandService } from '@univerjs/core';
 import type { CasualSheetsAPI } from '../sheets/api';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
+
+interface ActiveStyle {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  ht: number; // HorizontalAlign of the active cell (0 = unset)
+  ff: string;
+  fs: number;
+}
+
+const NO_STYLE: ActiveStyle = {
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  ht: 0,
+  ff: '',
+  fs: 0,
+};
+
+function readActiveStyle(api: CasualSheetsAPI): ActiveStyle {
+  const sel = api.getSelection();
+  const sheet = api.univer.getActiveWorkbook()?.getActiveSheet();
+  if (!sel || !sheet) return NO_STYLE;
+  const range = sheet.getRange(sel.range.startRow, sel.range.startColumn);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = (range.getCellStyleData?.() ?? null) as any;
+  return {
+    bold: s?.bl === 1,
+    italic: s?.it === 1,
+    underline: s?.ul?.s === 1,
+    strike: s?.st?.s === 1,
+    ht: typeof s?.ht === 'number' ? s.ht : 0,
+    ff: typeof s?.ff === 'string' ? s.ff : '',
+    fs: typeof s?.fs === 'number' ? s.fs : 0,
+  };
+}
 
 const FONT_FAMILIES = ['Arial', 'Calibri', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana'];
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
@@ -166,20 +206,63 @@ const SELECT_STYLE: CSSProperties = {
 };
 
 export interface ToolbarProps {
-  /** Reaches the live API (set after `onReady`); read lazily on click. */
-  getApi: () => CasualSheetsAPI | null;
+  /** Live API, or `null` until the editor is ready. */
+  api: CasualSheetsAPI | null;
 }
 
-export function Toolbar({ getApi }: ToolbarProps) {
-  // Local "last applied" state — the font controls apply on change. (Reflecting
-  // the active cell's current font needs selection sync; that's a follow-up that
-  // also lights up active states on the toggle buttons.)
-  const [family, setFamily] = useState('Arial');
-  const [size, setSize] = useState(11);
+// Which actions reflect an active state, keyed off the active cell's style.
+function isActive(id: string, s: ActiveStyle): boolean {
+  switch (id) {
+    case 'bold':
+      return s.bold;
+    case 'italic':
+      return s.italic;
+    case 'underline':
+      return s.underline;
+    case 'strikethrough':
+      return s.strike;
+    case 'align-left':
+      return s.ht === 1;
+    case 'align-center':
+      return s.ht === 2;
+    case 'align-right':
+      return s.ht === 3;
+    default:
+      return false;
+  }
+}
+
+export function Toolbar({ api }: ToolbarProps) {
+  const [active, setActive] = useState<ActiveStyle>(NO_STYLE);
 
   useEffect(() => {
     ensureChromeFonts();
   }, []);
+
+  // Reflect the active cell: subscribe to command activity (covers selection
+  // moves + style mutations) and re-read the style.
+  useEffect(() => {
+    if (!api) return;
+    const refresh = () => setActive(readActiveStyle(api));
+    refresh();
+    const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
+      ._injector;
+    const cmd = injector?.get(ICommandService) as
+      | { onCommandExecuted: (cb: () => void) => { dispose: () => void } }
+      | undefined;
+    const sub = cmd?.onCommandExecuted(() => refresh());
+    return () => sub?.dispose();
+  }, [api]);
+
+  const dispatch = (command: string, params?: object) => void api?.executeCommand(command, params);
+
+  // Reflect current font in the dropdowns; surface a non-listed value too.
+  const familyValue = active.ff || 'Arial';
+  const familyOptions =
+    active.ff && !FONT_FAMILIES.includes(active.ff) ? [active.ff, ...FONT_FAMILIES] : FONT_FAMILIES;
+  const sizeValue = active.fs || 11;
+  const sizeOptions =
+    active.fs && !FONT_SIZES.includes(active.fs) ? [active.fs, ...FONT_SIZES] : FONT_SIZES;
 
   return (
     <div style={BAR_STYLE} data-testid="casual-sheets-toolbar" role="toolbar" aria-label="Editor">
@@ -187,16 +270,10 @@ export function Toolbar({ getApi }: ToolbarProps) {
         aria-label="Font family"
         data-testid="cs-font-family"
         style={{ ...SELECT_STYLE, width: 116 }}
-        value={family}
-        // mousedown-preserve isn't possible on native select; commit on change.
-        onChange={(e) => {
-          setFamily(e.target.value);
-          void getApi()?.executeCommand('sheet.command.set-range-font-family', {
-            value: e.target.value,
-          });
-        }}
+        value={familyValue}
+        onChange={(e) => dispatch('sheet.command.set-range-font-family', { value: e.target.value })}
       >
-        {FONT_FAMILIES.map((f) => (
+        {familyOptions.map((f) => (
           <option key={f} value={f}>
             {f}
           </option>
@@ -206,14 +283,12 @@ export function Toolbar({ getApi }: ToolbarProps) {
         aria-label="Font size"
         data-testid="cs-font-size"
         style={{ ...SELECT_STYLE, width: 56, marginLeft: 4 }}
-        value={size}
-        onChange={(e) => {
-          const v = Number(e.target.value);
-          setSize(v);
-          void getApi()?.executeCommand('sheet.command.set-range-fontsize', { value: v });
-        }}
+        value={sizeValue}
+        onChange={(e) =>
+          dispatch('sheet.command.set-range-fontsize', { value: Number(e.target.value) })
+        }
       >
-        {FONT_SIZES.map((s) => (
+        {sizeOptions.map((s) => (
           <option key={s} value={s}>
             {s}
           </option>
@@ -223,29 +298,40 @@ export function Toolbar({ getApi }: ToolbarProps) {
       {GROUPS.map((group, gi) => (
         <span key={gi} style={{ display: 'inline-flex', alignItems: 'center' }}>
           {gi > 0 && <span style={DIVIDER_STYLE} aria-hidden />}
-          {group.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              title={a.label}
-              aria-label={a.label}
-              data-action={a.id}
-              style={BTN_STYLE}
-              // mousedown (not click) so the grid's selection isn't lost first.
-              onMouseDown={(e) => {
-                e.preventDefault();
-                void getApi()?.executeCommand(a.command, a.params);
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--cs-chrome-hover, rgba(0,0,0,0.06))';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <Icon name={a.icon} size={20} />
-            </button>
-          ))}
+          {group.map((a) => {
+            const on = isActive(a.id, active);
+            const baseBg = on ? 'var(--cs-chrome-active, #e6f3f7)' : 'transparent';
+            return (
+              <button
+                key={a.id}
+                type="button"
+                title={a.label}
+                aria-label={a.label}
+                aria-pressed={on}
+                data-action={a.id}
+                data-active={on ? 'true' : undefined}
+                style={{
+                  ...BTN_STYLE,
+                  background: baseBg,
+                  color: on ? 'var(--cs-chrome-active-fg, #0e7490)' : BTN_STYLE.color,
+                }}
+                // mousedown (not click) so the grid's selection isn't lost first.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  dispatch(a.command, a.params);
+                }}
+                onMouseEnter={(e) => {
+                  if (!on)
+                    e.currentTarget.style.background = 'var(--cs-chrome-hover, rgba(0,0,0,0.06))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = baseBg;
+                }}
+              >
+                <Icon name={a.icon} size={20} />
+              </button>
+            );
+          })}
         </span>
       ))}
     </div>

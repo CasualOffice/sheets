@@ -269,6 +269,27 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('[data-stat="average"]')).toHaveText('Average: 2');
   });
 
+  test('chrome toolbar: reflects active cell (Bold active state + font size)', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // Select A1 — bold not active yet.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    await expect(page.locator('[data-action="bold"]')).not.toHaveAttribute('data-active', 'true');
+    // Bold it via the toolbar → the button reflects the active state.
+    await page.locator('[data-action="bold"]').click();
+    await expect(page.locator('[data-action="bold"]')).toHaveAttribute('data-active', 'true');
+  });
+
   test('chrome toolbar: font size dropdown applies to the cell', async ({ page }) => {
     await page.goto('/sdk-harness?chrome=minimal');
     await page.waitForFunction(

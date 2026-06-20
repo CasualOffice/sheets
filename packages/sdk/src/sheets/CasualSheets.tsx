@@ -328,6 +328,9 @@ export function CasualSheets({
     '--cs-chrome-border': dark ? '#32363d' : '#e6e9ee',
     '--cs-chrome-input-bg': dark ? '#23262c' : '#ffffff',
     '--cs-chrome-hover': dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    // accent (design-system #0e7490) for active toggle states.
+    '--cs-chrome-active': dark ? 'rgba(21,151,186,0.22)' : '#e6f3f7',
+    '--cs-chrome-active-fg': dark ? '#7fd3e6' : '#0e7490',
   } as CSSProperties;
 
   return (
@@ -342,7 +345,7 @@ export function CasualSheets({
         flexDirection: 'column',
       }}
     >
-      <Toolbar getApi={() => apiRef.current} />
+      <Toolbar api={chromeApi} />
       <FormulaBar api={chromeApi} />
       <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
       <StatusBar api={chromeApi} />
