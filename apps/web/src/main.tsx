@@ -2,6 +2,12 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { AdminApp } from './admin/AdminApp';
 import { SdkHarness } from './sdk-harness/SdkHarness';
+// Design-system tokens (Phase 4): loads Inter / JetBrains Mono / Manrope +
+// Material Symbols + the 137 design tokens (colours, spacing, radius, shadows,
+// motion, chrome heights) on :root. Imported BEFORE styles.css so the app +
+// SDK chrome can reference `--color-*` / `--space-* / `--motion-*` etc., and
+// `[data-theme="dark"]` swaps them.
+import '@schnsrw/design-system/tokens.css';
 import './styles.css';
 
 // Pathname-based routing — mirrors the home/collab pattern in App.tsx.

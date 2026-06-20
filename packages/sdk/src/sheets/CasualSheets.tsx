@@ -418,28 +418,28 @@ export function CasualSheets({
   }
 
   // The built-in chrome components read their colours from `--cs-chrome-*` CSS
-  // vars (with light fallbacks). Set them on the wrapper so the toolbar / formula
-  // bar / status bar flip with `appearance` — reactive via the prop. (Hosts can
-  // still override any of these vars themselves.)
-  // Values from @schnsrw/design-system tokens (surface-strip / text / border)
-  // — adopted directly (not as a package dep) so the chrome matches the suite.
+  // vars. Phase 4: each var now resolves to a `@schnsrw/design-system` token
+  // (loaded by the host via `tokens.css`), with the prior hardcoded value as a
+  // FALLBACK so the chrome still renders standalone for hosts that don't ship the
+  // design system. `data-theme` on the wrapper (below) swaps the DS tokens
+  // light/dark; the fallbacks keep `appearance` working without the DS too.
   const dark = appearance === 'dark';
   const chromeVars = {
-    '--cs-chrome-bg': dark ? '#2a2e35' : '#eef1f5',
-    '--cs-chrome-fg': dark ? '#e6e6e6' : '#201f1e',
-    '--cs-chrome-muted': dark ? '#b0b3ba' : '#605e5c',
-    '--cs-chrome-border': dark ? '#32363d' : '#e6e9ee',
-    '--cs-chrome-input-bg': dark ? '#23262c' : '#ffffff',
-    '--cs-chrome-hover': dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-    // accent (design-system #0e7490) for active toggle states.
-    '--cs-chrome-active': dark ? 'rgba(21,151,186,0.22)' : '#e6f3f7',
-    '--cs-chrome-active-fg': dark ? '#7fd3e6' : '#0e7490',
+    '--cs-chrome-bg': `var(--color-surface-strip, ${dark ? '#2a2e35' : '#eef1f5'})`,
+    '--cs-chrome-fg': `var(--color-text, ${dark ? '#e6e6e6' : '#201f1e'})`,
+    '--cs-chrome-muted': `var(--color-text-secondary, ${dark ? '#b0b3ba' : '#605e5c'})`,
+    '--cs-chrome-border': `var(--color-divider, ${dark ? '#32363d' : '#e6e9ee'})`,
+    '--cs-chrome-input-bg': `var(--color-surface, ${dark ? '#23262c' : '#ffffff'})`,
+    '--cs-chrome-hover': `var(--color-hover, ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'})`,
+    '--cs-chrome-active': `var(--color-selected, ${dark ? 'rgba(21,151,186,0.22)' : '#e6f3f7'})`,
+    '--cs-chrome-active-fg': `var(--color-accent, ${dark ? '#7fd3e6' : '#0e7490'})`,
   } as CSSProperties;
 
   return (
     <div
       className={className}
       data-testid={testId}
+      data-theme={dark ? 'dark' : 'light'}
       onKeyDownCapture={onKeyDownCapture}
       style={{
         ...DEFAULT_STYLE,

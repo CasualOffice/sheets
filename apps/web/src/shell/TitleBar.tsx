@@ -13,6 +13,9 @@ import { MenuBar } from './MenuBar';
 import { NamePill } from './NamePill';
 import { AccountMenu } from '../auth/AccountMenu';
 import { navigate } from '../router';
+// Suite brand mark from the shared design system (Phase 4) — one logo across
+// sheet/doc/slides/drive. Vite resolves the SVG import to a URL.
+import sheetsMark from '@schnsrw/design-system/assets/casual-sheets-mark.svg';
 
 /**
  * Title bar — Google-Docs-style two-row chrome.
@@ -112,9 +115,8 @@ export function TitleBar() {
         title="Casual Sheets"
       >
         <img
-          // Prefix with Vite's BASE_URL so the path resolves under
-          // /sheets/ on GitHub Pages and stays at / in local dev.
-          src={`${import.meta.env.BASE_URL}brand.svg`}
+          // Shared design-system suite mark (Phase 4).
+          src={sheetsMark}
           alt="Casual Sheets"
           className="titlebar__brand-icon"
           width={28}
