@@ -269,6 +269,39 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('[data-stat="average"]')).toHaveText('Average: 2');
   });
 
+  test('chrome toolbar: font size dropdown applies to the cell', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue('x');
+      ws.getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.getByTestId('cs-font-size').selectOption('24');
+    const fs = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        if (style?.fs === 24) return 24;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return null;
+    });
+    expect(fs).toBe(24);
+  });
+
   test('chrome toolbar: Merge cells merges the selection', async ({ page }) => {
     await page.goto('/sdk-harness?chrome=minimal');
     await page.waitForFunction(

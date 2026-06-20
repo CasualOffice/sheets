@@ -6,15 +6,19 @@
  * row (the host frames the editor with its own bar). Commands grouped with
  * dividers, Office-style.
  *
- * Covered: undo/redo · bold/italic/underline/strikethrough · horizontal align.
- * Font/size/colour pickers, number formats, borders, merge land as follow-up
- * slices (some need value pickers / dropdowns).
+ * Covered: font family/size · undo/redo · bold/italic/underline/strikethrough ·
+ * horizontal align · merge/unmerge · number formats (currency/percent/decimals).
+ * Follow-ups: text/fill colour pickers (need a swatch popover) and reflecting the
+ * active cell's state (active toggles, current font) via selection sync.
  */
 
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { CasualSheetsAPI } from '../sheets/api';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
+
+const FONT_FAMILIES = ['Arial', 'Calibri', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana'];
+const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
 
 interface ToolbarAction {
   id: string;
@@ -149,18 +153,73 @@ const DIVIDER_STYLE: CSSProperties = {
   flex: '0 0 auto',
 };
 
+const SELECT_STYLE: CSSProperties = {
+  height: 26,
+  border: '1px solid var(--cs-chrome-border, #cdd3db)',
+  borderRadius: 6,
+  background: 'var(--cs-chrome-input-bg, #fff)',
+  color: 'var(--cs-chrome-fg, #201f1e)',
+  font: 'inherit',
+  fontSize: 13,
+  padding: '0 4px',
+  cursor: 'pointer',
+};
+
 export interface ToolbarProps {
   /** Reaches the live API (set after `onReady`); read lazily on click. */
   getApi: () => CasualSheetsAPI | null;
 }
 
 export function Toolbar({ getApi }: ToolbarProps) {
+  // Local "last applied" state — the font controls apply on change. (Reflecting
+  // the active cell's current font needs selection sync; that's a follow-up that
+  // also lights up active states on the toggle buttons.)
+  const [family, setFamily] = useState('Arial');
+  const [size, setSize] = useState(11);
+
   useEffect(() => {
     ensureChromeFonts();
   }, []);
 
   return (
     <div style={BAR_STYLE} data-testid="casual-sheets-toolbar" role="toolbar" aria-label="Editor">
+      <select
+        aria-label="Font family"
+        data-testid="cs-font-family"
+        style={{ ...SELECT_STYLE, width: 116 }}
+        value={family}
+        // mousedown-preserve isn't possible on native select; commit on change.
+        onChange={(e) => {
+          setFamily(e.target.value);
+          void getApi()?.executeCommand('sheet.command.set-range-font-family', {
+            value: e.target.value,
+          });
+        }}
+      >
+        {FONT_FAMILIES.map((f) => (
+          <option key={f} value={f}>
+            {f}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Font size"
+        data-testid="cs-font-size"
+        style={{ ...SELECT_STYLE, width: 56, marginLeft: 4 }}
+        value={size}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          setSize(v);
+          void getApi()?.executeCommand('sheet.command.set-range-fontsize', { value: v });
+        }}
+      >
+        {FONT_SIZES.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+      <span style={DIVIDER_STYLE} aria-hidden />
       {GROUPS.map((group, gi) => (
         <span key={gi} style={{ display: 'inline-flex', alignItems: 'center' }}>
           {gi > 0 && <span style={DIVIDER_STYLE} aria-hidden />}
