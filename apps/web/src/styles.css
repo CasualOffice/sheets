@@ -2857,6 +2857,10 @@ button {
   align-items: center;
   justify-content: center;
   z-index: 2000;
+  /* Soft blur behind the scrim so the dialog reads as a focused, floating
+     layer (design-system Dialog feel). */
+  backdrop-filter: blur(3px) saturate(1.1);
+  -webkit-backdrop-filter: blur(3px) saturate(1.1);
   animation: cs-scrim-in var(--motion-fast) var(--ease-out) both;
 }
 
@@ -2876,13 +2880,17 @@ button {
      that don't need this much room. */
   width: min(640px, 92vw);
   max-height: 86vh;
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-3);
+  /* Design-system Dialog look (Phase 4): raised surface, the largest radius
+     in the ladder (--radius-xl 14px), deepest shadow (--shadow-4) so it
+     floats well clear of the blurred scrim. */
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-4);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Design-system motion (Phase 4): dialogs rise + scale in on a spring. */
+  /* Dialogs rise + scale in on a spring. */
   animation: cs-rise-in var(--motion-slow) var(--ease-spring) both;
 }
 
@@ -2899,7 +2907,8 @@ button {
 }
 
 .dialog__title {
-  font-size: var(--text-md);
+  /* DS dialog header runs at --text-lg (16px) semibold. */
+  font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
   margin: 0;
 }
