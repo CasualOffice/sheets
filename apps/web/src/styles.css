@@ -1416,6 +1416,14 @@ button {
   display: flex;
   flex: 1;
   min-height: 0;
+  /* "Desk" for the floating body cards (Phase 4): canvas, side panel, and
+     rail all sit on this neutral strip with a uniform gap, so everything
+     reads as a rounded card on one surface — nothing is the odd one out.
+     The desk is mixed a touch darker than the chrome strip so the white
+     cards clearly lift off it (a near-white desk read as seams, not float). */
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-surface-strip), var(--color-text) 7%);
 }
 
 /* ── Right-edge panel rail ──────────────────────────────────────────
@@ -1424,27 +1432,26 @@ button {
    users can re-open without hunting through menus. The active panel
    body opens to the LEFT of the rail (preceding it in flex order). */
 .panel-rail {
-  flex: 0 0 36px;
-  width: 36px;
+  /* A clean floating icon column on the desk — no tacked-on strip bg or
+     borders. Buttons carry their own hover/active treatment (Phase 4). */
+  flex: 0 0 40px;
+  width: 40px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  padding: 6px 2px;
-  background: var(--color-surface-alt);
-  border-top: 1px solid var(--color-divider);
-  border-left: 1px solid var(--color-divider);
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+  background: transparent;
 }
 .panel-rail__btn {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
-  width: 32px;
-  margin: 0 auto;
+  height: 36px;
+  width: 36px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -1457,20 +1464,9 @@ button {
   color: var(--color-text);
 }
 .panel-rail__btn--active {
-  background: var(--color-accent-soft, var(--color-pressed));
+  /* DS IconButton pressed look — filled accent well + accent glyph. */
+  background: var(--color-selected);
   color: var(--color-accent);
-}
-.panel-rail__btn--active::before {
-  /* Accent rail marker on the LEFT edge of the active button —
-     matches VSCode / Office activity-bar conventions. */
-  content: '';
-  position: absolute;
-  left: -2px;
-  top: 6px;
-  bottom: 6px;
-  width: 2px;
-  background: var(--color-accent);
-  border-radius: 0 2px 2px 0;
 }
 .panel-rail__btn:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -1487,7 +1483,11 @@ button {
   background: var(--color-surface);
   overflow: hidden;
   z-index: 1;
-  border-top: 1px solid var(--color-divider);
+  /* Rounded floating canvas card on the desk — same radius / hairline /
+     shadow as the side panel so neither is the odd one out (Phase 4). */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
 }
 
 /* Our React-owned side panel (Tables for now). Sits to the right of the
@@ -5859,7 +5859,8 @@ button {
 .side-panel,
 .charts-panel,
 .outline-panel {
-  margin: var(--space-3);
+  /* Rounded floating card; the .grid-row desk gap provides the separation
+     (no own margin — keeps the gap uniform with the canvas card). */
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
