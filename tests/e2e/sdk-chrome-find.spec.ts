@@ -20,6 +20,10 @@ test.describe('SDK chrome — Find & Replace', () => {
       null,
       { timeout: 30_000 },
     );
+    // The chrome (incl. FindReplace + its Ctrl+F/H listener) lazy-loads a tick
+    // after onReady — wait for the status bar so the keyboard shortcut isn't
+    // pressed before the listener attaches.
+    await expect(page.getByTestId('casual-sheets-status-bar')).toBeVisible();
     // Seed A1=apple, A2=banana, A3=apricot.
     await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
