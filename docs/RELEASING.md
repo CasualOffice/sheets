@@ -59,11 +59,16 @@ line has finished migrating; the npm line has not:
   tags (`:0.3.1` / `:latest`) remain live but are frozen. There is no `0.4.x` /
   `0.5.x` Docker image — those numbers belong to the SDK line, not the app
   (see [#57](https://github.com/CasualOffice/sheets/issues/57)).
-- **SDK — latest `0.8.0`, still on npm under the old scope
-  `@schnsrw/casual-sheets`.** The package is already renamed to
-  `@casualoffice/sheets` in `packages/sdk`, but the first `@casualoffice/sheets`
-  npm publish is **pending** (the new scope 404s until then).
+- **SDK — two generations.** The **old** line is published as
+  `@schnsrw/casual-sheets@0.8.0` (pre-restructure: minimal editor + xlsx import +
+  host-controlled toolbar). The **new** line is `@casualoffice/sheets` — the
+  Excalidraw-model restructure now landing on `main` (full editor, formula
+  engine, `CasualSheetsAPI`, `onChange`, lazy plugins, …). It lives in
+  `packages/sdk` but is **not yet published** (the scope 404s); the unreleased
+  changesets ship it as `@casualoffice/sheets@0.9.0+` on first publish. The new
+  API does **not** exist in `@schnsrw/casual-sheets@0.8.0`.
 
-**Until the npm publish lands:** integrators depending on the package today must
-use `@schnsrw/casual-sheets`; docs reference the going-forward name
+**Until the `@casualoffice/sheets` publish lands:** the restructure SDK is
+install-able only from source; `@schnsrw/casual-sheets@0.8.0` is the only
+published SDK but lacks the new API. Docs reference the going-forward name
 `@casualoffice/sheets`. Self-hosters pull `casualoffice/sheets:latest`.
