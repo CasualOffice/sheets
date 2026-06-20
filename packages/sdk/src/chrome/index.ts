@@ -13,3 +13,4 @@ export { ensureChromeFonts } from './fonts';
 export { ColorPicker, type ColorPickerProps } from './ColorPicker';
 export { MenuBar, type MenuBarProps } from './MenuBar';
 export { NameBox, type NameBoxProps } from './NameBox';
+export { SheetTabs, type SheetTabsProps } from './SheetTabs';

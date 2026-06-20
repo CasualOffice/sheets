@@ -64,7 +64,7 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
 import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
-import { MenuBar, Toolbar, FormulaBar, StatusBar } from '../chrome';
+import { MenuBar, Toolbar, FormulaBar, SheetTabs, StatusBar } from '../chrome';
 
 export interface CasualSheetsProps {
   /** Workbook snapshot to mount. Read once on initial mount; change
@@ -388,6 +388,7 @@ export function CasualSheets({
       <Toolbar api={chromeApi} />
       <FormulaBar api={chromeApi} />
       <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
+      <SheetTabs api={chromeApi} />
       <StatusBar api={chromeApi} />
     </div>
   );

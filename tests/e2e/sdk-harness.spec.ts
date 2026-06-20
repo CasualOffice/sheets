@@ -530,6 +530,56 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(sel).toMatchObject({ startRow: 4, startColumn: 2 });
   });
 
+  test('chrome sheet tabs: add a sheet → second tab appears and activates', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const strip = page.getByTestId('casual-sheets-tabs');
+    await expect(strip).toBeVisible();
+    // The default workbook has exactly one sheet tab.
+    await expect(strip.getByRole('tab')).toHaveCount(1);
+    await page.getByTestId('cs-tab-add').click();
+    // A second tab should appear, and the new one becomes active.
+    await expect(strip.getByRole('tab')).toHaveCount(2);
+    const sheetCount = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      return api.univer.getActiveWorkbook().getSheets().length;
+    });
+    expect(sheetCount).toBe(2);
+  });
+
+  test('chrome sheet tabs: double-click rename commits the new name', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const tab = page.getByTestId('casual-sheets-tabs').getByRole('tab').first();
+    await tab.dblclick();
+    const input = page.getByTestId('cs-tab-rename-input');
+    await expect(input).toBeVisible();
+    await input.fill('Budget');
+    await input.press('Enter');
+    const name = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const n = api.univer.getActiveWorkbook().getActiveSheet().getSheetName();
+        if (n === 'Budget') return n;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return api.univer.getActiveWorkbook().getActiveSheet().getSheetName();
+    });
+    expect(name).toBe('Budget');
+  });
+
   test('onSave fires on Ctrl/Cmd+S with the snapshot', async ({ page }) => {
     await page.goto('/sdk-harness?chrome=minimal');
     await page.waitForFunction(
