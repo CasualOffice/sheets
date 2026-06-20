@@ -16,3 +16,4 @@ export { AutoSumPicker, type AutoSumPickerProps } from './AutoSumPicker';
 export { MenuBar, type MenuBarProps } from './MenuBar';
 export { NameBox, type NameBoxProps } from './NameBox';
 export { SheetTabs, type SheetTabsProps } from './SheetTabs';
+export { FindReplace, type FindReplaceProps } from './FindReplace';
