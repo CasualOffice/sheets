@@ -66,8 +66,9 @@ export function MyEditor({ initial }: { initial: IWorkbookData }) {
           console.log('ready', api.getSnapshot());
         }}
         onChange={(snapshot) => {
-          // persist wherever you like — this is the "you own storage" half
-          localStorage.setItem('my-workbook', JSON.stringify(snapshot));
+          // the SDK hands you the data; YOU persist it (backend, WOPI, or —
+          // for a backendless host — localStorage). The SDK stores nothing.
+          myBackend.autosave(snapshot);
         }}
       />
     </div>
@@ -121,17 +122,25 @@ interface CasualSheetsAPI {
 }
 ```
 
-### Persistence pattern
+### Persistence pattern — the host stores, the SDK never does
 
-`onChange` + `loadSnapshot` is all you need to run the editor against your own
-storage with no server:
+The SDK **owns no storage**. It hands you the workbook data on **change / save /
+exit**; *you* persist it wherever you want (your backend, a WOPI host, a file —
+or `localStorage` if you're a backendless demo). `loadSnapshot` reads it back.
 
 ```tsx
 <CasualSheets
-  initialData={loadFromLocalStorage() ?? blankWorkbook()}
-  onChange={(snap) => localStorage.setItem('wb', JSON.stringify(snap))}
+  initialData={(await myBackend.load(id)) ?? blankWorkbook()}
+  onChange={(snap) => myBackend.autosave(id, snap)} // debounced stream
+  onSave={(snap) => myBackend.save(id, snap)} // explicit Ctrl+S / Save
+  onExit={(snap) => myBackend.save(id, snap)} // last write before unmount
 />
 ```
+
+`localStorage` is a perfectly good target **for a host that has no backend** (it's
+what our Pages demo uses) — but that's *your* choice as the host, not something the
+SDK does. In the `<iframe>` embed, the same events arrive as `postMessage` instead
+of callbacks.
 
 ### Reading the selection
 
@@ -175,6 +184,11 @@ Hocuspocus + Yjs) that attaches around the editor; the integration hook is
 `ICommandService.onMutationExecutedForCollab` (see
 [`CO-EDITING.md`](./CO-EDITING.md)). Without it you have a fully functional
 single-user editor.
+
+In collaborative mode the realtime transport carries live edits, but the
+**authoritative document is persisted through your host integration (WOPI or
+similar)** — the same "the host stores, the SDK doesn't" rule, not a browser
+store.
 
 ---
 

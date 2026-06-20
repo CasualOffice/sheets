@@ -60,8 +60,8 @@ apps/server   →  @sheet/server (private, Fastify + Hocuspocus /yjs, opt-in col
 | --- | --- | --- |
 | **G1** | **The SDK is not the editor.** `@casualoffice/sheets` boots Univer with core plugins only. The full editor — every lazy plugin, the Office chrome, paste/merge hooks, the formula worker, snapshot swap — lives in `apps/web/src/UniverSheet.tsx` + `apps/web/src/shell/` and is **not exported.** | Integrators embedding the SDK get a bare grid, not the product. They cannot reproduce the hosted editor. |
 | **G2** | **No documented, stable integration API.** `CasualSheets` takes a snapshot and hands back `FUniver` via `onReady`. There is no first-class props contract (`viewMode`, `theme`, `onChange`) and no curated imperative API (`loadSnapshot`, `getSnapshot`, `exportXlsx`, `attachCollab`). | Hosts reach into raw Univer internals; every Univer bump can break them. No semver contract. |
-| **G3** | **Storage + collab are tangled into the heavy app.** `FileSource` and the Yjs bridge live in `apps/web`, not as adapters around the SDK. | Collab/localStorage can't be consumed independently. An integrator who wants "editor + localStorage, no server" has to lift app code. |
-| **G4** | **No thin reference site.** `apps/web` is ~60% bespoke shell; `services/site` is an Astro marketing site. The design system `@schnsrw/design-system` exists but **sheet does not consume it**. | There is no excalidraw.com-equivalent: a thin host that is mostly SDK + localStorage and demonstrates the integration path. |
+| **G3** | **No clean save/exit event contract; collab is tangled into the heavy app.** The Yjs bridge + persistence live in `apps/web`, not as a host-facing event surface around the SDK. | An integrator can't get the editor to simply "hand me the data on save/exit and I'll persist it." They have to lift app code instead of consuming an event contract. |
+| **G4** | **No thin reference site.** `apps/web` is ~60% bespoke shell; `services/site` is an Astro marketing site. The design system `@schnsrw/design-system` exists but **sheet does not consume it**. | There is no excalidraw.com-equivalent: a thin host that is mostly SDK and demonstrates the integration path (it may use localStorage as *its* store, like excalidraw.com — but the SDK itself stores nothing). |
 
 ---
 
@@ -78,20 +78,21 @@ packages/
 │    ├── ./signing     signature pipeline
 │    └── ./styles      CSS side-effect entry
 │
-├── storage        @casualoffice/sheets-storage  ← OPT-IN persistence adapters
-│    ├── browser     BrowserFileSource (localStorage/IndexedDB) — the DEFAULT
-│    ├── wopi        WopiFileSource
-│    └── personal    PersonalFileSource (talks to apps/server)
+│   (no storage package — the SDK persists NOTHING; it emits save/exit
+│    events and the HOST stores the bytes. WOPI/personal/S3 adapters are
+│    host-side, fed by those events.)
 │
 └── collab         @casualoffice/sheets-collab    ← OPT-IN real-time
      ├── bridge      Univer ↔ Yjs translation + echo-loop guard
      ├── presence    cursor / selection / live-edit awareness
-     └── driver      attachCollab(api, { room, server }) — connects to apps/server
+     └── driver      attachCollab(api, { room, server }) — realtime transport;
+                     persistence in collab mode is WOPI/host-backed, not a store
 
 apps/
 ├── web            @sheet/web   ← THIN reference host (excalidraw.com-equivalent)
-│    └── consumes sdk + sdk/chrome + storage(browser by default) + collab(opt-in).
-│        localStorage/IDB is zero-config; collab/WOPI/personal are layered adapters.
+│    └── consumes sdk + sdk/chrome; persists via the SDK's save/exit events.
+│        The Pages demo uses localStorage as ITS store (backendless, like
+│        excalidraw.com); real hosts swap in WOPI / their own backend / collab.
 │
 └── server         @sheet/server  ← OPT-IN collab + storage backend
      └── unchanged in shape: Fastify + Hocuspocus /yjs, only runs when a room exists.
@@ -116,11 +117,18 @@ import '@casualoffice/sheets/styles'
   theme="light"                   // 'light' | 'dark'
   viewMode={false}                // read-only viewer
   chrome="full"                   // 'full' | 'minimal' | 'none'  (Office shell level)
-  onChange={(snapshot) => …}      // debounced snapshot stream (host persists it)
+  onChange={(snapshot) => …}      // debounced stream while editing (host persists)
+  onSave={(snapshot) => …}        // explicit save (Ctrl+S / Save) — host writes it
+  onExit={(snapshot) => …}        // editor closing — last chance to persist
   onReady={(api) => …}            // hands back the imperative API below
   plugins={['charts','pivot']}    // opt-in heavy plugins; default = lazy-on-demand
 />
 ```
+
+The same events cross the iframe boundary as **postMessage** in the
+`<iframe>`/`embed-runtime` delivery mode (`EmbedTransport`) — host code listens
+for `save`/`exit` messages instead of React callbacks. **Persistence is always
+the host's job; the SDK never writes a store.**
 
 ```ts
 interface CasualSheetsAPI {
@@ -145,20 +153,35 @@ Rules:
 - **Pure import/export** (`@casualoffice/sheets/xlsx`) works with no React and no DOM —
   for server-side seeding and Node consumers (see headless caveats in `CLAUDE.md`).
 
-### Storage: localStorage is the default, server is optional
+### Storage: the SDK never persists — the host does, on save/exit
 
-- `BrowserFileSource` (IndexedDB, with File System Access where available) is the
-  **zero-config default** — the editor persists locally with no server, exactly like
-  excalidraw.com.
-- `wopi` and `personal` are adapters selected at runtime by the host (`select.ts`),
-  never branched on inside the editor. The editor only ever sees the `FileSource`
-  interface.
+- **The SDK owns no storage. No `localStorage`, no `IndexedDB`, no default store.**
+  It is storage-agnostic.
+- **Persistence is a handoff to the integrating app.** The editor emits the
+  workbook data on **change / save / exit**; the host decides where it goes (its
+  own backend, a WOPI host, a file, etc.). The editor never decides.
+- **Two event-delivery surfaces, same contract:**
+  - **Hooks / callbacks** for the React `<CasualSheets>` component
+    (`onChange`, `onSave`, `onExit`, `onReady`).
+  - **postMessage** for the `<iframe>` embed (`embed-runtime` `EmbedTransport`) —
+    save/exit events cross the frame boundary to the host.
+- There is **no `FileSource` baked into the editor.** A host that wants
+  WOPI/personal/S3 persistence implements it on *its* side, fed by these events.
 
-### Collab: opt-in, attaches around the editor
+> **`localStorage` is fine for the *demo host*, not the SDK.** Our thin demo
+> (`apps/web` on GitHub Pages — backendless, the excalidraw.com-equivalent) may
+> persist to `localStorage` as **its** storage choice, wired through the SDK's
+> save/exit events. That's the host doing it, exactly like excalidraw.com — the
+> SDK still writes nothing. Real integrators swap that for their backend / WOPI.
 
-- The editor ships **collab-unaware.** A host calls `api.attachCollab({ room, server })`
-  to wire the Yjs bridge; without that call there is no socket, no presence, no server.
-- Mirrors `excalidraw-room`: `apps/server` only matters once a room is created.
+### Collab: opt-in realtime, WOPI-backed persistence
+
+- The editor ships **collab-unaware.** A host opts in to wire the realtime bridge;
+  without it there is no socket, no presence, no server.
+- **In collaborative mode, persistence is based on WOPI** (or a similar host
+  protocol) — *not* a browser store. The realtime transport (Yjs/Hocuspocus)
+  carries live edits; the authoritative document is saved through the host's WOPI
+  integration.
 - The hook contract is unchanged and non-negotiable (see `CLAUDE.md` hard rules):
   subscribe to `ICommandService.onMutationExecutedForCollab`, apply remote mutations
   with `IExecutionOptions.fromCollab`, respect `params.__splitChunk__`.
@@ -177,7 +200,7 @@ Rules:
 | --- | --- |
 | Package **is** the full editor (G1) | Excalidraw's core insight: integrators must get the product, not a kit. The hosted site then proves the embed path by *being* a consumer. |
 | Props + imperative ref + slots (G2) | The exact surface Excalidraw integrators already understand; gives us a semver contract independent of Univer's internal churn. |
-| Storage/collab as opt-in adapters (G3) | Lets "editor + localStorage, no server" be the default story, and keeps `apps/server` a true addition. |
+| Host-owned persistence via save/exit events (G3) | The SDK stores nothing; it emits the data and the host persists it (localStorage for the demo, WOPI/backend for real hosts). Collab is opt-in realtime with WOPI-backed save. Keeps `apps/server` a true addition. |
 | Slim `apps/web` onto the SDK (G4) | One host to maintain; it doubles as the live integration example. Adopts `@schnsrw/design-system` so all suite editors share one look. |
 | Univer 0.25 first (Phase 0) | The SDK extraction should happen on the version we ship, not a moving base. The fork has no 0.25 yet — see pipeline Phase 0. |
 | Keep `apps/server` shape | Hocuspocus + Fastify already match the opt-in room-server model; no redesign needed. |
