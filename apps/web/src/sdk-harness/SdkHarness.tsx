@@ -37,6 +37,17 @@ export function SdkHarness() {
           univer.registerPlugin(UniverSheetsCrosshairHighlightPlugin);
         }
       : undefined;
+  // `?formulaWorker=1` exercises off-main formula compute via the standard
+  // Univer formula worker — the spec asserts compute still works through it.
+  const formula =
+    params.get('formulaWorker') === '1'
+      ? {
+          worker: new Worker(new URL('../univer/formula-worker.ts', import.meta.url), {
+            type: 'module',
+            name: 'formula-worker',
+          }),
+        }
+      : undefined;
   return (
     <div data-testid="sdk-harness" style={{ position: 'fixed', inset: 0 }}>
       <CasualSheets
@@ -45,6 +56,7 @@ export function SdkHarness() {
         appearance={appearance}
         chrome={chrome}
         onBeforeCreateUnit={beforeCreate}
+        formula={formula}
         onReady={(api: CasualSheetsAPI) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessAPI = api;

@@ -13,11 +13,11 @@
  * snapshot already uses, idle-loaded otherwise. Pass `lazyPlugins={false}`
  * for the minimal editor.
  *
+ * Formula compute runs on the main thread by default; pass `formula={{ worker }}`
+ * to move it off-thread (the SDK then wires `UniverRPCMainThreadPlugin` to the
+ * host's worker — see the `formula` prop).
+ *
  * Intentionally NOT included (host can layer on top via FUniver):
- *   - Formula compute via Web Worker — `notExecuteFormula: false`
- *     is the default; the formula engine runs on the main thread.
- *     Host wires `UniverRPCMainThreadPlugin` + a worker URL itself
- *     if it wants the off-main path.
  *   - Snapshot swap (this component mounts a snapshot once; change
  *     the React `key` to remount with a fresh snapshot).
  *   - Paste-merge hooks, dev helpers, zoom-shortcut overrides,
@@ -57,10 +57,13 @@ import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
-import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
+import { UniverSheetsFormulaPlugin, CalculationMode } from '@univerjs/sheets-formula';
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
+// Type-only — erased at build, so `@univerjs/rpc` stays a runtime-optional peer
+// (loaded via dynamic import only when a formula worker is passed).
+import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univerjs/rpc';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
 import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
@@ -112,6 +115,19 @@ export interface CasualSheetsProps {
    *  most integrators never need it. NOT covered by semver — it hands you the
    *  raw `Univer` instance. */
   onBeforeCreateUnit?: (univer: Univer) => void;
+  /** Off-main formula compute. By default the formula engine runs on the MAIN
+   *  thread (fine for typical sheets, zero host setup). Provide a Web Worker (or
+   *  its URL) to move compute off-thread so paste / sort / fill on large
+   *  workbooks don't freeze the UI: the SDK then registers the formula plugins
+   *  with `notExecuteFormula` and wires `UniverRPCMainThreadPlugin` to your
+   *  worker. The host owns the worker (the SDK never bundles one — that's brittle
+   *  across bundlers) and must have `@univerjs/rpc` installed. The worker script
+   *  is the standard Univer formula worker (see the reference app's
+   *  `apps/web/src/univer/formula-worker.ts`). */
+  formula?: {
+    /** A constructed `Worker`, or a URL/string the RPC plugin loads. */
+    worker?: Worker | string;
+  };
   /** Locale identifier. Defaults to `LocaleType.EN_US`. */
   locale?: LocaleType;
   /** Locale string bundle. Optional — Univer's default English
@@ -180,6 +196,7 @@ export function CasualSheets({
   onExit,
   lazyPlugins = true,
   onBeforeCreateUnit,
+  formula,
   locale = LocaleType.EN_US,
   locales,
   logLevel = LogLevel.WARN,
@@ -226,40 +243,56 @@ export function CasualSheets({
 
     const uiOpts = { ...DEFAULT_UI, ...ui, container };
 
-    univer.registerPlugin(UniverRenderEnginePlugin);
-    // Formula compute runs on the MAIN THREAD (no RPC worker). The library build
-    // externalises @univerjs (see tsup.config.ts), so the host provides a single
-    // redi/@univerjs copy — the duplicate-redi that previously made the formula
-    // plugins fail (and which the SDK worked around by dropping them) is gone.
-    // apps/web offloads compute to a worker for perf on huge sheets, but a worker
-    // shipped inside a published package is brittle to bundle in arbitrary hosts;
-    // main-thread keeps the SDK editor self-contained. SDK restructure Batch 2.
-    univer.registerPlugin(UniverFormulaEnginePlugin);
-    univer.registerPlugin(UniverUIPlugin, uiOpts);
-    univer.registerPlugin(UniverDocsPlugin);
-    univer.registerPlugin(UniverDocsUIPlugin);
-    univer.registerPlugin(UniverSheetsPlugin);
-    univer.registerPlugin(UniverSheetsUIPlugin);
-    univer.registerPlugin(UniverSheetsFormulaPlugin);
-    univer.registerPlugin(UniverSheetsFormulaUIPlugin);
-    univer.registerPlugin(UniverSheetsNumfmtPlugin);
-    univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
-
-    // Register the lazy-loader's holder so the eager/idle loaders can reach this
-    // univer. CasualSheets uses its own (bundled) copy of the loader — the
-    // exported `@casualoffice/sheets/univer` is @internal and only the host app's
-    // legacy UniverSheet consumes it, so there's no cross-instance state to share.
-    if (lazyPlugins) setUniverForLazyLoad(univer);
-
-    // Host escape hatch — register extra plugins before any unit exists
-    // (off-main formula worker, crosshair-highlight, zen-editor, …).
-    onBeforeCreateUnit?.(univer);
+    // `formula.worker` → off-main compute. Default = main thread (fine for
+    // typical sheets, zero host setup).
+    const offMain = !!formula?.worker;
 
     let cancelled = false;
     let changeTimer: ReturnType<typeof setTimeout> | null = null;
     let changeSub: { dispose: () => void } | undefined;
 
     void (async () => {
+      // Plugin registration runs here (not synchronously) so the OPTIONAL RPC
+      // transport can be `await import`ed FIRST and registered in its correct
+      // slot — right after the formula engine, before sheets. Registering it out
+      // of order (or after createUnit) leaves the formula engine's worker channel
+      // unwired → cells stay 0. Dynamic import keeps `@univerjs/rpc` a true
+      // optional peer (only loaded when a worker is passed).
+      let RPCMainThreadPlugin: typeof RpcMainThreadPluginType | null = null;
+      if (offMain && formula?.worker) {
+        RPCMainThreadPlugin = (await import('@univerjs/rpc')).UniverRPCMainThreadPlugin;
+        if (cancelled) return;
+      }
+
+      univer.registerPlugin(UniverRenderEnginePlugin);
+      univer.registerPlugin(
+        UniverFormulaEnginePlugin,
+        offMain ? { notExecuteFormula: true } : undefined,
+      );
+      if (RPCMainThreadPlugin && formula?.worker) {
+        univer.registerPlugin(RPCMainThreadPlugin, { workerURL: formula.worker });
+      }
+      univer.registerPlugin(UniverUIPlugin, uiOpts);
+      univer.registerPlugin(UniverDocsPlugin);
+      univer.registerPlugin(UniverDocsUIPlugin);
+      univer.registerPlugin(UniverSheetsPlugin, offMain ? { notExecuteFormula: true } : undefined);
+      univer.registerPlugin(UniverSheetsUIPlugin);
+      univer.registerPlugin(
+        UniverSheetsFormulaPlugin,
+        offMain
+          ? { notExecuteFormula: true, initialFormulaComputing: CalculationMode.NO_CALCULATION }
+          : undefined,
+      );
+      univer.registerPlugin(UniverSheetsFormulaUIPlugin);
+      univer.registerPlugin(UniverSheetsNumfmtPlugin);
+      univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
+
+      // Lazy-loader holder (the loader is @internal so a relative import shares
+      // no cross-instance state) + host plugin escape hatch — both before
+      // createUnit.
+      if (lazyPlugins) setUniverForLazyLoad(univer);
+      onBeforeCreateUnit?.(univer);
+
       // Eager-load any feature plugin whose data already lives in initialData
       // (CF rules, tables, hyperlinks, …) BEFORE createUnit — Univer's resource
       // manager silently drops keys for plugins that aren't registered when it
