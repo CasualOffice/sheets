@@ -13,6 +13,11 @@ export {
   type EmbedTransportOptions,
 } from './EmbedTransport';
 export {
+  EmbedHostTransport,
+  type EmbedHostHandlers,
+  type EmbedHostTransportOptions,
+} from './EmbedHostTransport';
+export {
   isCasualEnvelope,
   type CasualApp,
   type CasualEnvelope,
@@ -26,6 +31,8 @@ export {
   type SaveResponseData,
   type SaveResponseDataOk,
   type SaveResponseDataErr,
+  type SaveNotifyData,
+  type ExitData,
   type SelectionChangedData,
   type TelemetryEventData,
   type LockLostData,

@@ -230,6 +230,14 @@ function EmbeddedSheets({
       // iframe ships the minimal editor. Hosts that need feature plugins use
       // the React `<CasualSheets>` component directly (lazyPlugins defaults on).
       lazyPlugins={false}
+      // Phase 2 save/exit contract — the iframe surface of the same
+      // `onSave` / `onExit` hooks the React component exposes. The editor
+      // never persists; it hands the snapshot to the host over postMessage
+      // and the host decides what to do with it (WOPI, Drive, localStorage
+      // demo, …). `onSave` fires on Ctrl/Cmd+S inside the iframe; `onExit`
+      // on unmount.
+      onSave={(snapshot) => transport.sendSaveNotify({ snapshot, reason: 'shortcut' })}
+      onExit={(snapshot) => transport.sendExit({ snapshot })}
       onReady={(api) => {
         // Wire host → editor command.execute (Drive's custom toolbar
         // calls this for bold / italic / undo / …). Maps the small
@@ -246,6 +254,7 @@ function EmbeddedSheets({
         // a different module. The runtime behaviour is fine.
         const apiAny = api as unknown as {
           executeCommand(id: string, params?: object): Promise<unknown>;
+          getSnapshot(): unknown;
           univer: { getActiveWorkbook(): { getActiveSheet(): SheetLike | null } | null };
         };
         transport.on({
@@ -257,6 +266,17 @@ function EmbeddedSheets({
               void apiAny.executeCommand(id, params);
             } catch {
               /* swallow — bad command id from a stale host shouldn't crash the iframe */
+            }
+          },
+          // Host clicked its own "Save" button (host-rendered chrome above
+          // the iframe). Snapshot now and emit the same save notification
+          // the in-iframe Ctrl/Cmd+S path does — only the `reason` differs.
+          onCommandSave: () => {
+            try {
+              const snapshot = apiAny.getSnapshot();
+              if (snapshot) transport.sendSaveNotify({ snapshot, reason: 'host' });
+            } catch {
+              /* snapshot unavailable during boot — ignore */
             }
           },
         });

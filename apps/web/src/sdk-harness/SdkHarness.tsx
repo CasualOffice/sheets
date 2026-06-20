@@ -65,6 +65,16 @@ export function SdkHarness() {
           w.__sdkHarnessChangeCount = (w.__sdkHarnessChangeCount ?? 0) + 1;
           w.__sdkHarnessLastSnapshot = snapshot;
         }}
+        onSave={(snapshot: IWorkbookData) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const w = window as any;
+          w.__sdkHarnessSaveCount = (w.__sdkHarnessSaveCount ?? 0) + 1;
+          w.__sdkHarnessLastSaved = snapshot;
+        }}
+        onExit={(snapshot: IWorkbookData) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__sdkHarnessExited = !!snapshot;
+        }}
       />
     </div>
   );

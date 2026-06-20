@@ -22,6 +22,8 @@ import {
   type LoadRequestData,
   type SaveRequestData,
   type SaveResponseData,
+  type SaveNotifyData,
+  type ExitData,
   type SelectionChangedData,
   type TelemetryEventData,
   type CommandSetReadOnlyData,
@@ -143,6 +145,20 @@ export class EmbedTransport {
   /** Editor → Host: ask the host to persist `bytes`. */
   async requestSave(req: SaveRequestData, timeoutMs = 30000): Promise<SaveResponseData> {
     return this.request<SaveResponseData>('casual.save.request', req, timeoutMs, [req.bytes]);
+  }
+
+  /** Editor → Host: the user asked to save (Ctrl/Cmd+S or a host save
+   *  command). Fire-and-forget snapshot notification — the lightweight
+   *  mirror of the React `onSave` hook. The host persists however it
+   *  likes; no response is awaited. */
+  sendSaveNotify(data: SaveNotifyData): void {
+    this.post('casual.save.notify', data);
+  }
+
+  /** Editor → Host: the editor is unmounting. Carries the final snapshot
+   *  so the host can persist on exit. Mirror of the React `onExit` hook. */
+  sendExit(data: ExitData): void {
+    this.post('casual.exit', data);
   }
 
   /** Editor → Host: selection moved. Fire-and-forget. */

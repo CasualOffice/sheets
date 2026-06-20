@@ -26,6 +26,8 @@ import {
   type LoadResponseData,
   type SaveRequestData,
   type SaveResponseData,
+  type SaveNotifyData,
+  type ExitData,
   type SelectionChangedData,
   type SignatureCancelData,
   type SignatureCompleteData,
@@ -49,8 +51,15 @@ export interface EmbedHostHandlers {
   onEditorReady?: (data: EditorHelloData) => void;
   /** Editor requests bytes for `docId`. */
   onLoadRequest?: (data: LoadRequestData) => Promise<LoadResponseData> | LoadResponseData;
-  /** Editor requests a save. */
+  /** Editor requests a save (WOPI-style, carries xlsx bytes). */
   onSaveRequest?: (data: SaveRequestData) => Promise<SaveResponseData> | SaveResponseData;
+  /** Editor fired its lightweight save notification (Ctrl/Cmd+S or a
+   *  host save command). Carries the full snapshot JSON; fire-and-forget.
+   *  Mirror of the React `onSave` hook. */
+  onSaveNotify?: (data: SaveNotifyData) => void;
+  /** Editor is unmounting; carries the final snapshot. Mirror of the
+   *  React `onExit` hook. */
+  onExit?: (data: ExitData) => void;
   onSelectionChanged?: (data: SelectionChangedData) => void;
   onSelectionFormatState?: (data: SelectionFormatStateData) => void;
   onTelemetry?: (data: TelemetryEventData) => void;
@@ -182,6 +191,12 @@ export class EmbedHostTransport {
         }
         return;
       }
+      case 'casual.save.notify':
+        this.handlers.onSaveNotify?.(env.data as SaveNotifyData);
+        return;
+      case 'casual.exit':
+        this.handlers.onExit?.(env.data as ExitData);
+        return;
       case 'casual.selection.changed':
         this.handlers.onSelectionChanged?.(env.data as SelectionChangedData);
         return;

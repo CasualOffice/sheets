@@ -530,6 +530,33 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(sel).toMatchObject({ startRow: 4, startColumn: 2 });
   });
 
+  test('onSave fires on Ctrl/Cmd+S with the snapshot', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // Focus inside the editor so the capture-phase Ctrl+S handler sees the key.
+    await page.getByTestId('casual-sheets-formula-input').click();
+    await page.keyboard.press('Control+s');
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      for (let i = 0; i < 20; i++) {
+        if ((w.__sdkHarnessSaveCount ?? 0) > 0) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return {
+        count: w.__sdkHarnessSaveCount ?? 0,
+        hasSnapshot: !!w.__sdkHarnessLastSaved?.sheets,
+      };
+    });
+    expect(out.count).toBeGreaterThan(0);
+    expect(out.hasSnapshot).toBe(true);
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

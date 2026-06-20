@@ -88,6 +88,40 @@ export interface SaveResponseDataErr {
 export type SaveResponseData = SaveResponseDataOk | SaveResponseDataErr;
 
 // ---------------------------------------------------------------
+// Save / exit notifications (editor → host, fire-and-forget)
+// ---------------------------------------------------------------
+//
+// The lightweight counterpart to the bytes-carrying load/save *request*
+// pair above. These mirror the SDK's React `onSave` / `onExit` hooks one
+// for one — the "one shape, two surfaces" save/exit contract — so a host
+// that frames the iframe gets the same persistence signals a host that
+// renders `<CasualSheets>` directly does. Fire-and-forget: the editor
+// never owns storage; the host decides what to do with the snapshot.
+//
+// `casual.save.request` (above) stays the WOPI-style path for hosts that
+// want xlsx bytes + etag round-trips; these notifications are the simpler
+// "here's the current state, persist it however you like" path.
+
+/** Editor → host: the user explicitly asked to save — Ctrl/Cmd+S inside
+ *  the iframe, or the host's `casual.command.save`. Carries the full
+ *  editor snapshot as JSON (sheet app: Univer's `IWorkbookData`). Mirror
+ *  of the React `onSave` hook. v0.9+. */
+export interface SaveNotifyData {
+  /** App-specific snapshot JSON. Sheet: `IWorkbookData`. */
+  snapshot: unknown;
+  /** What triggered the save: the in-editor shortcut or a host command. */
+  reason: 'shortcut' | 'host';
+}
+
+/** Editor → host: the editor is unmounting / navigating away. Carries
+ *  the final snapshot so the host can persist on exit. Mirror of the
+ *  React `onExit` hook. v0.9+. */
+export interface ExitData {
+  /** App-specific snapshot JSON. Sheet: `IWorkbookData`. */
+  snapshot: unknown;
+}
+
+// ---------------------------------------------------------------
 // Selection + telemetry + lock (editor → host notifications)
 // ---------------------------------------------------------------
 

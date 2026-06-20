@@ -138,8 +138,25 @@ or `localStorage` if you're a backendless demo). `loadSnapshot` reads it back.
 
 `localStorage` is a perfectly good target **for a host that has no backend** (it's
 what our Pages demo uses) — but that's *your* choice as the host, not something the
-SDK does. In the `<iframe>` embed, the same events arrive as `postMessage` instead
-of callbacks.
+SDK does.
+
+In the `<iframe>` embed the *same three signals* arrive as `postMessage`
+envelopes instead of callbacks — one shape, two surfaces. Wire them with
+`EmbedHostTransport` (exported from `@casualoffice/sheets/embed`):
+
+```ts
+const host = new EmbedHostTransport({ app: 'sheet', iframeWindow, embedOrigin });
+host.on({
+  onSaveNotify: ({ snapshot, reason }) => myBackend.save(id, snapshot), // Ctrl+S / host Save button
+  onExit: ({ snapshot }) => myBackend.save(id, snapshot), // last write before the iframe unmounts
+});
+// onChange's iframe equivalent stays the existing selection/telemetry stream.
+```
+
+`reason` is `'shortcut'` (Ctrl/Cmd+S inside the iframe) or `'host'` (you sent
+`casual.command.save` from your own toolbar). The bytes-carrying
+`casual.save.request` / `onSaveRequest` pair stays available for WOPI-style
+hosts that want xlsx + etag round-trips instead of a JSON snapshot.
 
 ### Reading the selection
 
