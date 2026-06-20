@@ -272,6 +272,47 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('[data-stat="max"]')).toHaveText('Max: 3');
   });
 
+  test('chrome status bar: zoom control changes the zoom ratio', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // The zoom render module registers in sheets-ui's onRendered (after the grid
+    // canvas paints) — wait for a sized canvas before driving zoom.
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('canvas')).some((c) => c.clientWidth > 0),
+      null,
+      { timeout: 30_000 },
+    );
+    const level = page.getByTestId('cs-zoom-level');
+    await expect(level).toHaveText('100%');
+    await page.getByTestId('cs-zoom-in').click();
+    // Optimistic UI shows 110% immediately; the worksheet config confirms it.
+    await expect(level).toHaveText('110%');
+    const ratio = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const z = (api.univer.getActiveWorkbook().getActiveSheet() as any)
+          .getSheet()
+          .getConfig().zoomRatio;
+        if (Math.round(z * 100) === 110) return z;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (api.univer.getActiveWorkbook().getActiveSheet() as any).getSheet().getConfig()
+        .zoomRatio;
+    });
+    expect(Math.round(ratio * 100)).toBe(110);
+    // Click the level to reset to 100%.
+    await level.click();
+    await expect(level).toHaveText('100%');
+  });
+
   test('chrome status bar: Count includes text cells, numeric stats skip them', async ({
     page,
   }) => {
@@ -634,17 +675,15 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     const after = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const api = (window as any).__sdkHarnessAPI;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hasBorder = () => Object.values(api.getSnapshot().styles || {}).some((s: any) => s?.bd);
       for (let i = 0; i < 20; i++) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const n = Object.values(api.getSnapshot().styles || {}).filter(
-          (s: any) => s && s.bd,
-        ).length;
-        if (n > 0) return n;
+        if (hasBorder()) return true;
         await new Promise((r) => setTimeout(r, 100));
       }
-      return 0;
+      return false;
     });
-    expect(after).toBeGreaterThan(0);
+    expect(after).toBe(true);
   });
 
   test('onSave fires on Ctrl/Cmd+S with the snapshot', async ({ page }) => {
