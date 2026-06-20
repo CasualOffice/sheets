@@ -110,43 +110,53 @@ documented props + `CasualSheetsAPI` surface.
 
 ---
 
-## Phase 2 — Storage + collab as opt-in adapters  *(G3)*
+## Phase 2 — Save/exit event contract + opt-in collab  *(G3)*
 
-Extract persistence and real-time so "editor + localStorage, no server" is the default
-and a server is a true addition.
+The SDK persists **nothing**. This phase formalizes the **host-owned persistence
+contract** (the editor hands data out on change/save/exit; the host stores it) and
+makes collab opt-in with **WOPI-backed** persistence. There is **no
+`BrowserFileSource` / localStorage built into the SDK** — that earlier framing was
+wrong (localStorage is a *demo-host* choice, not an SDK feature; see
+`SDK_ARCHITECTURE.md` › Storage).
 
 **Steps**
-1. Move `apps/web/src/file-source/` to `@casualoffice/sheets/storage` (or a sibling
-   package — decide at this milestone). `BrowserFileSource` (IndexedDB) is the
-   **zero-config default**; `wopi` + `personal` are runtime-selected adapters.
-2. Move `apps/web/src/collab/` (bridge, presence, driver) to
+1. **Define the save/exit event contract** on the SDK, delivered two ways with one
+   shape: React hooks (`onChange` / `onSave` / `onExit`) and **postMessage** for the
+   `<iframe>` embed (extend `embed-runtime`'s `EmbedTransport` with `save`/`exit`).
+   The SDK never writes a store; it only emits the snapshot.
+2. **Persistence stays host-side.** Today's `apps/web/src/file-source/` (WOPI,
+   personal, demo localStorage) becomes a *host* consumer of those events, not an
+   SDK-bundled `FileSource`. The demo (`apps/web` on Pages) wires events →
+   localStorage; real hosts wire events → WOPI / their backend.
+3. Move `apps/web/src/collab/` (bridge, presence, driver) to
    `@casualoffice/sheets/collab`. Expose `attachCollab(api, { room, server, password })`
    returning a detach handle. The editor stays collab-unaware until attached.
-3. Confirm the non-negotiable collab hooks survive the move: subscribe to
+   **In collab mode the authoritative document is saved via WOPI / host protocol**,
+   not a browser store; Yjs/Hocuspocus is only the realtime transport.
+4. Confirm the non-negotiable collab hooks survive the move: subscribe to
    `ICommandService.onMutationExecutedForCollab`; apply remote with
    `IExecutionOptions.fromCollab`; respect `params.__splitChunk__`.
-4. `apps/server` unchanged.
+5. `apps/server` unchanged.
 
-**Decision at this milestone:** keep storage/collab as SDK subpaths, or graduate to
-standalone `@casualoffice/sheets-storage` / `-collab` packages. Graduate only if a
-consumer needs them independently of the editor.
+**Exit criteria:** a host receives save/exit events (React + postMessage) and can
+persist with no SDK-side storage; the Pages demo round-trips via localStorage as a
+host; `attachCollab` opens a room against `apps/server` with WOPI-backed save;
+WOPI + personal Playwright configs still green.
 
-**Exit criteria:** a host can run the editor with localStorage and zero network;
-`attachCollab` opens a room against `apps/server` and presence works; WOPI + personal
-Playwright configs still green.
-
-**Milestone M2:** storage + collab consumable independently; localStorage is the
-default path; collab is one call.
+**Milestone M2:** save/exit event contract shipped on both delivery surfaces;
+collab is one call with WOPI-backed persistence; the SDK stores nothing.
 
 ---
 
 ## Phase 3 — Slim `apps/web` into a thin reference host  *(G4)*
 
-Make `apps/web` the excalidraw.com-equivalent: mostly SDK, localStorage by default,
-collab/WOPI/personal layered as adapters.
+Make `apps/web` the excalidraw.com-equivalent: mostly SDK. As the backendless Pages
+demo it persists to localStorage **as the host** (consuming the SDK's save/exit
+events); WOPI/personal/collab are host-side layers for real deployments.
 
 **Steps**
-1. Reduce `apps/web` to: route shell + `FileSource` selection (`select.ts`) + mounting
+1. Reduce `apps/web` to: route shell + host persistence (save/exit events →
+   localStorage for the demo, WOPI/personal otherwise) + mounting
    `<CasualSheets chrome="full">` + opt-in `attachCollab`.
 2. Delete app-local copies now living in the SDK; import from the package.
 3. Keep `/home` picker, path router, admin panel (personal mode) as host concerns — they
@@ -206,7 +216,7 @@ demonstrates the embed.
 | M0 | Fork on `casual-sheets/0.25`, app+SDK pinned 0.25, CI green | — |
 | M0.5 | Missing Univer plugins wired (crosshair, zen-editor first) | parity |
 | M1 | SDK renders the full Office editor; documented props + `CasualSheetsAPI` | G1, G2 |
-| M2 | Storage + collab consumable independently; localStorage default; collab one call | G3 |
+| M2 | Save/exit event contract (hooks + postMessage); host owns persistence; collab one call, WOPI-backed | G3 |
 | M3 | `apps/web` is a thin SDK consumer | G4 |
 | M4 | Design-system adopted; suite-consistent look + dark mode | G4 |
 | M5 | Published SDK + integration guide + live embed example | — |
