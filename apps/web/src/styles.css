@@ -33,49 +33,9 @@ html[data-theme='dark'] {
   color-scheme: dark;
 }
 
-/* Banner palettes get explicit dark variants — they use hardcoded
-   warm/cool tones, not the neutral tokens. */
-html[data-theme='dark'] .autosave-banner {
-  background: #3f2a14;
-  border-bottom-color: #a86332;
-  color: #ffd8b2;
-}
-html[data-theme='dark'] .autosave-banner__btn {
-  border-color: #a86332;
-  color: #ffd8b2;
-}
-html[data-theme='dark'] .autosave-banner__btn:hover {
-  background: #5a3d1c;
-}
-html[data-theme='dark'] .autosave-banner__btn--primary {
-  background: #c75827;
-  border-color: #c75827;
-  color: #ffffff;
-}
-html[data-theme='dark'] .autosave-banner__btn--primary:hover {
-  background: #d76a36;
-  border-color: #d76a36;
-}
-html[data-theme='dark'] .preview-banner {
-  background: #1a2b48;
-  border-bottom-color: #3b5fa1;
-  color: #cfdcf3;
-}
-html[data-theme='dark'] .preview-banner__btn {
-  border-color: #3b5fa1;
-  color: #cfdcf3;
-}
-html[data-theme='dark'] .preview-banner__btn:hover {
-  background: #243b65;
-}
-html[data-theme='dark'] .preview-banner__btn--primary {
-  background: #3b6cd8;
-  border-color: #3b6cd8;
-}
-html[data-theme='dark'] .preview-banner__btn--primary:hover {
-  background: #4a7be0;
-  border-color: #4a7be0;
-}
+/* Banner dark variants are no longer hand-coded — the autosave (warning)
+   and preview (info) banners now use --color-warning* / --color-info*
+   tokens, which auto-theme under [data-theme="dark"]. */
 
 /* ─────────────────────────────────────────────────────────────────────────
    Reset / base — lock the viewport. Nothing outside the grid ever scrolls.
@@ -5351,9 +5311,9 @@ button {
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  background: #fff7ed;
-  border-bottom: 1px solid #fdba74;
-  color: #7c2d12;
+  background: var(--color-warning-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  color: var(--color-warning);
   font-size: 13px;
 }
 .autosave-banner__text {
@@ -5363,22 +5323,22 @@ button {
   font: inherit;
   padding: 4px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid #fdba74;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
   background: transparent;
-  color: #7c2d12;
+  color: var(--color-warning);
   cursor: pointer;
 }
 .autosave-banner__btn:hover {
-  background: #fed7aa;
+  background: color-mix(in srgb, var(--color-warning) 20%, transparent);
 }
 .autosave-banner__btn--primary {
-  background: #f97316;
+  background: var(--color-warning);
   color: #fff;
-  border-color: #f97316;
+  border-color: var(--color-warning);
 }
 .autosave-banner__btn--primary:hover {
-  background: #ea580c;
-  border-color: #ea580c;
+  background: color-mix(in srgb, var(--color-warning) 82%, #000);
+  border-color: color-mix(in srgb, var(--color-warning) 82%, #000);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -5392,9 +5352,9 @@ button {
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  background: #eff6ff;
-  border-bottom: 1px solid #93c5fd;
-  color: #1e3a8a;
+  background: var(--color-info-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
+  color: var(--color-info);
   font-size: 13px;
 }
 .preview-banner__text {
@@ -5404,22 +5364,22 @@ button {
   font: inherit;
   padding: 4px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid #93c5fd;
+  border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
   background: transparent;
-  color: #1e3a8a;
+  color: var(--color-info);
   cursor: pointer;
 }
 .preview-banner__btn:hover {
-  background: #dbeafe;
+  background: color-mix(in srgb, var(--color-info) 20%, transparent);
 }
 .preview-banner__btn--primary {
-  background: #2563eb;
+  background: var(--color-info);
   color: #fff;
-  border-color: #2563eb;
+  border-color: var(--color-info);
 }
 .preview-banner__btn--primary:hover {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: color-mix(in srgb, var(--color-info) 82%, #000);
+  border-color: color-mix(in srgb, var(--color-info) 82%, #000);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
