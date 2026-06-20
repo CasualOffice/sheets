@@ -21,15 +21,19 @@ import { ICommandService, ThemeService, type IWorkbookData } from '@univerjs/cor
  */
 export function SdkHarness() {
   const [data] = useState(() => emptyWorkbook());
+  const params = new URLSearchParams(window.location.search);
   // `?appearance=dark` mounts the editor in dark mode so the spec can verify it.
-  const appearance =
-    new URLSearchParams(window.location.search).get('appearance') === 'dark' ? 'dark' : 'light';
+  const appearance = params.get('appearance') === 'dark' ? 'dark' : 'light';
+  // `?chrome=minimal|full` renders the built-in chrome so the spec can verify it.
+  const chromeParam = params.get('chrome');
+  const chrome = chromeParam === 'minimal' || chromeParam === 'full' ? chromeParam : 'none';
   return (
     <div data-testid="sdk-harness" style={{ position: 'fixed', inset: 0 }}>
       <CasualSheets
         initialData={data}
         locales={LOCALES}
         appearance={appearance}
+        chrome={chrome}
         onReady={(api: CasualSheetsAPI) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessAPI = api;

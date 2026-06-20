@@ -58,6 +58,7 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
 import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
+import { Toolbar } from '../chrome';
 
 export interface CasualSheetsProps {
   /** Workbook snapshot to mount. Read once on initial mount; change
@@ -114,6 +115,13 @@ export interface CasualSheetsProps {
    *  Univer's design — a host that embeds the editor inside a light page
    *  should scope the editor or accept the global dark CSS. */
   appearance?: 'light' | 'dark';
+  /** Office chrome level rendered around the grid:
+   *  - `'none'` (default): bare grid — the host supplies its own chrome.
+   *  - `'minimal'` / `'full'`: a built-in toolbar (undo/redo/bold/italic/
+   *    underline). The rich Office shell (formula bar, menus, status bar) is
+   *    being lifted from the app behind `'full'`; until then both render the
+   *    minimal toolbar. See SDK_MIGRATION_PIPELINE Phase 1 step 2. */
+  chrome?: 'none' | 'minimal' | 'full';
   /** Container style. Default fills the parent. */
   style?: CSSProperties;
   /** Container className for additional styling hooks. */
@@ -147,6 +155,7 @@ export function CasualSheets({
   ui,
   theme = defaultTheme,
   appearance = 'light',
+  chrome = 'none',
   style,
   className,
   testId = 'casual-sheets',
@@ -281,13 +290,30 @@ export function CasualSheets({
     applyAppearance(api, container, appearance);
   }, [appearance]);
 
+  // chrome="none" (default) keeps the exact bare-grid shape existing consumers
+  // rely on (embed-runtime, hosts that bring their own shell). Any other level
+  // wraps the grid in a flex column with the built-in chrome above it; the grid
+  // container (hostRef, where Univer mounts) fills the remaining space.
+  if (chrome === 'none') {
+    return (
+      <div
+        ref={hostRef}
+        style={{ ...DEFAULT_STYLE, ...style }}
+        className={className}
+        data-testid={testId}
+      />
+    );
+  }
+
   return (
     <div
-      ref={hostRef}
-      style={{ ...DEFAULT_STYLE, ...style }}
       className={className}
       data-testid={testId}
-    />
+      style={{ ...DEFAULT_STYLE, ...style, display: 'flex', flexDirection: 'column' }}
+    >
+      <Toolbar getApi={() => apiRef.current} />
+      <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
+    </div>
   );
 }
 

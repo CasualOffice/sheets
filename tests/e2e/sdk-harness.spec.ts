@@ -167,6 +167,48 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(result.afterLight).toBe(false);
   });
 
+  test('chrome="minimal" renders the toolbar and Bold dispatches', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId('casual-sheets-toolbar')).toBeVisible();
+    await expect(page.locator('[data-action="bold"]')).toBeVisible();
+    // Put a value in A1, select it, then click Bold via the chrome toolbar.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue('x');
+      ws.getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.locator('[data-action="bold"]').click();
+    // Verify via the snapshot: A1's resolved style has bold (bl === 1).
+    const isBold = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        // style is either inline (cell.s as object) or a ref into snap.styles.
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        if (style?.bl === 1) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    });
+    expect(isBold).toBe(true);
+  });
+
+  test('chrome defaults to none (no toolbar)', async ({ page }) => {
+    await expect(page.getByTestId('casual-sheets-toolbar')).toHaveCount(0);
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
