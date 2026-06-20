@@ -1357,6 +1357,9 @@ button {
   max-height: 280px;
   overflow-y: auto;
   font-family: var(--font-sans);
+  /* Design-system motion (Phase 4): autocomplete fades in fast — it
+     re-renders on every keystroke, so a fade reads cleaner than a pop. */
+  animation: cs-fade-in var(--motion-fast) var(--ease-out) both;
 }
 
 .formula-suggestions__item {
@@ -2313,6 +2316,9 @@ button {
   min-width: 200px;
   z-index: 30;
   font-size: 12px;
+  /* Design-system motion (Phase 4): opens upward, so pop from the bottom. */
+  transform-origin: bottom;
+  animation: cs-pop-in var(--motion-base) var(--ease-spring) both;
 }
 .statbar-customise__heading {
   padding: 4px 10px 8px;
@@ -2494,6 +2500,11 @@ button {
      context. Without this, the Borders popover renders behind the formula
      input — Playwright catches it because pointer hit-tests pick the input. */
   z-index: 2000;
+  /* Design-system motion (Phase 4): menus pop in from the top with a gentle
+     spring. Keyframe lives in @schnsrw/design-system motion.css (loaded via
+     tokens.css). Reduced-motion guard at the foot of this file. */
+  transform-origin: top;
+  animation: cs-pop-in var(--motion-base) var(--ease-spring) both;
 }
 
 .menu__item {
@@ -2864,6 +2875,8 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Design-system motion (Phase 4): dialogs rise + scale in on a spring. */
+  animation: cs-rise-in var(--motion-slow) var(--ease-spring) both;
 }
 
 .dialog--narrow {
@@ -5785,5 +5798,21 @@ button {
   .sheet-tabs__tab {
     min-height: 28px;
     padding: 0 10px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Reduced motion — the design-system collapses its own `.cs-anim-*` utility
+   classes under prefers-reduced-motion, but we reference its keyframes
+   directly (animation: cs-pop-in / cs-rise-in / cs-fade-in) on chrome
+   overlays, so disable those here too. The grid is always instant; only the
+   chrome animates, and that animation is opt-out for motion-sensitive users.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .menu,
+  .dialog,
+  .formula-suggestions,
+  .statbar-customise {
+    animation: none;
   }
 }
