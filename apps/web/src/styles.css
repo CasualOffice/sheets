@@ -1523,26 +1523,52 @@ button {
 .side-panel__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-divider);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   font-size: var(--text-sm);
+}
+.side-panel__header > .icon {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
 }
 .side-panel__title {
   margin: 0;
   font-size: inherit;
   font-weight: inherit;
   flex: 1;
+  min-width: 0;
 }
 .side-panel__count {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   color: var(--color-text-secondary);
   background: var(--color-surface-strip);
-  border-radius: 999px;
-  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-3);
   font-size: var(--text-xs);
+}
+/* Shared panel-header close button (replaces per-panel __close). */
+.side-panel__close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+.side-panel__close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 .side-panel__empty {
   padding: 24px 16px;
@@ -4983,8 +5009,9 @@ button {
    ───────────────────────────────────────────────────────────────────────── */
 .outline-panel {
   animation: cs-slide-in-right var(--motion-slow) var(--ease-out) both;
-  width: 280px;
-  flex: 0 0 280px;
+  /* 320px to match every other side panel (was 280 — the one odd width). */
+  width: 320px;
+  flex: 0 0 320px;
   background: var(--color-surface-alt);
   border-top: 1px solid var(--color-divider);
   border-left: 1px solid var(--color-divider);

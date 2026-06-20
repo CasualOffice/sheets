@@ -10,7 +10,12 @@ import {
 } from '../charts/insert-chart';
 import { nextChartName } from '../charts/naming';
 import { InsertChartDialog } from '../charts/InsertChartDialog';
-import { CHART_FAMILY_OF, CHART_TYPE_LABEL, type ChartFamily, type ChartModel } from '../charts/types';
+import {
+  CHART_FAMILY_OF,
+  CHART_TYPE_LABEL,
+  type ChartFamily,
+  type ChartModel,
+} from '../charts/types';
 
 /**
  * Right-side Charts panel. Equivalent of Excel's Selection Pane scoped
@@ -45,10 +50,7 @@ export function ChartsPanel() {
   }, [api, charts]);
 
   const visible = useMemo<ChartModel[]>(
-    () =>
-      activeSheetId
-        ? charts.filter((c) => c.sheetId === activeSheetId)
-        : charts,
+    () => (activeSheetId ? charts.filter((c) => c.sheetId === activeSheetId) : charts),
     [charts, activeSheetId],
   );
   const empty = visible.length === 0;
@@ -72,16 +74,18 @@ export function ChartsPanel() {
   };
 
   return (
-    <aside className="charts-panel" data-testid="charts-panel">
-      <header className="charts-panel__head">
-        <span className="charts-panel__title">Charts</span>
+    <aside className="side-panel charts-panel" data-testid="charts-panel">
+      <header className="side-panel__header">
+        <Icon name="bar_chart" size="sm" />
+        <h2 className="side-panel__title">Charts</h2>
+        {!empty && <span className="side-panel__count">{visible.length}</span>}
         <button
           type="button"
-          className="charts-panel__close"
+          className="side-panel__close"
           aria-label="Close charts panel"
           onClick={ui.toggleChartsPanel}
         >
-          <Icon name="close" />
+          <Icon name="close" size="sm" />
         </button>
       </header>
       <div className="charts-panel__body">

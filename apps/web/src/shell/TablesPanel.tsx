@@ -76,8 +76,7 @@ const REFRESH_CMD_PREFIXES = [
   'doc.command-replace-snapshot',
 ];
 
-const shouldRefresh = (id?: string) =>
-  !!id && REFRESH_CMD_PREFIXES.some((p) => id === p);
+const shouldRefresh = (id?: string) => !!id && REFRESH_CMD_PREFIXES.some((p) => id === p);
 
 export function TablesPanel() {
   const api = useUniverAPI();
@@ -154,16 +153,18 @@ export function TablesPanel() {
   }, []);
 
   return (
-    <aside className="tables-panel" data-testid="tables-panel">
-      <header className="tables-panel__head">
-        <span className="tables-panel__title">Tables</span>
+    <aside className="side-panel tables-panel" data-testid="tables-panel">
+      <header className="side-panel__header">
+        <Icon name="table" size="sm" />
+        <h2 className="side-panel__title">Tables</h2>
+        {!empty && <span className="side-panel__count">{tables.length}</span>}
         <button
           type="button"
-          className="tables-panel__close"
+          className="side-panel__close"
           aria-label="Close tables panel"
           onClick={ui.toggleTablesPanel}
         >
-          <Icon name="close" />
+          <Icon name="close" size="sm" />
         </button>
       </header>
       <div className="tables-panel__body">
@@ -194,7 +195,11 @@ export function TablesPanel() {
               const isRenaming = renaming?.id === t.id;
               const theme = themesById.get(t.styleId);
               return (
-                <li className="tables-panel__row" key={t.id} data-testid={`tables-panel-row-${t.id}`}>
+                <li
+                  className="tables-panel__row"
+                  key={t.id}
+                  data-testid={`tables-panel-row-${t.id}`}
+                >
                   <div className="tables-panel__name">
                     {isRenaming ? (
                       <input

@@ -46,18 +46,19 @@ export function OutlinePanel() {
   const empty = sheet.rows.length === 0 && sheet.cols.length === 0;
 
   return (
-    <aside className="outline-panel" data-testid="outline-panel">
-      <header className="outline-panel__head">
-        <span className="outline-panel__title">Outline</span>
+    <aside className="side-panel outline-panel" data-testid="outline-panel">
+      <header className="side-panel__header">
+        <Icon name="account_tree" size="sm" />
+        <h2 className="side-panel__title">Outline</h2>
         <Tooltip label="Close outline panel">
           <button
             type="button"
-            className="outline-panel__close"
+            className="side-panel__close"
             data-testid="outline-panel-close"
             aria-label="Close outline panel"
             onClick={ui.toggleOutlinePanel}
           >
-            <Icon name="close" />
+            <Icon name="close" size="sm" />
           </button>
         </Tooltip>
       </header>
@@ -110,11 +111,7 @@ function OutlineSection({
       <h4 className="outline-panel__section-title">{title}</h4>
       <ul className="outline-panel__list">
         {sorted.map((g) => (
-          <li
-            className="outline-panel__row"
-            key={g.id}
-            data-testid={`outline-row-${axis}-${g.id}`}
-          >
+          <li className="outline-panel__row" key={g.id} data-testid={`outline-row-${axis}-${g.id}`}>
             <Tooltip label={g.collapsed ? 'Expand' : 'Collapse'}>
               <button
                 type="button"
