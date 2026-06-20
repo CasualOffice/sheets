@@ -28,7 +28,7 @@
  * styles from this entry if the host doesn't reach the styles export.
  */
 
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ICommandService,
   LocaleType,
@@ -58,7 +58,7 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
 import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
-import { Toolbar } from '../chrome';
+import { MenuBar, Toolbar, FormulaBar, StatusBar } from '../chrome';
 
 export interface CasualSheetsProps {
   /** Workbook snapshot to mount. Read once on initial mount; change
@@ -170,6 +170,11 @@ export function CasualSheets({
   // The live FUniver facade, captured at mount so the reactive appearance
   // effect can reach Univer's ThemeService without re-running boot.
   const apiRef = useRef<CasualSheetsAPI | null>(null);
+  // The live API as state, so the built-in chrome (FormulaBar) re-renders and
+  // subscribes once the editor is ready. Only set when chrome is shown — the
+  // bare-grid path never triggers this re-render. A single post-mount setState
+  // doesn't disturb the grid (Univer owns its canvas outside React).
+  const [chromeApi, setChromeApi] = useState<CasualSheetsAPI | null>(null);
 
   useEffect(() => {
     const container = hostRef.current;
@@ -227,6 +232,9 @@ export function CasualSheets({
 
       const api = createCasualSheetsAPI(FUniver.newAPI(univer));
       apiRef.current = api;
+      // Hand the live API to the built-in chrome (FormulaBar subscribes to it).
+      // Only when chrome is shown, so bare-grid consumers never re-render.
+      if (!cancelled && chrome !== 'none') setChromeApi(api);
       // Apply the initial appearance now that the editor exists (the reactive
       // effect below also runs on mount, but apiRef may not be set yet when it
       // first fires — this guarantees dark mode from the first paint).
@@ -268,6 +276,7 @@ export function CasualSheets({
       if (changeTimer) clearTimeout(changeTimer);
       changeSub?.dispose();
       apiRef.current = null;
+      setChromeApi(null);
       if (lazyPlugins) setUniverForLazyLoad(null);
       // Defer disposal off the React render phase — Univer owns its
       // own React root, and a synchronous unmount mid-render warns
@@ -305,14 +314,42 @@ export function CasualSheets({
     );
   }
 
+  // The built-in chrome components read their colours from `--cs-chrome-*` CSS
+  // vars (with light fallbacks). Set them on the wrapper so the toolbar / formula
+  // bar / status bar flip with `appearance` — reactive via the prop. (Hosts can
+  // still override any of these vars themselves.)
+  // Values from @schnsrw/design-system tokens (surface-strip / text / border)
+  // — adopted directly (not as a package dep) so the chrome matches the suite.
+  const dark = appearance === 'dark';
+  const chromeVars = {
+    '--cs-chrome-bg': dark ? '#2a2e35' : '#eef1f5',
+    '--cs-chrome-fg': dark ? '#e6e6e6' : '#201f1e',
+    '--cs-chrome-muted': dark ? '#b0b3ba' : '#605e5c',
+    '--cs-chrome-border': dark ? '#32363d' : '#e6e9ee',
+    '--cs-chrome-input-bg': dark ? '#23262c' : '#ffffff',
+    '--cs-chrome-hover': dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    // accent (design-system #0e7490) for active toggle states.
+    '--cs-chrome-active': dark ? 'rgba(21,151,186,0.22)' : '#e6f3f7',
+    '--cs-chrome-active-fg': dark ? '#7fd3e6' : '#0e7490',
+  } as CSSProperties;
+
   return (
     <div
       className={className}
       data-testid={testId}
-      style={{ ...DEFAULT_STYLE, ...style, display: 'flex', flexDirection: 'column' }}
+      style={{
+        ...DEFAULT_STYLE,
+        ...chromeVars,
+        ...style,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
-      <Toolbar getApi={() => apiRef.current} />
+      <MenuBar api={chromeApi} />
+      <Toolbar api={chromeApi} />
+      <FormulaBar api={chromeApi} />
       <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
+      <StatusBar api={chromeApi} />
     </div>
   );
 }

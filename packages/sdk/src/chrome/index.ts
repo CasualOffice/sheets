@@ -6,3 +6,10 @@
  * from `apps/web/src/shell/` here in later slices, behind `chrome="full"`.
  */
 export { Toolbar, type ToolbarProps } from './Toolbar';
+export { FormulaBar, type FormulaBarProps } from './FormulaBar';
+export { StatusBar, type StatusBarProps } from './StatusBar';
+export { Icon, type IconProps } from './Icon';
+export { ensureChromeFonts } from './fonts';
+export { ColorPicker, type ColorPickerProps } from './ColorPicker';
+export { MenuBar, type MenuBarProps } from './MenuBar';
+export { NameBox, type NameBoxProps } from './NameBox';

@@ -205,8 +205,329 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(isBold).toBe(true);
   });
 
-  test('chrome defaults to none (no toolbar)', async ({ page }) => {
+  test('chrome defaults to none (no toolbar/formula bar)', async ({ page }) => {
     await expect(page.getByTestId('casual-sheets-toolbar')).toHaveCount(0);
+    await expect(page.getByTestId('casual-sheets-formula-bar')).toHaveCount(0);
+  });
+
+  test('chrome formula bar: name box tracks selection + edit commits', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId('casual-sheets-formula-bar')).toBeVisible();
+    // Select B2 (row 1, col 1) — the name box should show "B2".
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(1, 1).activate();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    await expect(page.getByTestId('cs-namebox-input')).toHaveValue('B2');
+    // Type a formula into the bar and commit with Enter → B2 computes to 5.
+    const input = page.getByTestId('casual-sheets-formula-input');
+    await input.fill('=2+3');
+    await input.press('Enter');
+    const value = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 30; i++) {
+        const v = api.univer.getActiveWorkbook().getActiveSheet().getRange(1, 1).getValue();
+        if (v === 5 || v === '5') return v;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return api.univer.getActiveWorkbook().getActiveSheet().getRange(1, 1).getValue();
+    });
+    expect(Number(value)).toBe(5);
+  });
+
+  test('chrome status bar: selection stats (Average/Count/Sum)', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId('casual-sheets-status-bar')).toBeVisible();
+    // Put 1,2,3 in A1:A3 and select the range → Sum 6, Count 3, Average 2.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue(1);
+      ws.getRange(1, 0).setValue(2);
+      ws.getRange(2, 0).setValue(3);
+      ws.getRange('A1:A3').activate();
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    await expect(page.locator('[data-stat="sum"]')).toHaveText('Sum: 6');
+    await expect(page.locator('[data-stat="count"]')).toHaveText('Count: 3');
+    await expect(page.locator('[data-stat="average"]')).toHaveText('Average: 2');
+  });
+
+  test('chrome toolbar: reflects active cell (Bold active state + font size)', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // Select A1 — bold not active yet.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    await expect(page.locator('[data-action="bold"]')).not.toHaveAttribute('data-active', 'true');
+    // Bold it via the toolbar → the button reflects the active state.
+    await page.locator('[data-action="bold"]').click();
+    await expect(page.locator('[data-action="bold"]')).toHaveAttribute('data-active', 'true');
+  });
+
+  test('chrome toolbar: font size dropdown applies to the cell', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue('x');
+      ws.getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.getByTestId('cs-font-size').selectOption('24');
+    const fs = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        if (style?.fs === 24) return 24;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return null;
+    });
+    expect(fs).toBe(24);
+  });
+
+  test('chrome toolbar: Merge cells merges the selection', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.locator('[data-action="merge"]')).toBeVisible();
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange('A1:B2').activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.locator('[data-action="merge"]').click();
+    const merges = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        if ((sheet?.mergeData?.length ?? 0) > 0) return sheet.mergeData.length;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return 0;
+    });
+    expect(merges).toBeGreaterThan(0);
+  });
+
+  test('chrome flips to dark with appearance="dark"', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal&appearance=dark');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const bg = await page
+      .getByTestId('casual-sheets-toolbar')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    // Dark chrome bg is the design-system surface-strip #2a2e35 → rgb(42, 46, 53).
+    expect(bg).toBe('rgb(42, 46, 53)');
+  });
+
+  test('chrome formula bar: function autocomplete completes', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const input = page.getByTestId('casual-sheets-formula-input');
+    await input.click();
+    await input.fill('=SU');
+    await expect(page.getByTestId('cs-formula-suggestions')).toBeVisible();
+    await expect(page.getByTestId('cs-formula-suggestion-SUM')).toBeVisible();
+    // Complete via keyboard (ArrowDown to SUM, then Enter). Keyboard-driven so
+    // it's deterministic under suite load — clicking the item is flaky while the
+    // chrome re-renders from background idle-plugin-load command bursts.
+    // Suggestions for "=SU" are [SUBSTITUTE, SUM, …]; ArrowDown once → SUM.
+    await input.press('ArrowDown');
+    await input.press('Enter');
+    await expect(input).toHaveValue('=SUM(');
+  });
+
+  test('chrome toolbar: wrap text applies', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).setValue('x');
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.locator('[data-action="wrap-text"]').click();
+    const wrapped = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        if (style?.tb === 3) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    });
+    expect(wrapped).toBe(true);
+  });
+
+  test('chrome menu bar: View menu renders (freeze)', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.locator('[data-menu="view"]').click();
+    await expect(page.getByTestId('cs-menuitem-freeze')).toBeVisible();
+  });
+
+  test('chrome color picker: text color applies + popover closes', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue('x');
+      ws.getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.locator('[data-testid="cs-color-text"]').click();
+    await expect(page.getByTestId('cs-color-popover')).toBeVisible();
+    await page.locator('[data-color="#0e7490"]').click();
+    await expect(page.getByTestId('cs-color-popover')).toHaveCount(0);
+    const colored = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        const rgb = style?.cl?.rgb ?? style?.cl;
+        if (typeof rgb === 'string' && rgb.toLowerCase() === '#0e7490') return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    });
+    expect(colored).toBe(true);
+  });
+
+  test('chrome menu bar: Format → Bold dispatches', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId('cs-menubar')).toBeVisible();
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).setValue('x');
+      api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0).activate();
+      await new Promise((r) => setTimeout(r, 150));
+    });
+    await page.locator('[data-menu="format"]').click();
+    await expect(page.getByTestId('cs-menuitem-bold')).toBeVisible();
+    await page.getByTestId('cs-menuitem-bold').click();
+    const bold = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const snap = api.getSnapshot();
+        const sheet = snap?.sheets?.[Object.keys(snap.sheets)[0]];
+        const cell = sheet?.cellData?.[0]?.[0];
+        const style = cell && (typeof cell.s === 'string' ? snap.styles?.[cell.s] : cell.s);
+        if (style?.bl === 1) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    });
+    expect(bold).toBe(true);
+  });
+
+  test('chrome name box: typing a ref navigates the selection', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const input = page.getByTestId('cs-namebox-input');
+    await input.fill('C5');
+    await input.press('Enter');
+    const sel = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        const s = api.getSelection();
+        if (s && s.range.startRow === 4 && s.range.startColumn === 2) return s.range;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return api.getSelection()?.range ?? null;
+    });
+    expect(sel).toMatchObject({ startRow: 4, startColumn: 2 });
   });
 
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
