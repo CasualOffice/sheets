@@ -13,7 +13,11 @@
     "allowImportingTsExtensions": false,
     "noEmit": true,
     "verbatimModuleSyntax": false,
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@casualoffice/sheets/chrome": ["./src/chrome/index.ts"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules", "src/**/*.unit.test.ts"]

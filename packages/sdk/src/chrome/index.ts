@@ -17,3 +17,8 @@ export { MenuBar, type MenuBarProps } from './MenuBar';
 export { NameBox, type NameBoxProps } from './NameBox';
 export { SheetTabs, type SheetTabsProps } from './SheetTabs';
 export { FindReplace, type FindReplaceProps } from './FindReplace';
+// Lazy-loaded shells: chrome above (ChromeTop) and below (ChromeBottom) the grid,
+// imported on demand by `<CasualSheets>` via the `@casualoffice/sheets/chrome`
+// subpath so `chrome="none"` consumers don't bundle the chrome JS.
+export { ChromeTop } from './ChromeTop';
+export { ChromeBottom } from './ChromeBottom';

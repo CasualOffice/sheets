@@ -74,6 +74,12 @@ ENV VITE_SOFT_WARN_MB=${VITE_SOFT_WARN_MB}
 
 # Same base path the production deploy expects — assets resolve from the
 # server's root. PAGES_BASE only matters for the GitHub Pages build.
+# Bump the V8 heap: the web bundle is large (Univer + the SDK editor core that
+# apps/web now mounts via `<CasualSheets>`), and the default heap OOMs the Vite
+# build (SIGABRT) in the constrained Docker VM — confirmed still needed even
+# after the chrome chunk was split out (the Univer core alone exceeds it).
+# Builds fine locally; this just gives CI/Docker the same headroom.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN pnpm --filter @sheet/web build
 
 # ─────────────── runtime ───────────────

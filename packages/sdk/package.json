@@ -39,6 +39,11 @@
       "import": "./dist/collab.js",
       "require": "./dist/collab.cjs"
     },
+    "./chrome": {
+      "types": "./dist/chrome.d.ts",
+      "import": "./dist/chrome.js",
+      "require": "./dist/chrome.cjs"
+    },
     "./styles": {
       "import": "./dist/styles.js",
       "require": "./dist/styles.cjs"

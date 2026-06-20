@@ -29,6 +29,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   useEffect,
   useRef,
   useState,
@@ -67,7 +69,17 @@ import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univ
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
 import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
-import { MenuBar, Toolbar, FormulaBar, SheetTabs, StatusBar, FindReplace } from '../chrome';
+// Chrome is lazy-loaded from the `@casualoffice/sheets/chrome` subpath (NOT a
+// relative import — that would inline under this build's splitting:false). The
+// subpath is externalised in tsup, so the consumer's bundler code-splits it and
+// `chrome="none"` hosts (the default + the apps/web reference host) never load
+// the chrome chunk.
+const ChromeTop = lazy(() =>
+  import('@casualoffice/sheets/chrome').then((m) => ({ default: m.ChromeTop })),
+);
+const ChromeBottom = lazy(() =>
+  import('@casualoffice/sheets/chrome').then((m) => ({ default: m.ChromeBottom })),
+);
 
 export interface CasualSheetsProps {
   /** Workbook snapshot to mount. Read once on initial mount; change
@@ -437,13 +449,15 @@ export function CasualSheets({
         flexDirection: 'column',
       }}
     >
-      <MenuBar api={chromeApi} />
-      <Toolbar api={chromeApi} />
-      <FormulaBar api={chromeApi} />
+      {/* Bars appear once their lazy chunk loads (a tick after first paint); the
+          grid host is OUTSIDE Suspense so Univer mounts immediately. */}
+      <Suspense fallback={null}>
+        <ChromeTop api={chromeApi} />
+      </Suspense>
       <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
-      <SheetTabs api={chromeApi} />
-      <StatusBar api={chromeApi} />
-      <FindReplace api={chromeApi} />
+      <Suspense fallback={null}>
+        <ChromeBottom api={chromeApi} />
+      </Suspense>
     </div>
   );
 }

@@ -37,6 +37,7 @@ const mainConfig = defineConfig({
     signing: 'src/signing/index.ts',
     embed: 'src/embed/index.ts',
     sheets: 'src/sheets/index.ts',
+    chrome: 'src/chrome/index.ts',
     collab: 'src/collab/index.ts',
     styles: 'src/styles.ts',
     xlsx: 'src/xlsx/index.ts',
@@ -62,7 +63,20 @@ const mainConfig = defineConfig({
   // @univerjs: the `collab` entry is a peer-provided realtime layer. Two copies
   // of Yjs in the graph break `Y.Doc` identity (cross-copy `instanceof` fails,
   // awareness silently desyncs), so the host MUST resolve a single copy.
-  external: ['react', 'react-dom', /^@univerjs\//, 'yjs', '@hocuspocus/provider'],
+  // `@casualoffice/sheets/chrome` is externalised so `sheets`'s lazy
+  // `import('@casualoffice/sheets/chrome')` is NOT inlined (this config is
+  // splitting:false, which inlines relative dynamic imports) — it stays a bare
+  // subpath import the CONSUMER's bundler code-splits, so `chrome="none"` hosts
+  // never load the chrome chunk. Only this exact subpath is externalised; the
+  // loader/other internals stay relative (bundled) as before.
+  external: [
+    'react',
+    'react-dom',
+    /^@univerjs\//,
+    'yjs',
+    '@hocuspocus/provider',
+    '@casualoffice/sheets/chrome',
+  ],
   platform: 'browser',
   target: 'es2020',
   // Rewrites the './parser.worker.ts' URL in the xlsx code to the built '.js'
