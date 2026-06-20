@@ -1210,3 +1210,31 @@
 .home--collapsed .home__account > .icon {
   display: none;
 }
+
+/* Collapsed-rail "New" FAB — centered round primary button (mirrors the
+   round account avatar) instead of a stretched full-width button. */
+.home--collapsed .home__new {
+  display: flex;
+  justify-content: center;
+}
+.home__new-fab {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Outspec .btn-primary (height:28) so the collapsed FAB is a true circle. */
+.home--collapsed .home__new-fab {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+}
+.home--collapsed .home__new-fab .icon {
+  font-size: 22px;
+}

@@ -237,15 +237,31 @@ export function HomeScreen({
         </div>
 
         <div className="home__new">
-          <Button
-            variant="primary"
-            icon="add"
-            full
-            onClick={() => void pick(TEMPLATES.find((t) => t.id === 'blank') ?? TEMPLATES[0])}
-            data-testid="home-new"
-          >
-            <span className="home__new-label">New spreadsheet</span>
-          </Button>
+          {collapsed ? (
+            // Collapsed rail: a centered round primary FAB (matches the round
+            // account avatar), not a stretched full-width button with an
+            // off-centre plus.
+            <button
+              type="button"
+              className="btn-primary home__new-fab"
+              onClick={() => void pick(TEMPLATES.find((t) => t.id === 'blank') ?? TEMPLATES[0])}
+              data-testid="home-new"
+              aria-label="New spreadsheet"
+              title="New spreadsheet"
+            >
+              <Icon name="add" />
+            </button>
+          ) : (
+            <Button
+              variant="primary"
+              icon="add"
+              full
+              onClick={() => void pick(TEMPLATES.find((t) => t.id === 'blank') ?? TEMPLATES[0])}
+              data-testid="home-new"
+            >
+              <span className="home__new-label">New spreadsheet</span>
+            </Button>
+          )}
         </div>
 
         <nav className="home__nav" aria-label="Home navigation">
