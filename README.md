@@ -196,14 +196,14 @@ The full env-var matrix (storage backends, networking, admin, JWT, webhooks, mor
 
 ### 🧩 Embed the editor (SDK)
 
-The editor is becoming an npm package — `@casualoffice/sheets` — that you mount as
-a single React component. You own storage (the `onChange` snapshot stream), and
-collaboration is opt-in; no backend is required to embed.
+The editor ships as an npm package — **`@casualoffice/sheets@0.9.0`** — that you
+mount as a single React component. The SDK stores nothing; it hands you the data
+on save/exit and you persist it. Collaboration is opt-in; no backend to embed.
 
-> **In active development, not yet published.** `@casualoffice/sheets` is the new
-> Excalidraw-model editor SDK, landing on `main` now. The older
-> `@schnsrw/casual-sheets@0.8.0` is published but is a pre-restructure line
-> without this API. First `@casualoffice/sheets` publish ships the surface below.
+> **Early `0.x`, still evolving.** `@casualoffice/sheets` is the new
+> Excalidraw-model editor SDK; the restructure continues (Office chrome slots +
+> storage/collab adapters are still landing). The older `@schnsrw/casual-sheets`
+> is a pre-restructure line without this API — install `@casualoffice/sheets`.
 
 ```tsx
 import { CasualSheets } from '@casualoffice/sheets/sheets';

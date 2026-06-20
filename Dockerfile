@@ -81,7 +81,8 @@ FROM node:${NODE_VERSION} AS runtime
 RUN corepack enable && corepack prepare pnpm@10.33.4 --activate
 
 # wget for HEALTHCHECK (alpine has it via busybox). curl would also work.
-RUN apk add --no-cache wget
+# su-exec drops root → node in the entrypoint after fixing data-dir ownership.
+RUN apk add --no-cache wget su-exec
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -152,17 +153,21 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q --spider http://127.0.0.1:3000/health || exit 1
 
-# Provision the personal-mode storage root with `node` ownership
-# before dropping privileges. /data is the default CASUAL_LOCAL_PATH
-# the docker-compose surface sets; without this, the named volume
-# mounts owned by root and SQLite (users.db) bombs with
-# "unable to open database file" the moment Phase C personal mode
-# tries to bootstrap. Idempotent — re-running with an existing
-# volume keeps prior ownership.
+# Provision the personal-mode storage root with `node` ownership at build time.
+# /data is the default CASUAL_LOCAL_PATH. This covers named volumes (Docker
+# copies the image's ownership onto an empty volume), but NOT bind mounts — a
+# host dir bind-mounted at /data keeps its host ownership (root, if Docker
+# created it), masking this. The entrypoint below fixes that case at runtime.
 RUN mkdir -p /data && chown -R node:node /data
 
-# Drop privileges. node:alpine ships a `node` user.
-USER node
+# Runtime ownership fix + privilege drop. The container starts as ROOT so the
+# entrypoint can chown the (possibly root-owned, bind-mounted) data dir, then
+# drops to `node` via su-exec to run the server. Without starting as root we
+# couldn't repair a bind-mounted /data and personal mode would crash with
+# SQLITE_CANTOPEN (GitHub #57).
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /app/apps/server
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "--import", "tsx", "src/index.ts"]

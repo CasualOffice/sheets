@@ -104,13 +104,12 @@ Subsequent phases (also shipped):
 
 - **Released**: Docker app **v0.3.2** (`casualoffice/sheets:0.3.2` /
   `latest`, live). Single-user demo live at https://sheet.casualoffice.org/.
-- **SDK — two lines, restructure half-done.** The **old** SDK is published as
-  `@schnsrw/casual-sheets@0.8.0` (pre-restructure: minimal editor + xlsx import).
-  The **new** `@casualoffice/sheets` is the in-progress Excalidraw-model
-  restructure (full editor, formula engine, `CasualSheetsAPI`, `onChange`, lazy
-  plugins, light/dark) landing on `main` — **not yet published** (first publish
-  ships it as `0.9.0+`). The new API is **not** in `@schnsrw/casual-sheets@0.8.0`.
-  See `docs/INTEGRATION.md` + `docs/RELEASING.md`.
+- **SDK — `@casualoffice/sheets@0.9.0` published** (the new Excalidraw-model
+  restructure: full editor, formula engine, `CasualSheetsAPI`, `onChange`, lazy
+  plugins, light/dark). It's an early `0.x` — the restructure continues (Office
+  chrome slots + storage/collab adapters still landing). The **old**
+  `@schnsrw/casual-sheets@0.8.0` is a frozen pre-restructure line **without** this
+  API. See `docs/INTEGRATION.md` + `docs/RELEASING.md`.
 - **Recent UX wave** (UX_AUDIT.md, all shipped 2026-06-11/12): path
   router with `/home` file picker, mobile-responsive list, keyboard
   shortcuts dialog, SaveStatusPill, ActivityPill, collab name pre-

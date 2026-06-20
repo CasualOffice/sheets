@@ -8,6 +8,19 @@ Pre-v0.2.0 releases were tagged without a CHANGELOG file. The site
 (`https://casualoffice.org/changelog/`) carries longer-form release notes
 for v0.1.0+; the GitHub Releases page links to the same content.
 
+## [0.3.3] — 2026-06-20
+
+### Fixed
+
+- **Personal mode crashed with `SqliteError: unable to open database file`
+  (`SQLITE_CANTOPEN`) when `/data` was a bind mount to a root-owned host
+  directory** (#57). The image chowned `/data` to `node` at build time, but a
+  bind mount keeps its host ownership at runtime, so the `node` user couldn't
+  create `users.db`. The container now starts as root, an entrypoint chowns the
+  data dir (`CASUAL_LOCAL_PATH`, default `/data`) to `node`, then drops to `node`
+  via `su-exec` before launching the server. Named volumes, fresh bind mounts,
+  and `--user` overrides all still work; the server still runs unprivileged.
+
 ## [0.3.2] — 2026-06-20
 
 Docker app refresh — rebuilds and republishes the image (so
