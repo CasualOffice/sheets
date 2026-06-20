@@ -171,6 +171,10 @@ button {
   width: 100vw;
   overflow: hidden;
   background: var(--color-bg);
+  /* App-scoped: taller formula bar than the DS default (26px) — at 26 the
+     bar reads cramped and a floating treatment would backfire. Scoped to
+     .app so the shared DS token (and the SDK) are untouched. */
+  --formula-bar-h: 32px;
 }
 
 .app--no-formula-bar {
