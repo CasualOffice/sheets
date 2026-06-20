@@ -11,6 +11,7 @@ export { StatusBar, type StatusBarProps } from './StatusBar';
 export { Icon, type IconProps } from './Icon';
 export { ensureChromeFonts } from './fonts';
 export { ColorPicker, type ColorPickerProps } from './ColorPicker';
+export { BordersPicker, type BordersPickerProps } from './BordersPicker';
 export { MenuBar, type MenuBarProps } from './MenuBar';
 export { NameBox, type NameBoxProps } from './NameBox';
 export { SheetTabs, type SheetTabsProps } from './SheetTabs';

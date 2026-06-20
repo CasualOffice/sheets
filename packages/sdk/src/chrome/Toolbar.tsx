@@ -19,6 +19,7 @@ import type { CasualSheetsAPI } from '../sheets/api';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
 import { ColorPicker } from './ColorPicker';
+import { BordersPicker } from './BordersPicker';
 
 interface ActiveStyle {
   bold: boolean;
@@ -391,6 +392,7 @@ export function Toolbar({ api }: ToolbarProps) {
       ))}
       <span style={DIVIDER_STYLE} aria-hidden />
       <ColorPicker api={api} />
+      <BordersPicker api={api} />
     </div>
   );
 }

@@ -609,6 +609,44 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(name).toBe('Budget');
   });
 
+  test('chrome toolbar: borders dropdown applies a border to the selection', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // No border styles initially.
+    const before = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const snap = (window as any).__sdkHarnessAPI.getSnapshot();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return Object.values(snap.styles || {}).filter((s: any) => s && s.bd).length;
+    });
+    expect(before).toBe(0);
+    // Open the borders dropdown and apply "All borders".
+    await page.getByTestId('cs-borders-button').click();
+    await expect(page.getByTestId('cs-borders-popover')).toBeVisible();
+    await page.getByTestId('cs-border-all').click();
+    // The popover closes and a border style now exists.
+    await expect(page.getByTestId('cs-borders-popover')).toHaveCount(0);
+    const after = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      for (let i = 0; i < 20; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const n = Object.values(api.getSnapshot().styles || {}).filter(
+          (s: any) => s && s.bd,
+        ).length;
+        if (n > 0) return n;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return 0;
+    });
+    expect(after).toBeGreaterThan(0);
+  });
+
   test('onSave fires on Ctrl/Cmd+S with the snapshot', async ({ page }) => {
     await page.goto('/sdk-harness?chrome=minimal');
     await page.waitForFunction(
