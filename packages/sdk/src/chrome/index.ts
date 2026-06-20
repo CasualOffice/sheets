@@ -7,3 +7,4 @@
  */
 export { Toolbar, type ToolbarProps } from './Toolbar';
 export { FormulaBar, type FormulaBarProps } from './FormulaBar';
+export { StatusBar, type StatusBarProps } from './StatusBar';

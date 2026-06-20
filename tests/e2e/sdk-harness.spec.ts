@@ -244,6 +244,31 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(Number(value)).toBe(5);
   });
 
+  test('chrome status bar: selection stats (Average/Count/Sum)', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId('casual-sheets-status-bar')).toBeVisible();
+    // Put 1,2,3 in A1:A3 and select the range → Sum 6, Count 3, Average 2.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue(1);
+      ws.getRange(1, 0).setValue(2);
+      ws.getRange(2, 0).setValue(3);
+      ws.getRange('A1:A3').activate();
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    await expect(page.locator('[data-stat="sum"]')).toHaveText('Sum: 6');
+    await expect(page.locator('[data-stat="count"]')).toHaveText('Count: 3');
+    await expect(page.locator('[data-stat="average"]')).toHaveText('Average: 2');
+  });
+
   test('CasualSheetsAPI: getSelection returns the active range', async ({ page }) => {
     const sel = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
