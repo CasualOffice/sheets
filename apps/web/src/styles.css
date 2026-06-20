@@ -458,7 +458,7 @@ button {
   min-height: 0;
 }
 .toolbar .btn--big:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--color-hover);
 }
 .toolbar .btn--big:disabled {
   color: var(--color-text-disabled);
@@ -508,7 +508,7 @@ button {
 }
 
 .toolbar .btn:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--color-hover);
 }
 
 .toolbar .btn[aria-pressed='true'] {
@@ -565,12 +565,12 @@ button {
 
 .toolbar .btn-split__icon:hover,
 .toolbar .btn-color__icon:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--color-hover);
 }
 
 .toolbar .btn-split__caret:hover,
 .toolbar .btn-color__picker:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--color-hover);
 }
 
 /* Inside the toolbar, normalize sizes so buttons and selects align cleanly. */
@@ -2704,8 +2704,8 @@ button {
   cursor: pointer;
   padding: 0;
   transition:
-    transform 0.1s ease,
-    box-shadow 0.1s ease;
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .menu__color-swatch:hover {
@@ -2761,8 +2761,8 @@ button {
   cursor: pointer;
   padding: 0 6px;
   transition:
-    transform 0.1s ease,
-    box-shadow 0.1s ease;
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .menu__weight-swatch:hover {
@@ -3091,8 +3091,8 @@ button {
   font-weight: var(--weight-medium, 500);
   background: var(--color-surface);
   transition:
-    border-color 0.12s ease,
-    background 0.12s ease;
+    border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
 }
 
 .page-setup__option:hover {
@@ -3326,8 +3326,8 @@ button {
   text-align: center;
   color: var(--color-text);
   transition:
-    border-color 0.12s ease,
-    background 0.12s ease,
+    border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out),
     transform 0.06s ease;
 }
 .insert-chart__subtype:hover {
@@ -3436,8 +3436,8 @@ button {
   font-weight: var(--weight-medium, 500);
   background: var(--color-surface);
   transition:
-    border-color 0.12s ease,
-    background 0.12s ease;
+    border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
 }
 .format-chart__seg-opt:hover {
   background: var(--color-hover);
@@ -3488,8 +3488,8 @@ button {
   cursor: pointer;
   background: var(--color-surface);
   transition:
-    border-color 0.12s ease,
-    background 0.12s ease;
+    border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
 }
 .format-chart__palette:hover {
   background: var(--color-hover);
@@ -3652,8 +3652,8 @@ button {
   font-size: 13px;
   font-weight: var(--weight-medium, 500);
   transition:
-    border-color 0.12s ease,
-    background 0.12s ease;
+    border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
 }
 .cells-op__option:hover {
   background: var(--color-hover);
