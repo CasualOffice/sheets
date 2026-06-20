@@ -18,6 +18,7 @@ import { ICommandService } from '@univerjs/core';
 import type { CasualSheetsAPI } from '../sheets/api';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
+import { ColorPicker } from './ColorPicker';
 
 interface ActiveStyle {
   bold: boolean;
@@ -334,6 +335,8 @@ export function Toolbar({ api }: ToolbarProps) {
           })}
         </span>
       ))}
+      <span style={DIVIDER_STYLE} aria-hidden />
+      <ColorPicker api={api} />
     </div>
   );
 }

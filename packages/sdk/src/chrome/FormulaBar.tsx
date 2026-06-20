@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { ICommandService } from '@univerjs/core';
 import type { CasualSheetsAPI } from '../sheets/api';
+import { NameBox } from './NameBox';
 
 /** A1 column letters from a 0-based column index (0→A, 26→AA). */
 function colToLetters(col: number): string {
@@ -56,20 +57,6 @@ const BAR_STYLE: CSSProperties = {
   flex: '0 0 auto',
   font: 'inherit',
   fontSize: 13,
-};
-
-const NAMEBOX_STYLE: CSSProperties = {
-  flex: '0 0 auto',
-  minWidth: 64,
-  height: 24,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '0 8px',
-  border: '1px solid var(--cs-chrome-border, rgba(0,0,0,0.18))',
-  borderRadius: 4,
-  background: 'var(--cs-chrome-input-bg, #fff)',
-  color: 'var(--cs-chrome-fg, #1f2329)',
 };
 
 const FX_STYLE: CSSProperties = {
@@ -148,9 +135,7 @@ export function FormulaBar({ api }: FormulaBarProps) {
 
   return (
     <div style={BAR_STYLE} data-testid="casual-sheets-formula-bar">
-      <span style={NAMEBOX_STYLE} data-testid="casual-sheets-name-box">
-        {cell?.a1 ?? ''}
-      </span>
+      <NameBox api={api} />
       <span style={FX_STYLE} aria-hidden>
         fx
       </span>
