@@ -267,6 +267,35 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('[data-stat="sum"]')).toHaveText('Sum: 6');
     await expect(page.locator('[data-stat="count"]')).toHaveText('Count: 3');
     await expect(page.locator('[data-stat="average"]')).toHaveText('Average: 2');
+    await expect(page.locator('[data-stat="num-count"]')).toHaveText('Numerical Count: 3');
+    await expect(page.locator('[data-stat="min"]')).toHaveText('Min: 1');
+    await expect(page.locator('[data-stat="max"]')).toHaveText('Max: 3');
+  });
+
+  test('chrome status bar: Count includes text cells, numeric stats skip them', async ({
+    page,
+  }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // A1=10, A2="x", A3=20 → Count 3 (non-empty), Numerical Count 2, Sum 30.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue(10);
+      ws.getRange(1, 0).setValue('x');
+      ws.getRange(2, 0).setValue(20);
+      ws.getRange('A1:A3').activate();
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    await expect(page.locator('[data-stat="count"]')).toHaveText('Count: 3');
+    await expect(page.locator('[data-stat="num-count"]')).toHaveText('Numerical Count: 2');
+    await expect(page.locator('[data-stat="sum"]')).toHaveText('Sum: 30');
   });
 
   test('chrome toolbar: reflects active cell (Bold active state + font size)', async ({ page }) => {

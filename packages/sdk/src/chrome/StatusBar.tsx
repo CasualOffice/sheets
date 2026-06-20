@@ -1,20 +1,34 @@
 /**
- * StatusBar — minimal built-in status bar for `<CasualSheets chrome>`.
+ * StatusBar — built-in status bar for `<CasualSheets chrome>`.
  *
- * Third chrome slice. Self-contained: reads the active selection through
- * `CasualSheetsAPI` and shows Excel-style aggregates (Average / Count / Sum)
- * over the numeric cells in it. No app context. The richer status bar
- * (configurable stats, min/max, zoom, sheet tabs) lifts behind `chrome="full"`.
+ * Self-contained: reads the active selection through `CasualSheetsAPI` and shows
+ * Excel-style aggregates over it (Average / Count / Numerical Count / Min / Max
+ * / Sum). Drives the editor only through the facade.
+ *
+ * Count = non-empty cells (any type); Numerical Count = numeric cells; the
+ * numeric aggregates (Average/Min/Max/Sum) run over the numeric cells only —
+ * matching Excel's status-bar semantics.
+ *
+ * A zoom control is deferred to a follow-up batch: the SDK's current eager
+ * plugin set doesn't register `SheetsZoomRenderController`, so the zoom
+ * command/operation throws ("Expect 1 dependency item(s)… get 0") in this
+ * mount. Wiring zoom needs that registration sorted first.
  */
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { ICommandService } from '@univerjs/core';
 import type { CasualSheetsAPI } from '../sheets/api';
+// (zoom reader/control deferred — see file header)
 
 interface Stats {
+  /** Non-empty cells (any type). */
   count: number;
+  /** Numeric cells. */
+  numCount: number;
   sum: number;
   avg: number;
+  min: number;
+  max: number;
 }
 
 function readStats(api: CasualSheetsAPI): Stats | null {
@@ -27,17 +41,24 @@ function readStats(api: CasualSheetsAPI): Stats | null {
   const values = sheet.getRange(sel.range).getValues?.() as unknown[][] | undefined;
   if (!values) return null;
   let count = 0;
+  let numCount = 0;
   let sum = 0;
+  let min = Infinity;
+  let max = -Infinity;
   for (const row of values) {
     for (const v of row) {
+      if (v == null || v === '') continue;
+      count += 1;
       if (typeof v === 'number' && Number.isFinite(v)) {
-        count += 1;
+        numCount += 1;
         sum += v;
+        if (v < min) min = v;
+        if (v > max) max = v;
       }
     }
   }
   if (count === 0) return null;
-  return { count, sum, avg: sum / count };
+  return { count, numCount, sum, avg: numCount ? sum / numCount : 0, min, max };
 }
 
 // Trim float noise without locking to a fixed precision.
@@ -85,9 +106,16 @@ export function StatusBar({ api }: StatusBarProps) {
     <div style={BAR_STYLE} data-testid="casual-sheets-status-bar">
       {stats && (
         <>
-          <span data-stat="average">Average: {fmt(stats.avg)}</span>
+          {stats.numCount > 0 && <span data-stat="average">Average: {fmt(stats.avg)}</span>}
           <span data-stat="count">Count: {stats.count}</span>
-          <span data-stat="sum">Sum: {fmt(stats.sum)}</span>
+          {stats.numCount > 0 && (
+            <>
+              <span data-stat="num-count">Numerical Count: {stats.numCount}</span>
+              <span data-stat="min">Min: {fmt(stats.min)}</span>
+              <span data-stat="max">Max: {fmt(stats.max)}</span>
+              <span data-stat="sum">Sum: {fmt(stats.sum)}</span>
+            </>
+          )}
         </>
       )}
     </div>
