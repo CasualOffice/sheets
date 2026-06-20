@@ -2268,11 +2268,18 @@ button {
   color: var(--color-text);
 }
 
+/* Signature active sheet tab — a rounded-top "card" with an accent bar across
+   the TOP (reads as the live sheet hanging from its grid), not the generic
+   bottom underline. Ownable + matches the floating-card language. */
 .sheet-tab--active {
   background: var(--color-surface);
   color: var(--color-accent);
   font-weight: var(--weight-semibold);
-  box-shadow: inset 0 -2px 0 var(--color-accent);
+  border-right-color: transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  box-shadow:
+    inset 0 2px 0 var(--color-accent),
+    var(--shadow-1);
 }
 
 .sheet-tab--dragging {
