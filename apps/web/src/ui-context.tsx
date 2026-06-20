@@ -9,6 +9,11 @@ export type UICtxValue = {
   toggleOutlinePanel: () => void;
   chartsPanelVisible: boolean;
   toggleChartsPanel: () => void;
+  /** Comments task pane — our React panel that indexes thread comments on
+   *  the active sheet (replaces Univer's bespoke comment sidebar so it
+   *  shares the shared `.side-panel` shell + motion). */
+  commentsPanelVisible: boolean;
+  toggleCommentsPanel: () => void;
   /** Live session-history panel — read-only list of every mutation in
    *  the active room's Yjs op-log, who issued it, and when. */
   historyPanelVisible: boolean;

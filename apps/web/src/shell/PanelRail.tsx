@@ -1,6 +1,4 @@
 import { useUI } from '../use-ui';
-import { useUniverAPI } from '../use-univer';
-import { toggleCommentPanel } from './tab-actions';
 import { Icon } from './Icon';
 
 /**
@@ -15,14 +13,11 @@ import { Icon } from './Icon';
  * grid-row flex line). The rail itself never collapses — even with
  * every panel closed, the icons remain accessible.
  *
- * The Comments rail entry calls Univer's `toggle-comment-panel`
- * operation, which Univer manages internally (no React-side visible
- * state). We don't show a pressed indicator on it because we'd need
- * to subscribe to Univer's UI service for that — left as a follow-up.
+ * Every entry — Comments included — is now a React panel sharing the
+ * `.side-panel` shell + the mutex, so each shows a real pressed state.
  */
 export function PanelRail() {
   const ui = useUI();
-  const api = useUniverAPI();
 
   return (
     <aside className="panel-rail" data-testid="panel-rail" aria-label="Panels">
@@ -49,9 +44,10 @@ export function PanelRail() {
       />
       <RailButton
         id="comments"
-        label="Comments"
+        label={ui.commentsPanelVisible ? 'Hide Comments' : 'Comments'}
         icon="forum"
-        onClick={() => api && toggleCommentPanel(api)}
+        pressed={ui.commentsPanelVisible}
+        onClick={ui.toggleCommentsPanel}
       />
       <RailButton
         id="history"
