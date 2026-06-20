@@ -686,6 +686,45 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(after).toBe(true);
   });
 
+  test('chrome toolbar: AutoSum inserts =SUM below the selection', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    // 1,2,3 in A1:A3, select the range → AutoSum → Sum drops =SUM(A1:A3) in A4.
+    await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      ws.getRange(0, 0).setValue(1);
+      ws.getRange(1, 0).setValue(2);
+      ws.getRange(2, 0).setValue(3);
+      ws.getRange('A1:A3').activate();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    await page.getByTestId('cs-autosum-button').click();
+    await expect(page.getByTestId('cs-autosum-popover')).toBeVisible();
+    await page.getByTestId('cs-autosum-SUM').click();
+    await expect(page.getByTestId('cs-autosum-popover')).toHaveCount(0);
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const ws = api.univer.getActiveWorkbook().getActiveSheet();
+      for (let i = 0; i < 30; i++) {
+        const f = ws.getRange(3, 0).getFormula?.();
+        const v = ws.getRange(3, 0).getValue();
+        if (v === 6 || v === '6') return { f, v };
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return { f: ws.getRange(3, 0).getFormula?.(), v: ws.getRange(3, 0).getValue() };
+    });
+    expect(out.f).toBe('=SUM(A1:A3)');
+    expect(Number(out.v)).toBe(6);
+  });
+
   test('onSave fires on Ctrl/Cmd+S with the snapshot', async ({ page }) => {
     await page.goto('/sdk-harness?chrome=minimal');
     await page.waitForFunction(
