@@ -3,7 +3,8 @@ import { CasualSheets, type CasualSheetsAPI } from '@casualoffice/sheets/sheets'
 import '@casualoffice/sheets/styles';
 import { emptyWorkbook } from '../snapshot';
 import { LOCALES } from '../locale';
-import { ICommandService, ThemeService, type IWorkbookData } from '@univerjs/core';
+import { ICommandService, ThemeService, type IWorkbookData, type Univer } from '@univerjs/core';
+import { UniverSheetsCrosshairHighlightPlugin } from '@univerjs/sheets-crosshair-highlight';
 
 /**
  * Dev-only harness that mounts the SDK's `<CasualSheets>` editor in isolation
@@ -27,6 +28,15 @@ export function SdkHarness() {
   // `?chrome=minimal|full` renders the built-in chrome so the spec can verify it.
   const chromeParam = params.get('chrome');
   const chrome = chromeParam === 'minimal' || chromeParam === 'full' ? chromeParam : 'none';
+  // `?beforeCreate=crosshair` exercises the onBeforeCreateUnit escape hatch by
+  // registering a plugin the SDK doesn't bundle (crosshair-highlight) — the
+  // spec then asserts its command registered, proving the hook works.
+  const beforeCreate =
+    params.get('beforeCreate') === 'crosshair'
+      ? (univer: Univer) => {
+          univer.registerPlugin(UniverSheetsCrosshairHighlightPlugin);
+        }
+      : undefined;
   return (
     <div data-testid="sdk-harness" style={{ position: 'fixed', inset: 0 }}>
       <CasualSheets
@@ -34,6 +44,7 @@ export function SdkHarness() {
         locales={LOCALES}
         appearance={appearance}
         chrome={chrome}
+        onBeforeCreateUnit={beforeCreate}
         onReady={(api: CasualSheetsAPI) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessAPI = api;

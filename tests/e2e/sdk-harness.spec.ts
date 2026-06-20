@@ -116,6 +116,42 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(has).toBe(true);
   });
 
+  test('onBeforeCreateUnit lets a host register an extra plugin', async ({ page }) => {
+    // crosshair-highlight is NOT in the SDK's plugin set — its command can only
+    // appear if the onBeforeCreateUnit hook registered the plugin before the unit.
+    await page.goto('/sdk-harness?beforeCreate=crosshair');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+    const has = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hasCommand = (window as any).__sdkHarnessHasCommand as
+        | ((id: string) => boolean)
+        | undefined;
+      for (let i = 0; i < 30; i++) {
+        if (hasCommand?.('sheet.operation.toggle-crosshair-highlight')) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return hasCommand?.('sheet.operation.toggle-crosshair-highlight') ?? false;
+    });
+    expect(has).toBe(true);
+  });
+
+  test('without onBeforeCreateUnit, the extra plugin is absent', async ({ page }) => {
+    // Control: the default mount must NOT have the crosshair command.
+    const has = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hasCommand = (window as any).__sdkHarnessHasCommand as
+        | ((id: string) => boolean)
+        | undefined;
+      return hasCommand?.('sheet.operation.toggle-crosshair-highlight') ?? false;
+    });
+    expect(has).toBe(false);
+  });
+
   test('appearance="dark" flips Univer dark mode + container class', async ({ page }) => {
     await page.goto('/sdk-harness?appearance=dark');
     await page.waitForFunction(

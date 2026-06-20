@@ -102,6 +102,16 @@ export interface CasualSheetsProps {
    *  minimal editor (render + formula + numfmt only) — the embed-iframe
    *  build does this to stay a single self-contained bundle. */
   lazyPlugins?: boolean;
+  /** Escape hatch fired after the SDK registers its built-in plugins but BEFORE
+   *  the workbook unit is created — the host can `univer.registerPlugin(...)`
+   *  additional plugins here (e.g. an off-main formula worker via
+   *  `UniverRPCMainThreadPlugin`, crosshair-highlight, zen-editor). Anything
+   *  registered after `createUnit` would miss the unit's plugin-init pass, so
+   *  register-time extras must go through this hook. Power hosts (the reference
+   *  app) use it to share the SDK editor core while keeping their extra plugins;
+   *  most integrators never need it. NOT covered by semver — it hands you the
+   *  raw `Univer` instance. */
+  onBeforeCreateUnit?: (univer: Univer) => void;
   /** Locale identifier. Defaults to `LocaleType.EN_US`. */
   locale?: LocaleType;
   /** Locale string bundle. Optional — Univer's default English
@@ -169,6 +179,7 @@ export function CasualSheets({
   onSave,
   onExit,
   lazyPlugins = true,
+  onBeforeCreateUnit,
   locale = LocaleType.EN_US,
   locales,
   logLevel = LogLevel.WARN,
@@ -239,6 +250,10 @@ export function CasualSheets({
     // exported `@casualoffice/sheets/univer` is @internal and only the host app's
     // legacy UniverSheet consumes it, so there's no cross-instance state to share.
     if (lazyPlugins) setUniverForLazyLoad(univer);
+
+    // Host escape hatch — register extra plugins before any unit exists
+    // (off-main formula worker, crosshair-highlight, zen-editor, …).
+    onBeforeCreateUnit?.(univer);
 
     let cancelled = false;
     let changeTimer: ReturnType<typeof setTimeout> | null = null;
