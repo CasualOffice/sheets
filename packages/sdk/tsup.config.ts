@@ -37,6 +37,7 @@ const mainConfig = defineConfig({
     signing: 'src/signing/index.ts',
     embed: 'src/embed/index.ts',
     sheets: 'src/sheets/index.ts',
+    collab: 'src/collab/index.ts',
     styles: 'src/styles.ts',
     xlsx: 'src/xlsx/index.ts',
   },
@@ -57,7 +58,11 @@ const mainConfig = defineConfig({
   // a real `dependencies` entry — externalised by default so the consumer
   // resolves one copy too. Only the workers (separate configs below) bundle these
   // because a module worker has no import map at runtime.
-  external: ['react', 'react-dom', /^@univerjs\//],
+  // `yjs` + `@hocuspocus/provider` are externalised for the same reason as
+  // @univerjs: the `collab` entry is a peer-provided realtime layer. Two copies
+  // of Yjs in the graph break `Y.Doc` identity (cross-copy `instanceof` fails,
+  // awareness silently desyncs), so the host MUST resolve a single copy.
+  external: ['react', 'react-dom', /^@univerjs\//, 'yjs', '@hocuspocus/provider'],
   platform: 'browser',
   target: 'es2020',
   // Rewrites the './parser.worker.ts' URL in the xlsx code to the built '.js'

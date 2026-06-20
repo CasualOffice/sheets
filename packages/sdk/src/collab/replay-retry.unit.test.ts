@@ -195,7 +195,10 @@ test('pushDeadLetter evicts oldest when at cap', () => {
     buf = pushDeadLetter(buf, makeRec(id), small);
   }
   assert.equal(buf.length, 3);
-  assert.deepEqual(buf.map((r) => r.id), ['c', 'd', 'e']);
+  assert.deepEqual(
+    buf.map((r) => r.id),
+    ['c', 'd', 'e'],
+  );
 });
 
 test('pushDeadLetter returns a new array (reference change)', () => {
