@@ -44,8 +44,9 @@ export interface CasualSheetsIframeRef {
   setViewMode(mode: 'preview' | 'editor'): void;
   iframe(): HTMLIFrameElement | null;
   /** Dispatch a formatting / navigation command (bold, italic, undo, …)
-   *  against the iframe's active selection. v0.6+. */
-  executeCommand(command: CommandExecuteData['command']): void;
+   *  against the iframe's active selection. `args` carries command payloads
+   *  (e.g. font family/size, colour) — forwarded over the protocol. v0.6+. */
+  executeCommand(command: CommandExecuteData['command'], args?: CommandExecuteData['args']): void;
 }
 
 export interface CasualSheetsIframeProps {
@@ -194,7 +195,8 @@ export const CasualSheetsIframe = forwardRef<CasualSheetsIframeRef, CasualSheets
       apiRef.current = {
         setViewMode: (mode) => transportRef.current?.sendSetViewMode({ viewMode: mode }),
         iframe: () => iframeRef.current,
-        executeCommand: (command) => transportRef.current?.sendCommandExecute({ command }),
+        executeCommand: (command, args) =>
+          transportRef.current?.sendCommandExecute({ command, args }),
       };
     }
 

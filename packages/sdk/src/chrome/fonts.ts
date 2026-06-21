@@ -32,7 +32,12 @@ export function ensureChromeFonts(): void {
   for (const { id, href } of LINKS) {
     if (document.getElementById(id)) continue;
     // Skip if the host already loaded the same family by any <link>.
-    if (document.querySelector(`link[href*="${href.split('?')[0]}"]`)) continue;
+    // Match on the `family=<name>` segment, NOT the bare `/css2` path — both
+    // Google Fonts URLs share `/css2`, so splitting on `?` made the second
+    // family (Material Symbols) collide with the first (Inter) and never get
+    // injected, leaving `chrome="full"` icons as raw ligature text.
+    const familyKey = href.match(/family=[^:&]+/)?.[0] ?? href.split('?')[0];
+    if (document.querySelector(`link[href*="${familyKey}"]`)) continue;
     const link = document.createElement('link');
     link.id = id;
     link.rel = 'stylesheet';
