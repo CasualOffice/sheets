@@ -33,8 +33,8 @@ These are pinned by user direction and architecture; the design
 respects them.
 
 - **Single mode allows anonymous share-with-password.** Quote from
-  the audit thread: *"for anonymous writer it's user's fault as he
-  can share write access with password — architectural choice."*
+  the audit thread: _"for anonymous writer it's user's fault as he
+  can share write access with password — architectural choice."_
   So single mode does NOT block anonymous edit; the room URL +
   password pattern stays as-is. Memory: `feedback-single-mode-share`.
 - **Backend remains stateless.** The room manager keeps no user
@@ -52,11 +52,11 @@ respects them.
 
 ### §3.1 Identities
 
-| Identity        | Auth source                       | Multi mode      | Single mode     |
-|-----------------|-----------------------------------|-----------------|-----------------|
-| **Admin**       | personal-mode login (admin role)  | full ACL writer | full ACL writer |
-| **Member**      | personal-mode login (user role)   | per-share ACL   | n/a             |
-| **Anonymous**   | `?share=<token>` link, no account | per-link ACL    | per-link ACL    |
+| Identity      | Auth source                       | Multi mode      | Single mode     |
+| ------------- | --------------------------------- | --------------- | --------------- |
+| **Admin**     | personal-mode login (admin role)  | full ACL writer | full ACL writer |
+| **Member**    | personal-mode login (user role)   | per-share ACL   | n/a             |
+| **Anonymous** | `?share=<token>` link, no account | per-link ACL    | per-link ACL    |
 
 ### §3.2 Roles per share
 
@@ -205,16 +205,48 @@ the normal way.
 
 ## §6 — Phasing
 
-| Phase | Scope | Effort |
-|---|---|---|
-| §6.1 — Link tokens (single + multi) | `POST /share/link` + token role enforcement in the join handshake + Link tab in share dialog. | 1–2 weeks |
-| §6.2 — Member ACLs (multi only) | Routes + Members tab + email lookup. | 1 week |
-| §6.3 — Audit logging surface | Structured logs + admin-side log view. | 3 days |
-| §6.4 — Suggestion mode (proposal) | Out-of-scope — separate doc. | TBD |
+| Phase                               | Scope                                                                                         | Effort    | Status                                       |
+| ----------------------------------- | --------------------------------------------------------------------------------------------- | --------- | -------------------------------------------- |
+| §6.1 — Link tokens (single + multi) | `POST /share/link` + token role enforcement in the join handshake + Link tab in share dialog. | 1–2 weeks | ✅ **done**                                  |
+| §6.2 — Member ACLs (multi only)     | Routes + Members tab + email lookup.                                                          | 1 week    | 🟡 foundation done; enforcement + UI pending |
+| §6.3 — Audit logging surface        | Structured logs + admin-side log view.                                                        | 3 days    | ⬜                                           |
+| §6.4 — Suggestion mode (proposal)   | Out-of-scope — separate doc.                                                                  | TBD       | ⬜                                           |
 
 §6.1 alone closes the immediate "no recipient permission story"
 gap. §6.2 is the multi-mode follow-up. §6.3 makes the operator-side
 story complete.
+
+### Implementation status (2026-06-21)
+
+**§6.1 — done.** Link tokens are room-bound `(workbookId, roomId, token,
+role, expiresAt?, passwordHash?)` rows in the personal SQLite store
+(`apps/server/src/auth/personal.ts`); owner/admin-gated CRUD at
+`/files/:id/shares[/link/:token]`; a public `GET /files/shares/link/:token/meta`
+for pre-join discovery (`{valid, role, hasPassword, roomId}` — never the hash).
+Enforcement is the **server-authoritative, pure** `resolveJoinRole`
+(`apps/server/src/auth/join-role.ts`) wired into the Hocuspocus
+`onAuthenticate` (`yjs.ts`): a `?share=<token>` makes the server decide the
+role (client `?role=` ignored); the token must resolve, be bound to the room
+being joined (replay-proof), and pass its optional `?sp=` bcrypt password. No
+token → the legacy anonymous path is byte-identical. Client: a secure-link
+section in the share dialog (mint view/edit, optional expiry + password, list,
+copy, revoke) plus join-side `?share=`/`?sp=` forwarding + a password prompt.
+
+- **Deferred from §6.1:** the `comment` role currently collapses to read-only
+  (Hocuspocus `readOnly` is binary; fine-grained comment-mode — permit comment
+  mutations, block edits — needs Univer-permission work in the client's
+  `applyViewOnlyMode`, per §3.4).
+
+**§6.2 — foundation done, enforcement pending.** Member-ACL persistence
+(`file_member_acls`, upsert + `getMemberRole` + `findMemberByHandle`) and the
+multi-mode owner/admin-gated routes (`/files/:id/shares/member[s]`) are in.
+**Not yet built:** (a) join enforcement for tokenless member joins — needs a
+**room→workbook mapping** so a logged-in member opening `/r/<roomId>` resolves
+to the workbook whose ACL governs them (open design decision: a dedicated
+`room_workbooks` association recorded when a room is created for a file, vs.
+deriving it from an existing `share_links` row for that room); (b) the
+"Shared with me" file surface + member room-join flow; (c) the Members tab UI.
+Until enforcement lands, member ACLs are stored but grant no live access.
 
 ## §7 — What this proposal does **not** do
 
