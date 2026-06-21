@@ -278,12 +278,17 @@ function EmbeddedSheets({
       // this from the host's `locales` prop; the iframe has no host to
       // pass one, so the self-contained runtime bundles a minimal set.
       locales={EMBED_LOCALES}
-      // The embed runtime is bundled as ONE self-contained file (tsup
-      // `noExternal: /.*/`). Lazy plugins would emit per-feature dynamic
-      // chunks into dist/embed/, breaking that single-file deployment, so the
-      // iframe ships the minimal editor. Hosts that need feature plugins use
-      // the React `<CasualSheets>` component directly (lazyPlugins defaults on).
-      lazyPlugins={false}
+      // Enable the FULL feature set (tables, sort, filter, conditional
+      // formatting, data validation, drawing, hyperlinks, notes, comments,
+      // find/replace) so the embed matches the real app. The tsup embed
+      // config is `splitting: false` + `noExternal: /.*/`, so the lazy
+      // loader's dynamic `import()`s are INLINED into the single
+      // embed-runtime.js rather than emitted as separate chunks — the
+      // single-file deployment is preserved. With lazyPlugins on, the loader
+      // also eager-loads any feature whose data is already in the snapshot
+      // (so opening a file with tables/CF never silently drops it) and
+      // idle-loads the rest, so the toolbar/menu feature actions resolve.
+      lazyPlugins={true}
       // Phase 2 save/exit contract — the iframe surface of the same
       // `onSave` / `onExit` hooks the React component exposes. The editor
       // never persists; it hands the snapshot to the host over postMessage
