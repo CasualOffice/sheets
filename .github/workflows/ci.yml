@@ -91,6 +91,13 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    # Shard the ~40-min suite across parallel runners (Playwright --shard) so
+    # wall-clock is one shard, not the whole suite. fail-fast off so one shard's
+    # failure doesn't cancel the others (you still see every failure).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,12 +132,12 @@ jobs:
       - name: Install Playwright system deps
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
-      - run: pnpm test:e2e
+      - run: pnpm exec playwright test --shard=${{ matrix.shard }}/4
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
 
