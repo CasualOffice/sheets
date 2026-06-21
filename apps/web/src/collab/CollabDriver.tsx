@@ -100,6 +100,11 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   // The actual password (kept in memory only) once the user has provided
   // one — needed to retry on reconnect after a transient drop.
   const passwordRef = useRef<string>('');
+  // Secure share-link capability read off the page URL once (sharing-model
+  // §6.1). `null` for anonymous rooms. Stable for the page's lifetime, so a
+  // ref read at join time (incl. reconnect re-joins) is correct and keeps
+  // `join`'s signature unchanged.
+  const shareRef = useRef<{ share: string; sp?: string } | null>(readShareFromLocation());
   // Pending password-prompt resolver. The connect flow awaits this so
   // we can hold the seed/snapshot fetch off until the user submits.
   // Replaced wholesale by each `promptForPassword` call; the previous
@@ -322,11 +327,19 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       // provider (10 s reconnect timeout so a drop surfaces as `offline` fast),
       // and starts the mutation bridge. We layer presence / charts / close
       // handling / divergence onto the returned provider + doc below.
+      // When a secure share token is on the page URL, forward it (+ optional
+      // join password) on the WS upgrade and let the SERVER decide the role —
+      // it resolves the token to a role bound to this room at mint time and
+      // ignores any client `?role=`. So we pass `share` to the SDK (which then
+      // omits `role=` from the URL) but still pass `joinRole` for the LOCAL
+      // belt-and-braces view-only gate below; the server stays authoritative.
+      const share = shareRef.current ?? undefined;
       const collab = attachCollab(api, {
         room: id,
         server: wsUrl(),
         password: password || undefined,
         role: joinRole,
+        share,
         // Map the SDK's coarse status onto our richer CollabStatus (which also
         // carries 'off' / 'denied', driven elsewhere in this component).
         onStatus: (s) => setStatus(s),
@@ -882,9 +895,7 @@ function PasswordPrompt({
   );
 }
 
-async function fetchRoomInfo(
-  id: string,
-): Promise<{
+async function fetchRoomInfo(id: string): Promise<{
   needsPassword: boolean;
   hasSeed: boolean;
   hasSnapshot: boolean;
@@ -929,6 +940,23 @@ function readRoomFromLocation(): string | null {
 function readRoleFromLocation(): CollabRole {
   const params = new URLSearchParams(window.location.search);
   return params.get('role') === 'view' ? 'view' : 'write';
+}
+
+/**
+ * Read the secure share-link capability off the PAGE url (sharing-model
+ * §6.1). `?share=<token>` is the minted token; `?sp=<password>` is the
+ * optional join password for a password-protected token. When a token is
+ * present the SERVER is authoritative for the role — the token is forwarded
+ * (+ sp) on the WS upgrade and the client `?role=` is ignored. Returns
+ * `null` when there's no token, so the anonymous-room path
+ * (`?room`/`?p`/`?role`) is completely unchanged.
+ */
+function readShareFromLocation(): { share: string; sp?: string } | null {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('share');
+  if (!token) return null;
+  const sp = params.get('sp');
+  return sp ? { share: token, sp } : { share: token };
 }
 
 function wsUrl(): string {

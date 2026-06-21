@@ -5092,6 +5092,95 @@ button {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Secure share links (sharing-model §6.1). Sits below the anonymous-room
+   URLs in the share dialog's "ready" stage, for personal-mode saved files.
+   ───────────────────────────────────────────────────────────────────────── */
+.share-link {
+  display: grid;
+  gap: 8px;
+}
+.share-link__divider {
+  height: 1px;
+  background: var(--color-divider);
+  margin: 6px 0 2px;
+}
+.share-link__controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.share-link__field {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.share-link__create {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.share-link__list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.share-link__empty {
+  font-size: 13px;
+  color: var(--color-text-soft, var(--color-text));
+}
+.share-link__item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+}
+.share-link__item-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.share-link__badge {
+  font-size: 11px;
+  font-weight: var(--weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-soft, var(--color-text));
+}
+.share-link__badge--edit {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.share-link__revoke {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text);
+}
+.share-link__revoke:hover {
+  border-color: #d93025;
+  color: #d93025;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    Outline (group) side panel. Mirrors the TablesPanel surface treatment —
    right-edge column, surface-alt tint — so the two panels feel like a
    matched set when both are open.

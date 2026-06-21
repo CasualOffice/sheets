@@ -4,17 +4,47 @@
  * `node:test` without dragging in the Univer ESM graph.
  */
 
-/** Build the room WS URL: `<server>?room=<id>[&p=<pw>]&role=<role>`. */
+/** Extra capability params carried on the WS upgrade for secure share
+ *  links (sharing-model §6.1). */
+export type WsUrlShare = {
+  /** Secure share-link token. When present the server is authoritative
+   *  for the role — it resolves the token to a role + a bound room, so
+   *  the client must NOT also assert `role=` (the server ignores a
+   *  client `?role=` when a token is present; sending one is just
+   *  spoofable noise). */
+  share?: string;
+  /** Optional join password paired with a password-protected share
+   *  token (`?sp=`). Distinct from the anonymous-room `?p=` password. */
+  sp?: string;
+};
+
+/**
+ * Build the room WS URL.
+ *
+ *   - No share token: `<server>?room=<id>[&p=<pw>]&role=<role>` — the
+ *     anonymous-room path; byte-identical to before.
+ *   - With a `share` token: `<server>?room=<id>[&p=<pw>]&share=<token>[&sp=<pw>]`.
+ *     `role=` is deliberately omitted — the server resolves the role
+ *     from the token, so shipping a spoofable client role is pointless.
+ */
 export function buildWsUrl(
   server: string,
   room: string,
   role: 'view' | 'write',
   password?: string,
+  share?: WsUrlShare,
 ): string {
   const sep = server.includes('?') ? '&' : '?';
-  return (
+  const base =
     `${server}${sep}room=${encodeURIComponent(room)}` +
-    `${password ? `&p=${encodeURIComponent(password)}` : ''}` +
-    `&role=${encodeURIComponent(role)}`
-  );
+    `${password ? `&p=${encodeURIComponent(password)}` : ''}`;
+  const token = share?.share;
+  if (token) {
+    return (
+      base +
+      `&share=${encodeURIComponent(token)}` +
+      `${share?.sp ? `&sp=${encodeURIComponent(share.sp)}` : ''}`
+    );
+  }
+  return base + `&role=${encodeURIComponent(role)}`;
 }

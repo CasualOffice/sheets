@@ -25,7 +25,7 @@ import type { IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import type { CasualSheetsAPI } from '../sheets/api';
 import { startBridge, type BridgeHandle } from './bridge';
-import { buildWsUrl } from './ws-url';
+import { buildWsUrl, type WsUrlShare } from './ws-url';
 
 /** Either the SDK's imperative API (`onReady`) or the bare FUniver facade.
  *  Collab only needs the facade, so a host that holds the raw FUniver (the
@@ -64,8 +64,14 @@ export interface AttachCollabOptions {
    *  hook keep the connection queued without it. Defaults to `'anon'` (the
    *  reference server's hook only reads the `role` query param). */
   token?: string;
-  /** `view` joins read-only. Defaults to `'write'`. */
+  /** `view` joins read-only. Defaults to `'write'`. Ignored by the server
+   *  when a `share` token is supplied — the token is authoritative. */
   role?: CollabRole;
+  /** Secure share-link capability (sharing-model §6.1). When `share.share`
+   *  is set, the role is omitted from the WS URL and the server resolves it
+   *  from the token (bound to this room at mint time). `share.sp` carries
+   *  the optional join password for a password-protected token. */
+  share?: WsUrlShare;
   /**
    * Called when a peer's compaction snapshot arrives — the host swaps the
    * workbook (typically `api.loadSnapshot(wb)`). MAY return a promise; the
@@ -103,7 +109,7 @@ export function attachCollab(api: CollabAttachable, opts: AttachCollabOptions): 
   // Match the reference host: drop the reconnect timeout to 10 s so a dropped
   // socket surfaces as `offline` quickly rather than after the 30 s default.
   const ws = new HocuspocusProviderWebsocket({
-    url: buildWsUrl(opts.server, opts.room, role, opts.password),
+    url: buildWsUrl(opts.server, opts.room, role, opts.password, opts.share),
     messageReconnectTimeout: 10_000,
   });
   const provider = new HocuspocusProvider({

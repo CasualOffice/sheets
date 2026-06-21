@@ -18,6 +18,9 @@ export {
   type CollabRole,
   type CollabConnectionStatus,
 } from './attachCollab';
+// Secure share-link capability shape (sharing-model §6.1) — referenced by
+// AttachCollabOptions.share.
+export { type WsUrlShare } from './ws-url';
 
 // The mutation bridge — the framework-agnostic core (subscribes to
 // onMutationExecutedForCollab, replays with fromCollab, guards __splitChunk__).
