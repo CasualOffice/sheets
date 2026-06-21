@@ -19,6 +19,7 @@ import { PersonalAuthStore, readModeFromEnv } from './auth/personal.js';
 import { registerPersonalAuthRoutes } from './auth/personal-routes.js';
 import { registerPersonalProfileRoutes } from './auth/personal-profile-routes.js';
 import { registerPersonalFilesRoutes } from './files/personal-files-routes.js';
+import { registerPersonalSharesRoutes } from './files/personal-shares-routes.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -175,6 +176,10 @@ if (personalMode !== 'none') {
   registerPersonalFilesRoutes(app, personalAuth, host, {
     maxUploadBytes: MAX_UPLOAD_BYTES,
   });
+  // Share-link CRUD (sharing-model §6.1). Persistence + gated routes
+  // only — tokens grant NO access until the join-handshake batch wires
+  // enforcement into the room manager.
+  registerPersonalSharesRoutes(app, personalAuth);
   app.log.info(
     `personal auth: mode=${personalMode} db=${personalDbPath} users=${personalAuth.stats().userCount}`,
   );

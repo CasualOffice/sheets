@@ -84,6 +84,38 @@ export type FileRecord = {
   modifiedAt: number;
 };
 
+/** Share-link role. The token IS the capability; the role decides how
+ *  much it grants. Mirrors `docs/SHARING_MODEL.md` §3.2. */
+export type ShareRole = 'view' | 'comment' | 'edit';
+
+/** A persisted link token (sharing-model §3.3). The token string is
+ *  the capability secret; `passwordHash` (when set) is an optional
+ *  layered gate the joiner must also satisfy. */
+export type ShareLink = {
+  workbookId: string;
+  token: string;
+  role: ShareRole;
+  /** ms epoch, or null for a never-expiring link. */
+  expiresAt: number | null;
+  /** bcrypt hash of the optional join password, or null. Never leaves
+   *  the store — the route layer surfaces only `hasPassword`. */
+  passwordHash: string | null;
+  createdAt: number;
+  /** `users.id` of the admin/owner who minted the token. */
+  createdBy: number;
+};
+
+/** Read shape for the future join-handshake — the minimum a caller
+ *  needs to compute an effective role. `getLinkRole` returns this and
+ *  bakes in expiry (null when the token has lapsed). */
+export type ShareLinkRole = {
+  workbookId: string;
+  role: ShareRole;
+  hasPassword: boolean;
+  passwordHash: string | null;
+  expiresAt: number | null;
+};
+
 export type PersonalAuthOptions = {
   dbPath: string;
   mode: PersonalMode;
@@ -114,6 +146,14 @@ const BCRYPT_ROUNDS = 10;
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{2,40}$/;
 const MIN_PASSWORD_LEN = 8;
+/** ~32 bytes of CSPRNG entropy, base64url-encoded — the link token. */
+const SHARE_TOKEN_BYTES = 32;
+const SHARE_ROLES: readonly ShareRole[] = ['view', 'comment', 'edit'];
+
+/** Type-guard for the role enum — used at the route boundary. */
+export function isShareRole(v: unknown): v is ShareRole {
+  return typeof v === 'string' && (SHARE_ROLES as readonly string[]).includes(v);
+}
 
 /**
  * Thin wrapper around a single SQLite connection. The Fastify app
@@ -574,6 +614,135 @@ export class PersonalAuthStore {
     return result.changes > 0;
   }
 
+  // ── Share links (sharing-model §6.1 — persistence only) ─────────────────
+  //
+  // NOTE: these rows are inert until the join-handshake batch wires
+  // `getLinkRole` into the room manager. Minting a token grants NO
+  // access on its own — enforcement is a separate reviewed change.
+
+  /** Mint a fresh CSPRNG token (~32 bytes, base64url). Exposed so a
+   *  test / route can predict the shape; the store always generates
+   *  its own in `createShareLink`. */
+  static newShareToken(): string {
+    return randomBytes(SHARE_TOKEN_BYTES).toString('base64url');
+  }
+
+  /** Insert a link token for `workbookId`. `password`, when given, is
+   *  bcrypt-hashed with the same helper that protects user passwords —
+   *  the plaintext never touches the DB. `expiresAt` is an absolute ms
+   *  epoch or null for never. Returns the full persisted row. */
+  createShareLink(opts: {
+    workbookId: string;
+    role: ShareRole;
+    createdBy: number;
+    expiresAt?: number | null;
+    password?: string | null;
+  }): ShareLink {
+    const token = PersonalAuthStore.newShareToken();
+    const now = Date.now();
+    const expiresAt = opts.expiresAt ?? null;
+    const passwordHash =
+      opts.password != null && opts.password.length > 0
+        ? bcrypt.hashSync(opts.password, BCRYPT_ROUNDS)
+        : null;
+    this.db
+      .prepare(
+        `INSERT INTO share_links
+           (token, workbook_id, role, expires_at, password_hash, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(token, opts.workbookId, opts.role, expiresAt, passwordHash, now, opts.createdBy);
+    return {
+      workbookId: opts.workbookId,
+      token,
+      role: opts.role,
+      expiresAt,
+      passwordHash,
+      createdAt: now,
+      createdBy: opts.createdBy,
+    };
+  }
+
+  /** All link tokens for a workbook, newest first. Expired rows are
+   *  kept (sharing-model §8 q2 — history is preserved); callers that
+   *  care about live access use `getLinkRole`. */
+  listShareLinks(workbookId: string): ShareLink[] {
+    const rows = this.db
+      .prepare(
+        `SELECT token, workbook_id, role, expires_at, password_hash, created_at, created_by
+           FROM share_links WHERE workbook_id = ? ORDER BY created_at DESC`,
+      )
+      .all(workbookId) as ShareLinkRow[];
+    return rows.map(rowToShareLink);
+  }
+
+  /** Read a single token, regardless of expiry. Returns null when
+   *  unknown. */
+  getShareLink(token: string): ShareLink | null {
+    const row = this.db
+      .prepare(
+        `SELECT token, workbook_id, role, expires_at, password_hash, created_at, created_by
+           FROM share_links WHERE token = ?`,
+      )
+      .get(token) as ShareLinkRow | undefined;
+    return row ? rowToShareLink(row) : null;
+  }
+
+  /** Patch a token's role and/or expiry. Pass `expiresAt: null` to
+   *  clear the expiry. Returns the updated row, or null if the token
+   *  is unknown. */
+  updateShareLink(
+    token: string,
+    patch: { role?: ShareRole; expiresAt?: number | null },
+  ): ShareLink | null {
+    const fields: string[] = [];
+    const values: Array<unknown> = [];
+    if (patch.role !== undefined) {
+      fields.push('role = ?');
+      values.push(patch.role);
+    }
+    if (patch.expiresAt !== undefined) {
+      fields.push('expires_at = ?');
+      values.push(patch.expiresAt);
+    }
+    if (fields.length > 0) {
+      const result = this.db
+        .prepare(`UPDATE share_links SET ${fields.join(', ')} WHERE token = ?`)
+        .run(...values, token);
+      if (result.changes === 0) return null;
+    }
+    return this.getShareLink(token);
+  }
+
+  /** Revoke a token. Returns false when the token was unknown. */
+  deleteShareLink(token: string): boolean {
+    const result = this.db.prepare('DELETE FROM share_links WHERE token = ?').run(token);
+    return result.changes > 0;
+  }
+
+  /**
+   * Resolve a token to its effective role, **respecting expiry** — an
+   * expired token returns null as if it never existed.
+   *
+   * This is the read the future join-handshake will call to compute a
+   * joiner's role. It is deliberately NOT called from `rooms.ts` yet:
+   * tokens grant no access until that separate, reviewed batch wires
+   * enforcement in. Surfaced + tested now so the persistence contract
+   * is locked.
+   */
+  getLinkRole(token: string, now: number = Date.now()): ShareLinkRole | null {
+    const link = this.getShareLink(token);
+    if (!link) return null;
+    if (link.expiresAt !== null && link.expiresAt <= now) return null;
+    return {
+      workbookId: link.workbookId,
+      role: link.role,
+      hasPassword: link.passwordHash !== null,
+      passwordHash: link.passwordHash,
+      expiresAt: link.expiresAt,
+    };
+  }
+
   // ── Internals ──────────────────────────────────────────────────────────
 
   private migrate(): void {
@@ -626,6 +795,27 @@ export class PersonalAuthStore {
 
       CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
       CREATE INDEX IF NOT EXISTS idx_files_modified ON files(modified_at DESC);
+
+      -- Share links (sharing-model §6.1). One row per minted token.
+      -- The token is the PK + capability secret; password_hash is an
+      -- optional layered bcrypt gate. These rows are persisted now but
+      -- inert until the join-handshake batch reads getLinkRole — minting
+      -- a token grants no access on its own. workbook_id is NOT a hard
+      -- FK to files(id): tokens outlive the row only briefly, but more
+      -- importantly the file registry is the ownership boundary checked
+      -- at the route layer, not here.
+      CREATE TABLE IF NOT EXISTS share_links (
+        token TEXT PRIMARY KEY,
+        workbook_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        expires_at INTEGER,
+        password_hash TEXT,
+        created_at INTEGER NOT NULL,
+        created_by INTEGER NOT NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_share_links_workbook ON share_links(workbook_id);
     `);
 
     // Idempotent column migrations — a Batch-1 install predates the
@@ -666,6 +856,29 @@ export class PersonalAuthStore {
       )
       .run(username, hash, Date.now());
   }
+}
+
+/** Raw `share_links` row shape as it comes back from SQLite. */
+type ShareLinkRow = {
+  token: string;
+  workbook_id: string;
+  role: string;
+  expires_at: number | null;
+  password_hash: string | null;
+  created_at: number;
+  created_by: number;
+};
+
+function rowToShareLink(row: ShareLinkRow): ShareLink {
+  return {
+    workbookId: row.workbook_id,
+    token: row.token,
+    role: row.role as ShareRole,
+    expiresAt: row.expires_at,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
 }
 
 /** Parse `CASUAL_PERSONAL_MODE` to our enum, default `none`. */

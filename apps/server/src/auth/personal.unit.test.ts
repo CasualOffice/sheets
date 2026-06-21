@@ -11,8 +11,9 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import bcrypt from 'bcryptjs';
 
-import { PersonalAuthStore, readModeFromEnv, type PersonalMode } from './personal';
+import { PersonalAuthStore, readModeFromEnv, isShareRole, type PersonalMode } from './personal';
 
 function withTempStore(
   mode: PersonalMode,
@@ -271,6 +272,177 @@ test('CASUAL_BOOTSTRAP_USER is ignored once any user exists', () => {
   } finally {
     cleanup();
   }
+});
+
+// ── Share links (sharing-model §6.1) ─────────────────────────────────
+
+test('share link: create → list → get round-trips the row', () => {
+  const { store, cleanup } = withTempStore('single');
+  try {
+    const admin = store.createUser('alice', 'longpassword');
+    if (!admin.ok) throw new Error('seed failed');
+    const link = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'edit',
+      createdBy: admin.user.id,
+    });
+    assert.equal(link.workbookId, 'f-abc');
+    assert.equal(link.role, 'edit');
+    assert.equal(link.expiresAt, null);
+    assert.equal(link.passwordHash, null);
+    assert.ok(link.token.length >= 40, 'token should carry ~32 bytes of base64url');
+
+    const list = store.listShareLinks('f-abc');
+    assert.equal(list.length, 1);
+    assert.equal(list[0]?.token, link.token);
+
+    const got = store.getShareLink(link.token);
+    assert.equal(got?.role, 'edit');
+    assert.equal(store.getShareLink('no-such-token'), null);
+    assert.deepEqual(store.listShareLinks('f-other'), []);
+  } finally {
+    cleanup();
+  }
+});
+
+test('share link: tokens are unique CSPRNG values', () => {
+  const { store, cleanup } = withTempStore('single');
+  try {
+    const admin = store.createUser('alice', 'longpassword');
+    if (!admin.ok) throw new Error('seed failed');
+    const tokens = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      tokens.add(
+        store.createShareLink({ workbookId: 'f-abc', role: 'view', createdBy: admin.user.id })
+          .token,
+      );
+    }
+    assert.equal(tokens.size, 50);
+  } finally {
+    cleanup();
+  }
+});
+
+test('share link: getLinkRole respects expiry (live → role, lapsed → null)', () => {
+  const { store, cleanup } = withTempStore('single');
+  try {
+    const admin = store.createUser('alice', 'longpassword');
+    if (!admin.ok) throw new Error('seed failed');
+    const now = Date.now();
+
+    // Never-expiring → always resolves.
+    const forever = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'comment',
+      createdBy: admin.user.id,
+    });
+    assert.equal(store.getLinkRole(forever.token)?.role, 'comment');
+
+    // Future expiry → live.
+    const live = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'edit',
+      createdBy: admin.user.id,
+      expiresAt: now + 60_000,
+    });
+    assert.equal(store.getLinkRole(live.token, now)?.role, 'edit');
+
+    // Past expiry → null, as if it never existed, even though the row
+    // is still on disk (history is kept per §8 q2).
+    const dead = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'view',
+      createdBy: admin.user.id,
+      expiresAt: now - 1,
+    });
+    assert.equal(store.getLinkRole(dead.token, now), null);
+    assert.ok(store.getShareLink(dead.token), 'expired row is still persisted');
+
+    assert.equal(store.getLinkRole('unknown'), null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('share link: optional password is bcrypt-hashed, never stored plain', () => {
+  const { store, cleanup } = withTempStore('single');
+  try {
+    const admin = store.createUser('alice', 'longpassword');
+    if (!admin.ok) throw new Error('seed failed');
+    const link = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'view',
+      createdBy: admin.user.id,
+      password: 'hunter2',
+    });
+    assert.ok(link.passwordHash);
+    assert.notEqual(link.passwordHash, 'hunter2');
+    // Same bcrypt helper as user passwords → comparable.
+    assert.equal(bcrypt.compareSync('hunter2', link.passwordHash!), true);
+    assert.equal(bcrypt.compareSync('wrong', link.passwordHash!), false);
+
+    // Empty string is treated as no password.
+    const noPw = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'view',
+      createdBy: admin.user.id,
+      password: '',
+    });
+    assert.equal(noPw.passwordHash, null);
+
+    const role = store.getLinkRole(link.token);
+    assert.equal(role?.hasPassword, true);
+  } finally {
+    cleanup();
+  }
+});
+
+test('share link: update flips role + expiry; clears expiry with null', () => {
+  const { store, cleanup } = withTempStore('single');
+  try {
+    const admin = store.createUser('alice', 'longpassword');
+    if (!admin.ok) throw new Error('seed failed');
+    const link = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'view',
+      createdBy: admin.user.id,
+      expiresAt: Date.now() + 60_000,
+    });
+    const bumped = store.updateShareLink(link.token, { role: 'edit', expiresAt: null });
+    assert.equal(bumped?.role, 'edit');
+    assert.equal(bumped?.expiresAt, null);
+    assert.equal(store.updateShareLink('no-such', { role: 'edit' }), null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('share link: delete revokes; second delete is a no-op false', () => {
+  const { store, cleanup } = withTempStore('single');
+  try {
+    const admin = store.createUser('alice', 'longpassword');
+    if (!admin.ok) throw new Error('seed failed');
+    const link = store.createShareLink({
+      workbookId: 'f-abc',
+      role: 'view',
+      createdBy: admin.user.id,
+    });
+    assert.equal(store.deleteShareLink(link.token), true);
+    assert.equal(store.getShareLink(link.token), null);
+    assert.equal(store.deleteShareLink(link.token), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('isShareRole guards the role enum', () => {
+  assert.equal(isShareRole('view'), true);
+  assert.equal(isShareRole('comment'), true);
+  assert.equal(isShareRole('edit'), true);
+  assert.equal(isShareRole('admin'), false);
+  assert.equal(isShareRole(''), false);
+  assert.equal(isShareRole(undefined), false);
+  assert.equal(isShareRole(3), false);
 });
 
 test('readModeFromEnv parses none|single|multi; defaults to none', () => {
