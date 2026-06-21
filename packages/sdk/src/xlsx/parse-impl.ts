@@ -10,22 +10,13 @@ import {
 import { excelStyleToUniver } from './style-mapping';
 import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from './_snapshot-constants';
 import { RESOURCES_SHEET } from './constants';
-import {
-  mergeCommentsIntoResources,
-  readCommentsFromXlsx,
-} from './comments-resource';
-import {
-  mergePageSetupIntoResources,
-  readPageSetupFromXlsx,
-} from './page-setup-resource';
+import { mergeCommentsIntoResources, readCommentsFromXlsx } from './comments-resource';
+import { mergePageSetupIntoResources, readPageSetupFromXlsx } from './page-setup-resource';
 import {
   mergeDataValidationIntoResources,
   readDataValidationFromXlsx,
 } from './data-validation-resource';
-import {
-  mergeTablesIntoResources,
-  readTablesFromXlsx,
-} from './tables-resource';
+import { mergeTablesIntoResources, readTablesFromXlsx } from './tables-resource';
 import {
   capturePassthroughFromBuffer,
   mergePassthroughIntoResources,
@@ -120,11 +111,14 @@ function mergeDefinedNamesFromXlsx(
     | undefined;
   if (!model?.length) return resources;
 
-  const map: Record<string, {
-    id: string;
-    name: string;
-    formulaOrRefString: string;
-  }> = {};
+  const map: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      formulaOrRefString: string;
+    }
+  > = {};
   let i = 0;
   for (const dn of model) {
     if (!dn?.name || !Array.isArray(dn.ranges) || dn.ranges.length === 0) continue;
@@ -150,6 +144,22 @@ function lettersToCol(letters: string): number {
     col = col * 26 + (letters.charCodeAt(i) - 64);
   }
   return col - 1;
+}
+
+/**
+ * Normalize an xlsx Core/App property string. ExcelJS hands back placeholder
+ * junk for files authored by tools that never set real metadata — most
+ * commonly `creator`/`lastModifiedBy` of `"Unknown"` — plus the occasional
+ * literal `"null"`/`"undefined"` string. Treat those (and blanks) as absent so
+ * the Properties dialog shows an empty field instead of garbage.
+ */
+function clean(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  if (!t) return undefined;
+  const lower = t.toLowerCase();
+  if (lower === 'unknown' || lower === 'null' || lower === 'undefined') return undefined;
+  return t;
 }
 
 export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<ImportedWorkbook> {
@@ -307,8 +317,8 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
       });
     }
 
-    const wsColumns = (ws as { columns?: Array<{ width?: number; hidden?: boolean } | null> })
-      .columns ?? [];
+    const wsColumns =
+      (ws as { columns?: Array<{ width?: number; hidden?: boolean } | null> }).columns ?? [];
     wsColumns.forEach((col, i) => {
       if (!col) return;
       const entry: { w?: number; hd?: number } = {};
@@ -324,7 +334,9 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
       if (entry.h !== undefined || entry.hd !== undefined) rowData[rowNumber - 1] = entry;
     });
 
-    let freeze: { xSplit: number; ySplit: number; startRow: number; startColumn: number } | undefined;
+    let freeze:
+      | { xSplit: number; ySplit: number; startRow: number; startColumn: number }
+      | undefined;
     const view = (ws as { views?: Array<{ state?: string; xSplit?: number; ySplit?: number }> })
       .views?.[0];
     if (view?.state === 'frozen') {
@@ -398,14 +410,14 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
       // slot so the Properties dialog shows what the file actually
       // carried. The exporter mirrors the same names in reverse.
       properties: {
-        ...(wb.title ? { title: wb.title } : {}),
-        ...(wb.subject ? { subject: wb.subject } : {}),
-        ...(wb.description ? { description: wb.description } : {}),
-        ...(wb.keywords ? { tags: wb.keywords } : {}),
-        ...(wb.category ? { category: wb.category } : {}),
-        ...(wb.company ? { company: wb.company } : {}),
-        ...(wb.manager ? { manager: wb.manager } : {}),
-        ...(wb.creator ? { author: wb.creator } : {}),
+        ...(clean(wb.title) ? { title: clean(wb.title) } : {}),
+        ...(clean(wb.subject) ? { subject: clean(wb.subject) } : {}),
+        ...(clean(wb.description) ? { description: clean(wb.description) } : {}),
+        ...(clean(wb.keywords) ? { tags: clean(wb.keywords) } : {}),
+        ...(clean(wb.category) ? { category: clean(wb.category) } : {}),
+        ...(clean(wb.company) ? { company: clean(wb.company) } : {}),
+        ...(clean(wb.manager) ? { manager: clean(wb.manager) } : {}),
+        ...(clean(wb.creator) ? { author: clean(wb.creator) } : {}),
         ...(wb.created instanceof Date && !isNaN(wb.created.getTime())
           ? { createdAt: wb.created.toISOString() }
           : {}),

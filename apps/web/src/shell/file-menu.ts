@@ -25,12 +25,29 @@ export type WorkbookProperties = {
 
 const KEY = 'properties';
 
+/** Drop blank / placeholder string values so the dialog never renders
+ *  literal `"null"`/`"undefined"`/`"Unknown"` left behind by some xlsx
+ *  authoring tools. Mirrors the parser's `clean()` for older snapshots
+ *  that were imported before that guard existed. */
+export function sanitizeProps(raw: WorkbookProperties): WorkbookProperties {
+  const out: WorkbookProperties = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v !== 'string') continue;
+    const t = v.trim();
+    if (!t) continue;
+    const lower = t.toLowerCase();
+    if (lower === 'unknown' || lower === 'null' || lower === 'undefined') continue;
+    out[k as keyof WorkbookProperties] = t;
+  }
+  return out;
+}
+
 export function readProperties(api: FUniver): WorkbookProperties {
   const wb = api.getActiveWorkbook();
   if (!wb) return {};
   const snap = wb.save() as IWorkbookData;
   const props = (snap.custom?.[KEY] as WorkbookProperties | undefined) ?? {};
-  return props;
+  return sanitizeProps(props);
 }
 
 /**
@@ -68,14 +85,23 @@ export function writeProperties(api: FUniver, patch: WorkbookProperties) {
  * never persisted.
  */
 export type ComputedProperties = {
+  /** Workbook name — the uploaded filename (sans extension) for imported
+   *  files, set in `openSpreadsheetFile`. */
+  name: string;
   sheetCount: number;
   cellCount: number;
-  snapshotBytes: number;
+  /** Best-available byte size: the real on-disk size of the uploaded file
+   *  when known (`custom.sourceBytes`), else an estimate from the in-memory
+   *  JSON snapshot. */
+  sizeBytes: number;
+  /** True when `sizeBytes` is the actual uploaded file size; false when it's
+   *  the (much larger, uncompressed) snapshot estimate. */
+  sizeIsExact: boolean;
 };
 
 export function computeProperties(api: FUniver): ComputedProperties {
   const wb = api.getActiveWorkbook();
-  if (!wb) return { sheetCount: 0, cellCount: 0, snapshotBytes: 0 };
+  if (!wb) return { name: '', sheetCount: 0, cellCount: 0, sizeBytes: 0, sizeIsExact: false };
 
   const snap = wb.save() as IWorkbookData;
   const sheetCount = snap.sheetOrder.length;
@@ -90,8 +116,14 @@ export function computeProperties(api: FUniver): ComputedProperties {
     }
   }
 
-  const snapshotBytes = new Blob([JSON.stringify(snap)]).size;
-  return { sheetCount, cellCount, snapshotBytes };
+  // Prefer the real uploaded size; the JSON snapshot is uncompressed and runs
+  // several times larger than the zipped xlsx, so it's only a rough fallback
+  // for workbooks created in-app (which were never a file on disk).
+  const sourceBytes = snap.custom?.sourceBytes;
+  const sizeIsExact = typeof sourceBytes === 'number' && sourceBytes > 0;
+  const sizeBytes = sizeIsExact ? (sourceBytes as number) : new Blob([JSON.stringify(snap)]).size;
+
+  return { name: snap.name ?? '', sheetCount, cellCount, sizeBytes, sizeIsExact };
 }
 
 export function formatBytes(n: number): string {
@@ -102,9 +134,10 @@ export function formatBytes(n: number): string {
 
 export function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return '—';
-  }
+  // `new Date('garbage')` returns an Invalid Date object rather than throwing,
+  // and its toLocaleString() is the literal "Invalid Date" — guard for it so a
+  // malformed timestamp shows an em-dash instead of garbage.
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString();
 }

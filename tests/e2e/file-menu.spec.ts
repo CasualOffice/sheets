@@ -43,6 +43,9 @@ test.describe('Properties dialog', () => {
     await page.getByTestId('menu-item-properties').click();
 
     await expect(page.getByTestId('properties-dialog')).toBeVisible();
+    // Name is surfaced as a read-only field (was previously absent — the
+    // dialog led with the empty "Title" field, which read as a wrong name).
+    await expect(page.getByTestId('prop-name')).not.toBeEmpty();
     await expect(page.getByTestId('prop-sheets')).toHaveText('1');
     await expect(page.getByTestId('prop-cells')).toHaveText('3');
     await expect(page.getByTestId('prop-size')).toHaveText(/B|KB/);

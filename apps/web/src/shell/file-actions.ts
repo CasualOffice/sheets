@@ -90,6 +90,11 @@ export async function openSpreadsheetFile(
   else data = await xlsxToWorkbookData(buf);
   console.info('[open] parsed', { id: data.id, sheets: Object.keys(data.sheets ?? {}).length });
   data.name = file.name.replace(/\.(xlsx|xlsm|ods|csv|tsv|tab)$/i, '');
+  // Stamp the real on-disk size of the uploaded file so File → Properties
+  // can show it. Without this the dialog falls back to measuring the
+  // uncompressed JSON snapshot, which runs ~4–6× larger than the zipped
+  // xlsx (a 6 MB file reads as ~29 MB). Survives save/load via `custom`.
+  data.custom = { ...data.custom, sourceBytes: file.size, sourceName: file.name };
   return data;
 }
 

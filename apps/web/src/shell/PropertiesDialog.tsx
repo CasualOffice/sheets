@@ -16,16 +16,13 @@ export function PropertiesDialog({ onClose }: Props) {
   const api = useUniverAPI();
 
   const computed = useMemo(() => (api ? computeProperties(api) : null), [api]);
-  const [props, setProps] = useState<WorkbookProperties>(() =>
-    api ? readProperties(api) : {},
-  );
+  const [props, setProps] = useState<WorkbookProperties>(() => (api ? readProperties(api) : {}));
 
   useEffect(() => {
     if (api) setProps(readProperties(api));
   }, [api]);
 
-  const update = (k: keyof WorkbookProperties, v: string) =>
-    setProps((p) => ({ ...p, [k]: v }));
+  const update = (k: keyof WorkbookProperties, v: string) => setProps((p) => ({ ...p, [k]: v }));
 
   const save = () => {
     if (!api) return;
@@ -71,11 +68,34 @@ export function PropertiesDialog({ onClose }: Props) {
         >
           File info
         </h3>
-        <ReadonlyField label="Size" testid="prop-size" value={formatBytes(computed?.snapshotBytes ?? 0)} />
-        <ReadonlyField label="Sheets" testid="prop-sheets" value={String(computed?.sheetCount ?? 0)} />
-        <ReadonlyField label="Cells with data" testid="prop-cells" value={String(computed?.cellCount ?? 0)} />
+        <ReadonlyField
+          label="Name"
+          testid="prop-name"
+          value={computed?.name?.trim() ? computed.name : 'Untitled'}
+        />
+        <ReadonlyField
+          label="Size"
+          testid="prop-size"
+          value={
+            (computed && !computed.sizeIsExact ? '≈ ' : '') + formatBytes(computed?.sizeBytes ?? 0)
+          }
+        />
+        <ReadonlyField
+          label="Sheets"
+          testid="prop-sheets"
+          value={String(computed?.sheetCount ?? 0)}
+        />
+        <ReadonlyField
+          label="Cells with data"
+          testid="prop-cells"
+          value={String(computed?.cellCount ?? 0)}
+        />
         <ReadonlyField label="Created" testid="prop-created" value={formatDate(props.createdAt)} />
-        <ReadonlyField label="Last modified" testid="prop-modified" value={formatDate(props.modifiedAt)} />
+        <ReadonlyField
+          label="Last modified"
+          testid="prop-modified"
+          value={formatDate(props.modifiedAt)}
+        />
       </section>
 
       <section>
@@ -133,15 +153,7 @@ export function PropertiesDialog({ onClose }: Props) {
   );
 }
 
-function ReadonlyField({
-  label,
-  value,
-  testid,
-}: {
-  label: string;
-  value: string;
-  testid: string;
-}) {
+function ReadonlyField({ label, value, testid }: { label: string; value: string; testid: string }) {
   return (
     <div className="field">
       <span className="field__label">{label}</span>
