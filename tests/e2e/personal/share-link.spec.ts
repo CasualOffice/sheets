@@ -154,8 +154,14 @@ test('mint + list + revoke a secure share link on a saved personal file', async 
   const fileId = url.match(/\/r\/([^?]+)/)?.[1];
   expect(fileId).toBeTruthy();
 
-  // ── 5. Revoke removes it ──────────────────────────────────────────
-  await item.getByTestId('share-link-revoke').click();
-  await expect(list.getByTestId('share-link-item')).toHaveCount(0, { timeout: 15_000 });
+  // ── 5. Revoke empties the list ────────────────────────────────────
+  // Revoke EVERY link on the file, not just .first(): links are file-scoped
+  // and a sibling spec sharing the single-mode admin (or a prior retry) can
+  // leave others on the same file, so a plain "revoke one → count 0" is racy.
+  const items = list.getByTestId('share-link-item');
+  for (let n = await items.count(); n > 0; n--) {
+    await items.first().getByTestId('share-link-revoke').click();
+    await expect(items).toHaveCount(n - 1, { timeout: 15_000 });
+  }
   await expect(page.getByTestId('share-link-empty')).toBeVisible();
 });
