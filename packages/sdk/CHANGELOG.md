@@ -1,5 +1,23 @@
 # @casualoffice/sheets
 
+## 0.12.0
+
+### Minor Changes
+
+- 58ce6a0: `attachCollab` now accepts an optional `share` token (`{ token, password? }`) which is forwarded on the collab WebSocket as `?share=`/`?sp=` and suppresses the client-asserted `?role=` (the server becomes authoritative for the joiner's role). Backward-compatible: without a `share` token the connection URL is byte-identical to before. Underpins server-enforced share links (sharing-model §6.1).
+
+### Patch Changes
+
+- 8b35360: Two embed/chrome fixes found integrating the SDK into a host (Drive):
+  - **Chrome font loader skipped Material Symbols.** `ensureChromeFonts` deduped on the bare `/css2` path, which is shared by both Google Fonts URLs, so the second family (Material Symbols Outlined) was never injected and `chrome="full"` icons rendered as raw ligature text. Now deduped per `family=` segment.
+  - **`CasualSheetsIframe` ref `executeCommand` dropped `args`.** It forwarded only `{ command }` over the postMessage protocol, so iframe-host commands carrying a payload (font family/size, colour) were no-ops. Now forwards `args` too.
+
+- 1adc983: Embed runtime `viewMode="preview"` is now genuinely READ-ONLY. Previously preview only hid the chrome (toolbar/menu) — Univer's cell editor still opened on double-click/F2, so a host's "preview" was editable.
+
+  `applyReadOnly(univerApi, unitId, onBlock?)` now vetoes mutating commands via `beforeCommandExecuted` (throwing `CustomCommandExecutionError`, which the command service cancels cleanly). This is the load-bearing layer: the iframe's minimal plugin set does **not** enforce `WorkbookEditablePermission` (the editor still accepts edits with it flipped off), so the veto — not the permission — is what stops typing, paste, styling and structural edits. The permission flip is kept as a second layer for full `<CasualSheets>` hosts (greys out mutating menu items). The optional `onBlock(commandId)` callback lets hosts react to a blocked edit (e.g. a "read-only" toast).
+
+  Applied in a `requestAnimationFrame` after `onReady` so it wins the race against Univer's post-mount permission init. Editor mode is unchanged. Also exposes `getEditable(univerApi, unitId)` and an `__casualEmbedApi` debug handle on the iframe window for host/e2e introspection.
+
 ## 0.11.1
 
 ### Patch Changes
