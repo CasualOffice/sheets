@@ -152,6 +152,24 @@ export interface CommandSetThemeData {
   theme: 'light' | 'dark' | 'system';
 }
 
+/** Host → editor: enable/disable chrome features. Each key maps a toolbar
+ *  group / menu item / capability to a boolean; a `false` hides the control
+ *  AND blocks its command. Omitted keys default to enabled. Mirrors the
+ *  `features` prop on `<CasualSheets>`. */
+export interface CommandSetFeaturesData {
+  features: Record<string, boolean>;
+}
+
+/** Editor → host: a chrome control backed by a dialog the SDK doesn't render
+ *  itself (Format Cells, Insert Chart, Find & Replace, …) was activated. The
+ *  host renders its OWN dialog/popup and applies the result via
+ *  `executeCommand`. Fired only when the host opted into host-owned dialogs
+ *  by handling this event. */
+export interface DialogRequestData {
+  kind: string;
+  context?: unknown;
+}
+
 export interface CommandSetLocaleData {
   locale: string;
 }

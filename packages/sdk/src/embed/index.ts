@@ -39,6 +39,8 @@ export {
   type CommandSetReadOnlyData,
   type CommandSetThemeData,
   type CommandSetLocaleData,
+  type CommandSetFeaturesData,
+  type DialogRequestData,
   type SignatureRequestData,
   type SignatureRequestAckData,
   type SignatureFieldSignedData,

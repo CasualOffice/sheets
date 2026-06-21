@@ -18,6 +18,8 @@ import {
   type CommandSetThemeData,
   type CommandSetLocaleData,
   type CommandSetViewModeData,
+  type CommandSetFeaturesData,
+  type DialogRequestData,
   type CommandExecuteData,
   type SelectionFormatStateData,
   type EditorHelloData,
@@ -62,6 +64,9 @@ export interface EmbedHostHandlers {
   onExit?: (data: ExitData) => void;
   onSelectionChanged?: (data: SelectionChangedData) => void;
   onSelectionFormatState?: (data: SelectionFormatStateData) => void;
+  /** A host-owned dialog (Format Cells, Insert Chart, …) was requested from the
+   *  editor's chrome. Render your own dialog and apply via executeCommand. */
+  onDialogRequest?: (data: DialogRequestData) => void;
   onTelemetry?: (data: TelemetryEventData) => void;
   onSignatureFieldSigned?: (data: SignatureFieldSignedData) => void;
   onSignatureComplete?: (data: SignatureCompleteData) => void;
@@ -113,6 +118,11 @@ export class EmbedHostTransport {
 
   sendSetLocale(data: CommandSetLocaleData): void {
     this.post('casual.command.set.locale', data);
+  }
+
+  /** Host → editor: enable/disable chrome features (hide control + block command). */
+  sendSetFeatures(data: CommandSetFeaturesData): void {
+    this.post('casual.command.set.features', data);
   }
 
   sendCommandSave(): void {
@@ -202,6 +212,9 @@ export class EmbedHostTransport {
         return;
       case 'casual.selection.format-state':
         this.handlers.onSelectionFormatState?.(env.data as SelectionFormatStateData);
+        return;
+      case 'casual.dialog.request':
+        this.handlers.onDialogRequest?.(env.data as DialogRequestData);
         return;
       case 'casual.telemetry.event':
         this.handlers.onTelemetry?.(env.data as TelemetryEventData);

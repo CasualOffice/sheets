@@ -178,6 +178,15 @@ export interface CasualSheetsProps {
    *    (light/dark). `'minimal'` and `'full'` currently render the same shell;
    *    `'full'` is where richer panels (find/replace, charts, …) will land. */
   chrome?: 'none' | 'minimal' | 'full';
+  /** Enable/disable chrome features. Each key maps a toolbar group / menu item /
+   *  capability to a boolean; `false` hides the control AND blocks its command.
+   *  Omitted keys default to enabled. Only applies when `chrome` is shown. */
+  features?: Record<string, boolean>;
+  /** Called when a chrome control backed by a dialog the SDK doesn't render
+   *  itself (Format Cells, Insert Chart, Find & Replace, …) is activated, so the
+   *  host can render its OWN dialog and apply via the API. Without it, those
+   *  controls are omitted (no fake dialog). */
+  onDialogRequest?: (kind: string, context?: unknown) => void;
   /** Container style. Default fills the parent. */
   style?: CSSProperties;
   /** Container className for additional styling hooks. */
@@ -216,6 +225,8 @@ export function CasualSheets({
   theme = defaultTheme,
   appearance = 'light',
   chrome = 'none',
+  features,
+  onDialogRequest,
   style,
   className,
   testId = 'casual-sheets',
@@ -452,7 +463,7 @@ export function CasualSheets({
       {/* Bars appear once their lazy chunk loads (a tick after first paint); the
           grid host is OUTSIDE Suspense so Univer mounts immediately. */}
       <Suspense fallback={null}>
-        <ChromeTop api={chromeApi} />
+        <ChromeTop api={chromeApi} features={features} onDialogRequest={onDialogRequest} />
       </Suspense>
       <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
       <Suspense fallback={null}>

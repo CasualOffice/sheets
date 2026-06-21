@@ -30,6 +30,8 @@ import {
   type CommandSetThemeData,
   type CommandSetLocaleData,
   type CommandSetViewModeData,
+  type CommandSetFeaturesData,
+  type DialogRequestData,
   type CommandExecuteData,
   type SelectionFormatStateData,
   type CasualErrorData,
@@ -64,6 +66,7 @@ export interface EmbedTransportHandlers {
   onCommandSetReadOnly?: (data: CommandSetReadOnlyData) => void | Promise<void>;
   onCommandSetTheme?: (data: CommandSetThemeData) => void | Promise<void>;
   onCommandSetLocale?: (data: CommandSetLocaleData) => void | Promise<void>;
+  onCommandSetFeatures?: (data: CommandSetFeaturesData) => void | Promise<void>;
   /** Host → editor: switch chrome density (preview ↔ editor). */
   onCommandSetViewMode?: (data: CommandSetViewModeData) => void | Promise<void>;
   /** Host → editor: execute a formatting / navigation command (bold,
@@ -173,6 +176,12 @@ export class EmbedTransport {
     this.post('casual.selection.format-state', data);
   }
 
+  /** Editor → host: a host-owned dialog (Format Cells, Insert Chart, …) was
+   *  requested. The host renders its own UI and applies via executeCommand. */
+  sendDialogRequest(data: DialogRequestData): void {
+    this.post('casual.dialog.request', data);
+  }
+
   /** Editor → Host: a noteworthy event. */
   sendTelemetry(data: TelemetryEventData): void {
     this.post('casual.telemetry.event', data);
@@ -243,6 +252,9 @@ export class EmbedTransport {
         return;
       case 'casual.command.set.locale':
         await this.handlers.onCommandSetLocale?.(env.data as CommandSetLocaleData);
+        return;
+      case 'casual.command.set.features':
+        await this.handlers.onCommandSetFeatures?.(env.data as CommandSetFeaturesData);
         return;
       case 'casual.command.set.viewmode':
         await this.handlers.onCommandSetViewMode?.(env.data as CommandSetViewModeData);

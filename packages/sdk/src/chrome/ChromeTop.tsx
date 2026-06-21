@@ -10,11 +10,19 @@ import { Toolbar } from './Toolbar';
 import { FormulaBar } from './FormulaBar';
 import type { CasualSheetsAPI } from '../sheets/api';
 
-export function ChromeTop({ api }: { api: CasualSheetsAPI | null }) {
+export interface ChromeTopProps {
+  api: CasualSheetsAPI | null;
+  /** Hide a control/group + block its command when its key is false. */
+  features?: Record<string, boolean>;
+  /** Route dialog-backed controls (Format Cells, Insert Chart, …) to the host. */
+  onDialogRequest?: (kind: string, context?: unknown) => void;
+}
+
+export function ChromeTop({ api, features, onDialogRequest }: ChromeTopProps) {
   return (
     <>
-      <MenuBar api={api} />
-      <Toolbar api={api} />
+      <MenuBar api={api} features={features} onDialogRequest={onDialogRequest} />
+      <Toolbar api={api} features={features} onDialogRequest={onDialogRequest} />
       <FormulaBar api={api} />
     </>
   );

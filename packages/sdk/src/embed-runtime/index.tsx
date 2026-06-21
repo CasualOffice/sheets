@@ -172,6 +172,10 @@ function EmbeddedSheets({
     return () => mq.removeEventListener('change', onChange);
   }, [theme]);
 
+  // Feature flags (host → editor via casual.command.set.features). undefined =
+  // all enabled; a key set false hides that control/group + blocks its command.
+  const [features, setFeatures] = useState<Record<string, boolean> | undefined>(undefined);
+
   const [viewMode, setViewMode] = useState<'preview' | 'editor'>(initialViewMode);
   // Editor mode renders the SDK's OWN React chrome (`chrome="full"`): the
   // menu bar (Edit/Insert/Format/Data/View), the rich formatting toolbar,
@@ -191,6 +195,7 @@ function EmbeddedSheets({
   useEffect(() => {
     transport.on({
       onCommandSetTheme: ({ theme: next }) => setTheme(next),
+      onCommandSetFeatures: ({ features: next }) => setFeatures(next),
       onCommandSetViewMode: ({ viewMode: next }) => setViewMode(next),
     });
   }, [transport]);
@@ -270,6 +275,8 @@ function EmbeddedSheets({
       initialData={data}
       chrome={chrome}
       appearance={appearance}
+      features={features}
+      onDialogRequest={(kind, context) => transport.sendDialogRequest({ kind, context })}
       ui={ui}
       // Seed the en-US string bundle. Without `locales`, Univer's
       // LocaleService throws "Locale not initialized" and the workbench
