@@ -1,5 +1,12 @@
 # @casualoffice/sheets
 
+## 0.11.0
+
+### Minor Changes
+
+- 6c8a94e: Add `CasualSheetsAPI.exportXlsx()` and a `workbookDataToXlsx` converter on the `@casualoffice/sheets/xlsx` subpath — the SDK is now a two-way xlsx I/O surface (was import-only). The core converter (values/formulas, styles, merges, number formats, borders, hyperlinks, comments, data validation, tables, page setup, named ranges, VBA passthrough) was lifted out of `apps/web` and runs in its own Web Worker; ExcelJS stays out of the editor entry (lazy-loaded as a separate chunk). App-level feature models (charts/pivots/sparklines) remain a power-host concern, baked into the snapshot before serialization via the generic `ExportExtras` (`hyperlinks` / `outline` / `chartImages`).
+- 3c93042: Add `CasualSheetsAPI.importXlsx(input)` — parse an `.xlsx` (`File`/`Blob`/`ArrayBuffer`/`Uint8Array`) and load it as the active workbook in one call. The ExcelJS parser is lazy-loaded from the `@casualoffice/sheets/xlsx` subpath (externalised in the build), so hosts that never import a file don't pay for it and the editor entry stays small. When a `File` is passed, its name + on-disk size are recorded on the snapshot (surfaced by the built-in Properties dialog).
+
 ## 0.10.0
 
 ### Minor Changes
