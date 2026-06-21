@@ -4,16 +4,21 @@ import type { ChartModel } from '../charts/types';
 import type { PivotModel } from '../pivots/types';
 import type { SparklineModel } from '../sparklines/types';
 import { timeItAsync } from '../perf';
-import { serializeXlsxInWorker } from './serialize-in-worker';
+import { workbookDataToXlsx as sdkWorkbookDataToXlsx } from '@casualoffice/sheets/xlsx';
+import { writeOutlineIntoSnapshot } from '../outline/resources';
+import { writeChartsIntoSnapshot } from '../charts/resources';
+import { writePivotsIntoSnapshot } from '../pivots/resources';
+import { writeSparklinesIntoSnapshot } from '../sparklines/resources';
 
 /**
- * Public entry point for xlsx export. The actual ExcelJS work lives in
- * `export-impl.ts` invoked via the `exporter.worker.ts` Web Worker so
- * the main thread stays responsive while a multi-MB save serializes.
- *
- * This file is type-only on the main bundle — ExcelJS doesn't get
- * pulled in here. See `import.ts` for the matching parser-side split
- * and `docs/LARGE_FILE_PIPELINE.md` for the rationale.
+ * Public entry point for xlsx export. The core converter now lives in the SDK
+ * (`@casualoffice/sheets/xlsx`, runs in its own Web Worker so a multi-MB save
+ * stays off the main thread + keeps ExcelJS out of this bundle). This file is
+ * the app's power-host layer: it bakes app-only feature models (charts, pivots,
+ * sparklines, outline) into the snapshot's resources, then delegates the
+ * cell/style/merge/resource serialization to the shared SDK exporter — so the
+ * app and third-party SDK hosts share one exporter. See `import.ts` for the
+ * matching parser side and `docs/LARGE_FILE_PIPELINE.md` for the rationale.
  */
 
 /**
@@ -23,7 +28,10 @@ import { serializeXlsxInWorker } from './serialize-in-worker';
  */
 export type ExportExtras = {
   /** subUnitId -> rows of { row, column, payload, display } */
-  hyperlinks?: Record<string, Array<{ row: number; column: number; payload: string; display?: string }>>;
+  hyperlinks?: Record<
+    string,
+    Array<{ row: number; column: number; payload: string; display?: string }>
+  >;
   /** Per-sheet row/column outline groups — survives the round-trip via two
    *  parallel channels: our `__casual_sheets_outline__` resource (exact
    *  group boundaries) AND ExcelJS row/col `outlineLevel`+`collapsed` (so
@@ -66,7 +74,37 @@ export async function workbookDataToXlsx(
   data: IWorkbookData,
   extras: ExportExtras = {},
 ): Promise<Blob> {
-  return timeItAsync('export-xlsx', () => serializeXlsxInWorker(data, extras));
+  // Bake app-only feature models into the snapshot resources before handing it
+  // to the shared SDK exporter. Done on a shallow clone (custom + resources are
+  // the only things the writers touch — both reassigned, not deep-mutated) so a
+  // caller that reuses its snapshot doesn't see the export-side additions. The
+  // big `sheets`/cellData refs are shared, not copied.
+  const baked: IWorkbookData = {
+    ...data,
+    custom: { ...data.custom },
+    resources: [...(data.resources ?? [])],
+  };
+  if (extras.outline && Object.keys(extras.outline).length > 0) {
+    writeOutlineIntoSnapshot(baked, extras.outline);
+  }
+  if (extras.charts && extras.charts.length > 0) {
+    writeChartsIntoSnapshot(baked, extras.charts);
+  }
+  if (extras.pivots && extras.pivots.length > 0) {
+    writePivotsIntoSnapshot(baked, extras.pivots);
+  }
+  if (extras.sparklines && extras.sparklines.length > 0) {
+    writeSparklinesIntoSnapshot(baked, extras.sparklines);
+  }
+  // The SDK exporter handles the generic xlsx-native bits it can derive on its
+  // own (hyperlink cells, outline gutter, floating chart images).
+  return timeItAsync('export-xlsx', () =>
+    sdkWorkbookDataToXlsx(baked, {
+      hyperlinks: extras.hyperlinks,
+      outline: extras.outline,
+      chartImages: extras.chartImages,
+    }),
+  );
 }
 
 // Re-export the constant from its dedicated module so existing imports

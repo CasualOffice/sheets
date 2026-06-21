@@ -6,13 +6,9 @@ import type { ExportExtras } from './export';
 
 /**
  * Worker side of the xlsx exporter. Receives the snapshot + extras as
- * structured-cloned JSON (no transferable since the data is shared with
- * the main thread for the duration of the save), runs the ExcelJS
- * serialization, posts back a transferable Blob.
- *
+ * structured-cloned JSON, runs the ExcelJS serialization, posts back a Blob.
  * Single-shot per export — serialize-in-worker.ts spawns, posts, awaits,
- * terminates. Same pooling note as the parser worker applies if we ever
- * see many sequential exports.
+ * terminates.
  */
 
 type ExportRequest = { id: number; data: IWorkbookData; extras: ExportExtras };

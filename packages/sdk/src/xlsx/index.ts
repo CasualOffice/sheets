@@ -1,9 +1,9 @@
 /**
  * xlsx — `.xlsx` ↔ Univer IWorkbookData converters.
  *
- * Phase-A surface (this release): IMPORT only.
+ * Both directions:
  *
- *   import { xlsxToWorkbookData } from '@casualoffice/sheets/xlsx';
+ *   import { xlsxToWorkbookData, workbookDataToXlsx } from '@casualoffice/sheets/xlsx';
  *
  * The parser runs in a Web Worker so multi-MB workbooks don't block
  * the main thread; bundler must support the `new Worker(new URL(...),
@@ -31,6 +31,7 @@
  */
 
 export { xlsxToWorkbookData, type ImportedWorkbook } from './import';
+export { workbookDataToXlsx, type ExportExtras } from './export';
 export * from './style-mapping';
 export * from './constants';
 export * from './comments-resource';

@@ -12,7 +12,7 @@ import { defineConfig, type Plugin } from 'tsup';
  * URL in the compiled chunk so the consumer's bundler resolves it.
  */
 const rewriteParserWorkerUrl: Plugin = {
-  name: 'rewrite-parser-worker-url',
+  name: 'rewrite-worker-urls',
   // The package.json has `"type": "module"` so tsup emits ESM with the
   // `.js` extension (and CJS with `.cjs`). The runtime URL points at
   // the ESM sibling since the Worker constructor with `type: 'module'`
@@ -20,8 +20,10 @@ const rewriteParserWorkerUrl: Plugin = {
   // re-roll the construction. Same trade-off Vite makes for its own
   // worker plugin output.
   async renderChunk(code) {
-    if (!code.includes('parser.worker.ts')) return null;
-    const rewritten = code.replace(/["']\.\/parser\.worker\.ts["']/g, `'./parser.worker.js'`);
+    if (!code.includes('parser.worker.ts') && !code.includes('exporter.worker.ts')) return null;
+    const rewritten = code
+      .replace(/["']\.\/parser\.worker\.ts["']/g, `'./parser.worker.js'`)
+      .replace(/["']\.\/exporter\.worker\.ts["']/g, `'./exporter.worker.js'`);
     return { code: rewritten };
   },
 };
@@ -94,7 +96,10 @@ const mainConfig = defineConfig({
 // This is the one place @univerjs + exceljs are bundled; the library entries
 // above keep them external to avoid duplicating redi in the host.
 const workerConfig = defineConfig({
-  entry: { 'parser.worker': 'src/xlsx/parser.worker.ts' },
+  entry: {
+    'parser.worker': 'src/xlsx/parser.worker.ts',
+    'exporter.worker': 'src/xlsx/exporter.worker.ts',
+  },
   format: ['esm', 'cjs'],
   dts: false,
   splitting: false,
@@ -148,6 +153,7 @@ const embedRuntimeConfig = defineConfig({
   entry: {
     'embed-runtime': 'src/embed-runtime/index.tsx',
     'parser.worker': 'src/xlsx/parser.worker.ts',
+    'exporter.worker': 'src/xlsx/exporter.worker.ts',
   },
   outDir: 'dist/embed',
   format: ['esm'],

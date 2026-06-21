@@ -1,40 +1,31 @@
 import ExcelJS from 'exceljs';
 import { CustomRangeType, type IStyleData, type IWorkbookData } from '@univerjs/core';
-// Shared xlsx utilities (style mappers + resource readers/writers) live
-// in @casualoffice/sheets/xlsx alongside the importer. Export-side
-// snapshot extensions (outline / charts / pivots / sparklines) stay
-// local to apps/web because they pull in per-feature state types.
+import { univerStyleToExcel } from './style-mapping';
+import { RESOURCES_SHEET } from './constants';
+import { commentBodyToString, readCommentsFromSnapshot, refToRowCol } from './comments-resource';
+import { applyPageSetupToXlsxWorksheet, readPageSetupFromSnapshot } from './page-setup-resource';
 import {
   applyDataValidationToXlsxWorksheet,
-  applyPageSetupToXlsxWorksheet,
-  applyPassthroughToXlsxBuffer,
-  applyTablesToXlsxWorksheet,
-  commentBodyToString,
-  mimeForPassthrough,
-  readCommentsFromSnapshot,
   readDataValidationFromSnapshot,
-  readPageSetupFromSnapshot,
+} from './data-validation-resource';
+import { applyTablesToXlsxWorksheet, readTablesFromSnapshot } from './tables-resource';
+import {
+  applyPassthroughToXlsxBuffer,
+  mimeForPassthrough,
   readPassthroughFromSnapshot,
-  readTablesFromSnapshot,
-  refToRowCol,
-  RESOURCES_SHEET,
-  univerStyleToExcel,
-} from '@casualoffice/sheets/xlsx';
-import { writeOutlineIntoSnapshot } from '../outline/resources';
-import { writeChartsIntoSnapshot } from '../charts/resources';
-import { writePivotsIntoSnapshot } from '../pivots/resources';
-import { writeSparklinesIntoSnapshot } from '../sparklines/resources';
+} from './passthrough-resource';
 import type { ExportExtras } from './export';
 
 /**
  * Pure conversion: Univer IWorkbookData → ExcelJS workbook → xlsx Blob.
  * Imported only by `exporter.worker.ts` (where it actually runs) — the
- * main bundle's `export.ts` is type-only + the worker-dispatch entry
- * point. Splitting like this keeps ExcelJS (~600 KB) out of the main
- * chunk.
+ * library `export.ts` is the worker-dispatch entry point. Splitting like
+ * this keeps ExcelJS (~600 KB) out of the main chunk.
  *
- * Behavior is byte-for-byte equivalent to the previous in-place impl;
- * see export.ts header for the fidelity scope.
+ * Feature models that don't live on `IWorkbookData` (charts / pivots /
+ * sparklines / outline resources) are baked into the snapshot by the host
+ * BEFORE calling the exporter; this core only reads what's on the snapshot
+ * plus the generic `ExportExtras` (hyperlinks, outline gutter, images).
  */
 
 type ICellSnapshot = {
@@ -128,11 +119,13 @@ export async function workbookDataToXlsxImpl(
     }
 
     if (wsd.freeze && (wsd.freeze.xSplit > 0 || wsd.freeze.ySplit > 0)) {
-      ws.views = [{
-        state: 'frozen',
-        xSplit: wsd.freeze.xSplit || 0,
-        ySplit: wsd.freeze.ySplit || 0,
-      }];
+      ws.views = [
+        {
+          state: 'frozen',
+          xSplit: wsd.freeze.xSplit || 0,
+          ySplit: wsd.freeze.ySplit || 0,
+        },
+      ];
     }
 
     if (typeof wsd.defaultColumnWidth === 'number' && wsd.defaultColumnWidth > 0) {
@@ -168,15 +161,27 @@ export async function workbookDataToXlsxImpl(
         // matters when the exporter is called without extras (audit
         // round-trip, headless seed-back).
         const cellP = (cell as ICellSnapshot & { p?: unknown }).p as
-          | { body?: { dataStream?: string; customRanges?: Array<{ rangeType?: number; properties?: { url?: string } }> } }
+          | {
+              body?: {
+                dataStream?: string;
+                customRanges?: Array<{ rangeType?: number; properties?: { url?: string } }>;
+              };
+            }
           | undefined;
         if (cellP?.body?.customRanges) {
           for (const cr of cellP.body.customRanges) {
-            if (cr.rangeType === CustomRangeType.HYPERLINK && typeof cr.properties?.url === 'string' && cr.properties.url) {
+            if (
+              cr.rangeType === CustomRangeType.HYPERLINK &&
+              typeof cr.properties?.url === 'string' &&
+              cr.properties.url
+            ) {
               const display =
                 cellP.body.dataStream?.replace(/[\r\n]+$/, '') ??
                 (typeof cell.v === 'string' ? cell.v : String(cell.v ?? ''));
-              excelCell.value = { text: display, hyperlink: cr.properties.url } as ExcelJS.CellValue;
+              excelCell.value = {
+                text: display,
+                hyperlink: cr.properties.url,
+              } as ExcelJS.CellValue;
               break;
             }
           }
@@ -286,11 +291,10 @@ export async function workbookDataToXlsxImpl(
       }
     }
 
-    // Charts P5b — embed pre-rendered chart bitmaps as floating images.
-    // The live chart model still ships via `__casual_sheets_charts__` so
-    // our app re-attaches an editable chart on re-open; Excel sees the
-    // image. `editAs: 'oneCell'` anchors the image so it scales with the
-    // top-left cell only (Excel's "Move with cells but don't size").
+    // Pre-rendered bitmaps embedded as floating images (e.g. chart P5b chart
+    // snapshots). The live model still ships in the snapshot resources so our
+    // app re-attaches an editable object on re-open; a foreign reader sees the
+    // image. `editAs: 'oneCell'` anchors to the top-left cell only.
     const sheetCharts = (extras.chartImages ?? []).filter((c) => c.sheetId === sheetId);
     for (const ci of sheetCharts) {
       const imageId = wb.addImage({ buffer: ci.png, extension: 'png' });
@@ -304,21 +308,6 @@ export async function workbookDataToXlsxImpl(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     }
-  }
-
-  if (extras.outline && Object.keys(extras.outline).length > 0) {
-    writeOutlineIntoSnapshot(data, extras.outline);
-  }
-
-  if (extras.charts && extras.charts.length > 0) {
-    writeChartsIntoSnapshot(data, extras.charts);
-  }
-
-  if (extras.pivots && extras.pivots.length > 0) {
-    writePivotsIntoSnapshot(data, extras.pivots);
-  }
-  if (extras.sparklines && extras.sparklines.length > 0) {
-    writeSparklinesIntoSnapshot(data, extras.sparklines);
   }
 
   // Lift Univer's defined-name resource into xlsx-native `<definedName>`

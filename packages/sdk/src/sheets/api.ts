@@ -8,19 +8,15 @@
  *
  * Surface:
  *   getSnapshot / loadSnapshot / getSelection / executeCommand / setTheme /
- *   importXlsx / univer
+ *   importXlsx / exportXlsx / univer
  *
- * `importXlsx` lazy-loads the parser via `import('@casualoffice/sheets/xlsx')`
- * — a BARE subpath, not a relative `import('../xlsx')`. The main tsup config is
- * `splitting:false`, so a relative dynamic import would be inlined and balloon
- * the editor entry from ~24KB to ~200KB of ExcelJS for hosts that never open a
- * file. The subpath is externalised in tsup.config.ts so it stays a separate
- * chunk the consumer code-splits.
- *
- * Deferred to a later, clearly-scoped batch (kept off the type until it works,
- * so the surface never advertises a method that throws):
- *   - exportXlsx — needs the export converter lifted out of apps/web first (the
- *     SDK xlsx module is import-only today); next batch.
+ * `importXlsx` / `exportXlsx` lazy-load the converters via
+ * `import('@casualoffice/sheets/xlsx')` — a BARE subpath, not a relative
+ * `import('../xlsx')`. The main tsup config is `splitting:false`, so a relative
+ * dynamic import would be inlined and balloon the editor entry from ~24KB to
+ * ~200KB of ExcelJS for hosts that never touch a file. The subpath is
+ * externalised in tsup.config.ts so it stays a separate chunk the consumer
+ * code-splits.
  *
  * `attachCollab` is NOT a method here — it ships as a standalone
  * `attachCollab(api, opts)` on the `@casualoffice/sheets/collab` subpath so the
@@ -61,6 +57,14 @@ export interface CasualSheetsAPI {
    *  its name + on-disk size are recorded on the snapshot (surfaced by the
    *  built-in Properties dialog). Resolves to the loaded snapshot. */
   importXlsx(input: ArrayBuffer | Uint8Array | Blob): Promise<IWorkbookData>;
+  /** Serialize the current workbook to an `.xlsx` `Blob`. Covers the core
+   *  fidelity (values/formulas, styles, merges, number formats, borders,
+   *  hyperlinks, comments, data validation, tables, page setup, named ranges,
+   *  VBA passthrough) — everything carried on the snapshot. App-level extras
+   *  (chart/pivot/sparkline models) are a power-host concern and aren't included
+   *  here. The converter (ExcelJS) is lazy-loaded as a separate chunk. Rejects
+   *  if there is no active workbook. */
+  exportXlsx(): Promise<Blob>;
   /** The active selection, or `null` when there is none. */
   getSelection(): RangeRef | null;
   /** Dispatch a Univer command by id. Resolves to the command's boolean
@@ -125,6 +129,14 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
       }
       loadSnapshot(data);
       return data;
+    },
+
+    async exportXlsx() {
+      const snap = univerAPI.getActiveWorkbook()?.save();
+      if (!snap) throw new Error('exportXlsx: no active workbook to export');
+      // Bare subpath import → separate chunk (see file header + tsup external).
+      const { workbookDataToXlsx } = await import('@casualoffice/sheets/xlsx');
+      return workbookDataToXlsx(snap as IWorkbookData);
     },
 
     getSelection() {
