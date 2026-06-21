@@ -3835,6 +3835,67 @@ button {
   font-size: 12px;
 }
 
+/* Watermark config dialog — on/off switch + text + opacity. */
+.watermark {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 280px;
+}
+.watermark__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+.watermark__switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.watermark__switch input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.watermark__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.watermark__field input,
+.watermark__select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.watermark__field input:focus,
+.watermark__select:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+.watermark__field input:disabled,
+.watermark__select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.watermark__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 /* ── Sparklines ────────────────────────────────────────────────── */
 .sparkline-layer {
   position: absolute;

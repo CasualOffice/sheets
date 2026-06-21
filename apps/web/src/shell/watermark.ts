@@ -3,17 +3,63 @@ import { WatermarkService } from '@univerjs/watermark';
 import { IWatermarkTypeEnum } from '@univerjs/engine-render';
 
 /**
- * "Confidential watermark" toggle plumbing for the View menu.
+ * Watermark plumbing for the View menu.
  *
  * The app hides Univer's ribbon, so the stock watermark panel never mounts.
  * Instead we drive the `WatermarkService` (registered by `UniverWatermarkPlugin`
- * in `univer/extra-plugins.ts`) directly: ON writes a repeating diagonal
- * "CONFIDENTIAL" text layer, OFF clears it. The service persists the config to
- * `ILocalStorageService` under `UNIVER_WATERMARK_STORAGE_KEY`, and the plugin
- * re-reads it on boot, so the toggle survives a reload for free.
+ * in `univer/extra-plugins.ts`) directly from a small config dialog
+ * (`WatermarkDialog.tsx`): apply writes a repeating diagonal text layer, off
+ * clears it. The service persists the *active* config to `ILocalStorageService`
+ * under `UNIVER_WATERMARK_STORAGE_KEY`, and the plugin re-reads it on boot, so
+ * an applied watermark survives a reload for free.
+ *
+ * Separately we persist the user's *last chosen* text + opacity to `localStorage`
+ * under `cs-watermark` so the dialog re-opens with their preference even after
+ * the watermark has been turned off (the service drops its key entirely on
+ * delete, so there's nothing to read back once it's off).
  */
 
-const CONFIDENTIAL_TEXT = 'CONFIDENTIAL';
+export const DEFAULT_WATERMARK_TEXT = 'CONFIDENTIAL';
+export const DEFAULT_WATERMARK_OPACITY = 0.12;
+
+const PREF_KEY = 'cs-watermark';
+
+export type WatermarkConfig = {
+  /** Custom text. Falls back to DEFAULT_WATERMARK_TEXT when blank. */
+  text: string;
+  /** 0–1. Falls back to DEFAULT_WATERMARK_OPACITY when out of range. */
+  opacity: number;
+};
+
+/** The user's last chosen text + opacity (independent of on/off state). */
+export function loadWatermarkPref(): WatermarkConfig {
+  const fallback: WatermarkConfig = {
+    text: DEFAULT_WATERMARK_TEXT,
+    opacity: DEFAULT_WATERMARK_OPACITY,
+  };
+  try {
+    const raw = localStorage.getItem(PREF_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<WatermarkConfig>;
+    return {
+      text: typeof parsed.text === 'string' && parsed.text.trim() ? parsed.text : fallback.text,
+      opacity:
+        typeof parsed.opacity === 'number' && parsed.opacity > 0 && parsed.opacity <= 1
+          ? parsed.opacity
+          : fallback.opacity,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveWatermarkPref(config: WatermarkConfig): void {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(config));
+  } catch {
+    /* storage disabled / quota — preference is best-effort */
+  }
+}
 
 // Reach the service the same way the rest of the shell reaches Univer
 // internals — via the facade's private `_injector` (see App.tsx /
@@ -25,8 +71,17 @@ function watermarkService(api: FUniver): WatermarkService | undefined {
   return injector?.get(WatermarkService) as WatermarkService | undefined;
 }
 
-/** Apply (true) or clear (false) the CONFIDENTIAL text watermark. */
-export function setConfidentialWatermark(api: FUniver, on: boolean): void {
+/**
+ * Apply a text watermark with the given config, or clear it when `on` is false.
+ * The chosen text/opacity is persisted to `localStorage` either way, so the
+ * dialog remembers the user's last choice across an off/on cycle and reloads.
+ */
+export function applyWatermark(api: FUniver, on: boolean, config: WatermarkConfig): void {
+  const text = config.text.trim() || DEFAULT_WATERMARK_TEXT;
+  const opacity =
+    config.opacity > 0 && config.opacity <= 1 ? config.opacity : DEFAULT_WATERMARK_OPACITY;
+  saveWatermarkPref({ text, opacity });
+
   const svc = watermarkService(api);
   if (!svc) return;
   if (on) {
@@ -34,7 +89,7 @@ export function setConfidentialWatermark(api: FUniver, on: boolean): void {
       type: IWatermarkTypeEnum.Text,
       config: {
         text: {
-          content: CONFIDENTIAL_TEXT,
+          content: text,
           fontSize: 24,
           color: 'rgb(120,120,120)',
           bold: true,
@@ -46,7 +101,7 @@ export function setConfidentialWatermark(api: FUniver, on: boolean): void {
           spacingX: 240,
           spacingY: 160,
           rotate: -30,
-          opacity: 0.12,
+          opacity,
         },
       },
     });
@@ -61,4 +116,20 @@ export async function isWatermarkOn(api: FUniver): Promise<boolean> {
   if (!svc) return false;
   const config = await svc.getWatermarkConfig();
   return !!config?.config?.text?.content;
+}
+
+/** The text + opacity of the currently applied watermark, if any. */
+export async function getAppliedWatermark(api: FUniver): Promise<WatermarkConfig | null> {
+  const svc = watermarkService(api);
+  if (!svc) return null;
+  const config = await svc.getWatermarkConfig();
+  const text = config?.config?.text;
+  if (!text?.content) return null;
+  return {
+    text: text.content,
+    opacity:
+      typeof text.opacity === 'number' && text.opacity > 0 && text.opacity <= 1
+        ? text.opacity
+        : DEFAULT_WATERMARK_OPACITY,
+  };
 }
