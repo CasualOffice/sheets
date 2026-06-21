@@ -762,6 +762,24 @@ button {
   gap: 10px;
 }
 
+/* Collaboration cluster — presence avatars + name + share/room, grouped as
+   one unit (tighter internal gap than the surrounding actions row). */
+.titlebar__collab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Thin vertical divider separating the three logical action groups
+   (status pills · collaboration · account). Collapses on mobile. */
+.titlebar__sep {
+  width: 1px;
+  align-self: center;
+  height: 20px;
+  background: var(--color-divider);
+  flex-shrink: 0;
+}
+
 .titlebar__share {
   display: inline-flex;
   align-items: center;

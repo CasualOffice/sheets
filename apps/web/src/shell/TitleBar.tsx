@@ -158,31 +158,39 @@ export function TitleBar() {
         </div>
       </div>
       <div className="titlebar__actions" data-testid="titlebar-actions">
+        {/* App status — transient document state. */}
         <BusyPill />
         <SaveStatusPill />
         <ActivityPill />
-        <AvatarStack />
-        {collab.roomId && <NamePill />}
-        {collab.roomId ? (
-          <Badge
-            tone="accent"
-            icon="group"
-            data-testid="titlebar-roompill"
-            title={`Joined room ${collab.roomId}`}
-          >
-            In room
-          </Badge>
-        ) : (
-          <Button
-            variant="primary"
-            size="sm"
-            icon="group_add"
-            data-testid="titlebar-share"
-            onClick={() => ui.openShareRoom()}
-          >
-            Share
-          </Button>
-        )}
+        <span className="titlebar__sep" aria-hidden="true" />
+        {/* Collaboration cluster — presence + who-you-are + share, grouped
+            together (Docs/Excel-online style) so the co-edit affordances read
+            as one unit, distinct from the status pills and account controls. */}
+        <div className="titlebar__collab" data-testid="titlebar-collab">
+          <AvatarStack />
+          {collab.roomId && <NamePill />}
+          {collab.roomId ? (
+            <Badge
+              tone="accent"
+              icon="group"
+              data-testid="titlebar-roompill"
+              title={`Joined room ${collab.roomId}`}
+            >
+              In room
+            </Badge>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              icon="group_add"
+              data-testid="titlebar-share"
+              onClick={() => ui.openShareRoom()}
+            >
+              Share
+            </Button>
+          )}
+        </div>
+        <span className="titlebar__sep" aria-hidden="true" />
         <IconButton
           size="md"
           icon={theme === 'dark' ? 'light_mode' : 'dark_mode'}
