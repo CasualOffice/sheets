@@ -32,6 +32,7 @@ interface EmbedUrlConfig {
   app: CasualApp;
   docId: string;
   viewMode: 'preview' | 'editor';
+  theme: 'light' | 'dark' | 'system';
 }
 
 function parseUrlConfig(search: string): EmbedUrlConfig {
@@ -40,7 +41,22 @@ function parseUrlConfig(search: string): EmbedUrlConfig {
   const docId = params.get('docId') ?? '';
   const viewModeParam = params.get('viewMode');
   const viewMode: 'preview' | 'editor' = viewModeParam === 'editor' ? 'editor' : 'preview';
-  return { app, docId, viewMode };
+  // The host passes its theme so the embedded editor matches light/dark.
+  // Default `system` follows the OS/host colour-scheme; the host can also
+  // push live changes over `casual.command.set.theme`.
+  const themeParam = params.get('theme');
+  const theme: 'light' | 'dark' | 'system' =
+    themeParam === 'dark' ? 'dark' : themeParam === 'light' ? 'light' : 'system';
+  return { app, docId, viewMode, theme };
+}
+
+/** Resolve `system` against the iframe's media query; `light`/`dark` pass through. */
+function resolveAppearance(theme: 'light' | 'dark' | 'system'): 'light' | 'dark' {
+  if (theme === 'light' || theme === 'dark') return theme;
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
 }
 
 export interface MountEmbeddedOptions {
@@ -112,7 +128,12 @@ export function mountEmbedded(opts: MountEmbeddedOptions): void {
 
   const reactRoot = createRoot(opts.root);
   reactRoot.render(
-    <EmbeddedSheets transport={transport} docId={config.docId} initialViewMode={config.viewMode} />,
+    <EmbeddedSheets
+      transport={transport}
+      docId={config.docId}
+      initialViewMode={config.viewMode}
+      initialTheme={config.theme}
+    />,
   );
 }
 
@@ -123,13 +144,33 @@ function EmbeddedSheets({
   transport,
   docId,
   initialViewMode,
+  initialTheme,
 }: {
   transport: EmbedTransport;
   docId: string;
   initialViewMode: 'preview' | 'editor';
+  initialTheme: 'light' | 'dark' | 'system';
 }) {
   const [data, setData] = useState<IWorkbookData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Theme: track the host's choice (light/dark/system) and resolve `system`
+  // live against the iframe's prefers-color-scheme. The host pushes changes
+  // over `casual.command.set.theme`; passed to <CasualSheets appearance>,
+  // which flips Univer's `univer-dark` class + ThemeService so the canvas,
+  // headers, gridlines and chrome all match.
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(initialTheme);
+  const [appearance, setAppearance] = useState<'light' | 'dark'>(() =>
+    resolveAppearance(initialTheme),
+  );
+  useEffect(() => {
+    setAppearance(resolveAppearance(theme));
+    if (theme !== 'system' || typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => setAppearance(mq.matches ? 'dark' : 'light');
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [theme]);
 
   const [viewMode, setViewMode] = useState<'preview' | 'editor'>(initialViewMode);
   // Editor mode renders the SDK's OWN React chrome (`chrome="full"`): the
@@ -149,6 +190,7 @@ function EmbeddedSheets({
 
   useEffect(() => {
     transport.on({
+      onCommandSetTheme: ({ theme: next }) => setTheme(next),
       onCommandSetViewMode: ({ viewMode: next }) => setViewMode(next),
     });
   }, [transport]);
@@ -227,6 +269,7 @@ function EmbeddedSheets({
       key={viewMode}
       initialData={data}
       chrome={chrome}
+      appearance={appearance}
       ui={ui}
       // Seed the en-US string bundle. Without `locales`, Univer's
       // LocaleService throws "Locale not initialized" and the workbench

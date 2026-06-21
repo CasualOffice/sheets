@@ -111,7 +111,9 @@ let transport: EmbedHostTransport | null = null;
 
 function buildIframeSrc(): string {
   const viewMode = viewModeSel.value === 'preview' ? 'preview' : 'editor';
-  const params = new URLSearchParams({ app: 'sheet', docId: DOC_ID, viewMode });
+  // Pass-through the host's ?theme= so the embed can be exercised in dark mode.
+  const theme = new URLSearchParams(window.location.search).get('theme') ?? 'system';
+  const params = new URLSearchParams({ app: 'sheet', docId: DOC_ID, viewMode, theme });
   return `./embed/sheets/embed.html?${params.toString()}`;
 }
 

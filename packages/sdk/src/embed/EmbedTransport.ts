@@ -235,13 +235,13 @@ export class EmbedTransport {
         await this.handlers.onHostHello?.(env.data as HostHelloData);
         this.sendReady();
         return;
-      case 'casual.command.setReadOnly':
+      case 'casual.command.set.readonly':
         await this.handlers.onCommandSetReadOnly?.(env.data as CommandSetReadOnlyData);
         return;
-      case 'casual.command.setTheme':
+      case 'casual.command.set.theme':
         await this.handlers.onCommandSetTheme?.(env.data as CommandSetThemeData);
         return;
-      case 'casual.command.setLocale':
+      case 'casual.command.set.locale':
         await this.handlers.onCommandSetLocale?.(env.data as CommandSetLocaleData);
         return;
       case 'casual.command.set.viewmode':
