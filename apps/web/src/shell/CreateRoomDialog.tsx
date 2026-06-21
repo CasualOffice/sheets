@@ -533,14 +533,17 @@ function ShareLinkSection({ serverFileId, roomId }: { serverFileId: string; room
       const res = await fetch(base, { credentials: 'include' });
       if (!res.ok) throw new Error(`list links: HTTP ${res.status}`);
       const body = (await res.json()) as { links: ShareLinkDto[] };
-      // Only surface links bound to THIS room — a file can have older
-      // links from prior co-edit sessions whose rooms are long gone.
-      setLinks(body.links.filter((l) => l.roomId === roomId));
+      // Show ALL of this file's links — the endpoint is already scoped to the
+      // file (`/files/:id/shares`). Don't filter by the dialog's anonymous room:
+      // the server binds each token to the file's deterministic `pf-<id>` room,
+      // so filtering by `created.roomId` hid every minted link. Each row builds
+      // its own URL from `link.roomId`.
+      setLinks(body.links);
     } catch (err) {
       console.warn('[share-link] list failed', err);
       setError('Could not load existing links.');
     }
-  }, [base, roomId]);
+  }, [base]);
 
   useEffect(() => {
     void refresh();
