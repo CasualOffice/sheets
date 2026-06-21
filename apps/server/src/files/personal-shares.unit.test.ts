@@ -418,6 +418,116 @@ test("share link: mode 'none' shadows the routes with 503", async () => {
   }
 });
 
+// ── Public /meta endpoint (sharing-model §6.1 — pre-join discovery) ─────
+
+test('share link /meta: valid token returns role + hasPassword + roomId (no hash)', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    const mint = await app.inject({
+      method: 'POST',
+      url: `/files/${fileId}/shares/link`,
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { roomId: 'room-1', role: 'edit', password: 'secret' },
+    });
+    assert.equal(mint.statusCode, 201, mint.body);
+    const token = JSON.parse(mint.body).token as string;
+
+    // No auth header — the token IS the capability, so /meta is public.
+    const r = await app.inject({ method: 'GET', url: `/files/shares/link/${token}/meta` });
+    assert.equal(r.statusCode, 200, r.body);
+    const body = JSON.parse(r.body) as Record<string, unknown>;
+    assert.equal(body.valid, true);
+    assert.equal(body.role, 'edit');
+    assert.equal(body.hasPassword, true);
+    assert.equal(body.roomId, 'room-1');
+    // The bcrypt hash must NEVER appear in the public response.
+    assert.equal(body.passwordHash, undefined, 'passwordHash must not leak');
+    assert.ok(!('passwordHash' in body), 'no passwordHash key at all');
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link /meta: a no-password link reports hasPassword=false', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    const mint = await app.inject({
+      method: 'POST',
+      url: `/files/${fileId}/shares/link`,
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { roomId: 'room-2', role: 'view' },
+    });
+    const token = JSON.parse(mint.body).token as string;
+
+    const r = await app.inject({ method: 'GET', url: `/files/shares/link/${token}/meta` });
+    assert.equal(r.statusCode, 200);
+    const body = JSON.parse(r.body) as Record<string, unknown>;
+    assert.equal(body.valid, true);
+    assert.equal(body.role, 'view');
+    assert.equal(body.hasPassword, false);
+    assert.equal(body.roomId, 'room-2');
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link /meta: unknown token returns { valid: false } and nothing else', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const r = await app.inject({
+      method: 'GET',
+      url: '/files/shares/link/this-token-does-not-exist/meta',
+    });
+    assert.equal(r.statusCode, 200);
+    assert.deepEqual(JSON.parse(r.body), { valid: false });
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link /meta: expired token returns { valid: false } (no leak of role/room)', async () => {
+  const { app, store, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    // Mint directly through the store so we can backdate the expiry —
+    // the route caps expiresInDays at a positive value, so an
+    // already-lapsed link can only be made store-side.
+    const link = store.createShareLink({
+      workbookId: fileId,
+      roomId: 'room-1',
+      role: 'edit',
+      createdBy: 1,
+      expiresAt: Date.now() - 1000,
+      password: 'secret',
+    });
+    const r = await app.inject({
+      method: 'GET',
+      url: `/files/shares/link/${link.token}/meta`,
+    });
+    assert.equal(r.statusCode, 200);
+    // Expired collapses to the same shape as unknown — a probe can't
+    // learn the token ever existed (or its role/room/hasPassword).
+    assert.deepEqual(JSON.parse(r.body), { valid: false });
+  } finally {
+    await cleanup();
+  }
+});
+
+test("share link /meta: mode 'none' → 503 (feature off, distinguishable from bad token)", async () => {
+  const { app, cleanup } = await makeApp({ mode: 'none' });
+  try {
+    const r = await app.inject({ method: 'GET', url: '/files/shares/link/anything/meta' });
+    assert.equal(r.statusCode, 503);
+  } finally {
+    await cleanup();
+  }
+});
+
 // ── Member ACL routes (sharing-model §6.2 — MULTI MODE ONLY) ────────────
 
 test('member ACL: add → list → patch → delete by username handle', async () => {

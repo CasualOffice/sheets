@@ -40,6 +40,7 @@ import { NamePrompt } from './NamePrompt';
 import { PresenceLayer } from './PresenceLayer';
 import { applyViewOnlyMode } from './view-mode';
 import { useCurrentUser } from '../auth/auth-context';
+import { parseShareMeta, shareMetaUrl, sharePasswordKey, type ShareMeta } from './share-meta';
 
 /**
  * Owns the co-edit join flow:
@@ -87,14 +88,22 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   // op-log consumer subscribe via context and rerender on transitions.
   const [doc, setDoc] = useState<Y.Doc | null>(null);
   const [needsSelfHost, setNeedsSelfHost] = useState(false);
+  // Set when a `?share=<token>` link resolves to invalid/expired via the
+  // public /meta probe — we render a clear dead-link state and never
+  // attempt the WS connect (sharing-model §6.1 join side).
+  const [shareInvalid, setShareInvalid] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [role, setRole] = useState<CollabRole>('write');
   const [status, setStatus] = useState<CollabStatus>('off');
   // Password prompt state: needs to render an input the user can submit.
   // `null` = no prompt; an object = open with this room id pending.
+  // `kind` distinguishes the anonymous-room `?p=` gate from the secure
+  // share-link `?sp=` gate — they're DISTINCT passwords and the
+  // re-prompt-on-reject path routes the submitted value differently.
   const [passwordPrompt, setPasswordPrompt] = useState<{
     roomId: string;
     role: CollabRole;
+    kind: 'room' | 'share';
     error?: string;
   } | null>(null);
   // The actual password (kept in memory only) once the user has provided
@@ -114,10 +123,15 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     reject: (err: Error) => void;
   } | null>(null);
   const promptForPassword = useCallback(
-    (id: string, joinRole: CollabRole, error?: string): Promise<string> => {
+    (
+      id: string,
+      joinRole: CollabRole,
+      kind: 'room' | 'share' = 'room',
+      error?: string,
+    ): Promise<string> => {
       return new Promise<string>((resolve, reject) => {
         passwordPromptResolverRef.current = { resolve, reject };
-        setPasswordPrompt({ roomId: id, role: joinRole, error });
+        setPasswordPrompt({ roomId: id, role: joinRole, kind, error });
       });
     },
     [],
@@ -168,6 +182,46 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
 
     let cancelled = false;
     (async () => {
+      // ── STEP 0 — secure share-link pre-flight (sharing-model §6.1). ──
+      // When the page URL carries `?share=<token>`, probe the PUBLIC
+      // /meta endpoint BEFORE touching the room: the token IS the
+      // capability, so we can discover (a) whether it's dead and (b)
+      // whether a `?sp=` password is needed, without connecting.
+      const share = shareRef.current;
+      if (share && !share.sp) {
+        const meta = await fetchShareMeta(share.share);
+        if (cancelled) return;
+        if (meta && !meta.valid) {
+          // Dead link — surface a clear state, do NOT connect.
+          setShareInvalid(true);
+          setStatus('off');
+          return;
+        }
+        // `meta === null` means the probe itself failed (server
+        // unreachable / older build without /meta). Fall through and let
+        // the WS connect decide — a password-gated token will be rejected
+        // there and routed to the share re-prompt below, matching the
+        // wrong-password path.
+        if (meta && meta.valid && meta.hasPassword) {
+          const stashed = readStashedSharePassword(share.share);
+          if (stashed) {
+            shareRef.current = { ...share, sp: stashed };
+          } else {
+            let sp = '';
+            try {
+              sp = await promptForPassword(id, requestedRole, 'share');
+            } catch {
+              // User cancelled the share-password prompt — leave idle.
+              setStatus('off');
+              return;
+            }
+            if (cancelled) return;
+            stashSharePassword(share.share, sp);
+            shareRef.current = { ...share, sp };
+          }
+        }
+      }
+
       const info = await fetchRoomInfo(id);
       if (cancelled) return;
 
@@ -377,11 +431,28 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
         // doesn't keep hammering the server with the wrong password.
         teardown();
         setStatus('denied');
-        // Re-prompt for the password. On submit, the resolver fires
-        // `join(id, joinRole, pw)` again via the connect flow — but we
-        // need to drive that directly from here since we're not in the
-        // main connect promise anymore.
-        void promptForPassword(id, joinRole, 'Incorrect password — try again.').then(
+        // A share-token join was rejected by the server. The most common
+        // cause is a wrong (or missing) `?sp=` share password — the server
+        // collapses every token failure to one closed connection, but for a
+        // token we know carried a password the actionable case is "wrong
+        // password". Re-prompt for the SHARE password (`?sp=`), drop the
+        // stale stash, and retry forwarding the new value via shareRef.
+        const activeShare = shareRef.current;
+        if (activeShare) {
+          forgetSharePassword(activeShare.share);
+          void promptForPassword(id, joinRole, 'share', 'Incorrect password — try again.').then(
+            (sp) => {
+              stashSharePassword(activeShare.share, sp);
+              shareRef.current = { ...activeShare, sp };
+              join(id, joinRole, passwordRef.current);
+            },
+            () => setStatus('off'),
+          );
+          return;
+        }
+        // Anonymous-room path — re-prompt for the room `?p=` password. On
+        // submit, the resolver fires `join(id, joinRole, pw)` again.
+        void promptForPassword(id, joinRole, 'room', 'Incorrect password — try again.').then(
           (pw) => join(id, joinRole, pw),
           () => setStatus('off'),
         );
@@ -662,6 +733,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
     <CollabContext.Provider value={collabCtx}>
       <PresenceContext.Provider value={presenceCtx}>
         {needsSelfHost && <SelfHostBanner />}
+        {shareInvalid && <ShareInvalidBanner />}
         {role === 'view' && roomId && status === 'live' && <ViewOnlyBanner />}
         {roomId && status === 'offline' && <OfflineBanner queuedLocal={queuedLocal} />}
         {passwordPrompt && (
@@ -734,6 +806,24 @@ function SelfHostBanner() {
   );
 }
 
+/** Shown when a `?share=<token>` link resolves to invalid/expired via the
+ *  public /meta probe (sharing-model §6.1). Render-blocking would be
+ *  overkill — there's nothing to connect to, so a clear banner is enough.
+ *  We never attempted the WS, so no content leaked behind it. */
+function ShareInvalidBanner() {
+  return (
+    <div
+      className="collab-banner collab-banner--warn"
+      data-testid="share-invalid-banner"
+      role="status"
+    >
+      <div className="collab-banner__body">
+        <strong>This share link is invalid or has expired.</strong> Ask the owner for a fresh link.
+      </div>
+    </div>
+  );
+}
+
 /** Persistent banner shown to view-role joiners — explains why their
  *  edits aren't propagating. */
 function ViewOnlyBanner() {
@@ -799,7 +889,7 @@ function PasswordPrompt({
   onSubmit,
   onCancel,
 }: {
-  state: { roomId: string; role: CollabRole; error?: string };
+  state: { roomId: string; role: CollabRole; kind: 'room' | 'share'; error?: string };
   currentName: string;
   onSubmit: (args: { password: string; name: string }) => void;
   onCancel: () => void;
@@ -848,8 +938,14 @@ function PasswordPrompt({
             aria-label="Your display name for this room"
           />
           <p style={{ margin: '0 0 12px', fontSize: 14, lineHeight: 1.5 }}>
-            Room <code>{state.roomId}</code> is password-protected. Enter the password the owner
-            shared with you.
+            {state.kind === 'share' ? (
+              <>This share link is password-protected. Enter the password the owner sent you.</>
+            ) : (
+              <>
+                Room <code>{state.roomId}</code> is password-protected. Enter the password the owner
+                shared with you.
+              </>
+            )}
           </p>
           <input
             autoFocus
@@ -912,6 +1008,54 @@ async function fetchRoomInfo(id: string): Promise<{
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Probe the PUBLIC /meta endpoint to discover whether a share token is
+ * live and whether it needs a `?sp=` password — BEFORE opening the WS.
+ * The token is the capability, so no auth is sent. Returns the parsed
+ * meta, or `null` when the probe itself fails (network error, a 503 in
+ * an anonymous-only deploy, an older server without /meta, or a
+ * malformed body) — callers treat null as "couldn't determine, let the
+ * WS connect decide".
+ */
+async function fetchShareMeta(token: string): Promise<ShareMeta | null> {
+  try {
+    const res = await fetch(shareMetaUrl(token));
+    if (!res.ok) return null;
+    return parseShareMeta(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+/** Read a stashed share-link password for this token (sessionStorage,
+ *  dies with the tab). Keyed by token so a reconnect within the session
+ *  doesn't re-prompt — mirrors the room-password `casual.collab.pw.<id>`
+ *  pattern but namespaced under `sp` to keep the two distinct. */
+function readStashedSharePassword(token: string): string | null {
+  try {
+    return sessionStorage.getItem(sharePasswordKey(token));
+  } catch {
+    return null;
+  }
+}
+
+function stashSharePassword(token: string, password: string): void {
+  if (!password) return;
+  try {
+    sessionStorage.setItem(sharePasswordKey(token), password);
+  } catch {
+    /* private mode — joiner will be re-prompted on reconnect, fine */
+  }
+}
+
+function forgetSharePassword(token: string): void {
+  try {
+    sessionStorage.removeItem(sharePasswordKey(token));
+  } catch {
+    /* swallow */
   }
 }
 

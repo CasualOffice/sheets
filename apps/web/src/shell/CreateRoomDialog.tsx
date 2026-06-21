@@ -521,6 +521,7 @@ const EXPIRY_CHOICES: { label: string; days?: number }[] = [
 function ShareLinkSection({ serverFileId, roomId }: { serverFileId: string; roomId: string }) {
   const [role, setRole] = useState<LinkRole>('view');
   const [expiryIdx, setExpiryIdx] = useState(0);
+  const [linkPassword, setLinkPassword] = useState('');
   const [links, setLinks] = useState<ShareLinkDto[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -550,6 +551,7 @@ function ShareLinkSection({ serverFileId, roomId }: { serverFileId: string; room
     setError(null);
     try {
       const expiresInDays = EXPIRY_CHOICES[expiryIdx]?.days;
+      const trimmedPw = linkPassword.trim();
       const res = await fetch(`${base}/link`, {
         method: 'POST',
         credentials: 'include',
@@ -558,9 +560,13 @@ function ShareLinkSection({ serverFileId, roomId }: { serverFileId: string; room
           roomId,
           role,
           ...(expiresInDays ? { expiresInDays } : {}),
+          ...(trimmedPw.length > 0 ? { password: trimmedPw } : {}),
         }),
       });
       if (!res.ok) throw new Error(`create link: HTTP ${res.status}`);
+      // Clear the password field after a successful mint so a second
+      // link isn't accidentally created with the same (now stale) value.
+      setLinkPassword('');
       await refresh();
     } catch (err) {
       console.warn('[share-link] create failed', err);
@@ -591,7 +597,8 @@ function ShareLinkSection({ serverFileId, roomId }: { serverFileId: string; room
       <span className="share-room__label">Secure link (enforced)</span>
       <p className="share-room__hint" style={{ marginTop: 0 }}>
         Unlike the links above, a secure link's view/edit role is enforced by the server — it can't
-        be changed by editing the URL. Best for a saved file.
+        be changed by editing the URL. Best for a saved file. Add a password for a second gate —
+        send it separately, it isn't part of the link.
       </p>
 
       <div className="share-link__controls">
@@ -627,6 +634,21 @@ function ShareLinkSection({ serverFileId, roomId }: { serverFileId: string; room
               </option>
             ))}
           </select>
+        </div>
+        <div className="share-link__field">
+          <label className="share-room__label" htmlFor="share-link-password">
+            Password (optional)
+          </label>
+          <input
+            id="share-link-password"
+            type="password"
+            className="page-setup__select"
+            data-testid="share-link-password"
+            placeholder="No password"
+            value={linkPassword}
+            onChange={(e) => setLinkPassword(e.target.value)}
+            autoComplete="new-password"
+          />
         </div>
         <button
           type="button"
@@ -687,6 +709,16 @@ function ShareLinkRow({ link, onRevoke }: { link: ShareLinkDto; onRevoke: () => 
     <li className="share-link__item" data-testid="share-link-item" data-role={roleLabel}>
       <div className="share-link__item-head">
         <span className={`share-link__badge share-link__badge--${roleLabel}`}>{roleLabel}</span>
+        {link.hasPassword && (
+          <span
+            className="share-link__lock"
+            data-testid="share-link-password-badge"
+            title="Password required to join"
+          >
+            <Icon name="lock" size="sm" />
+            password
+          </span>
+        )}
         <span className="share-room__hint">{formatExpiry(link.expiresAt)}</span>
         <button
           type="button"

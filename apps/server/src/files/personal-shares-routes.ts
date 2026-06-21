@@ -69,6 +69,42 @@ export function registerPersonalSharesRoutes(
   options: SharesRoutesOptions = {},
 ): void {
   const roomExists = options.roomExists ?? null;
+
+  // ── GET /files/shares/link/:token/meta ──────────────────────────────
+  // PUBLIC pre-join discovery (sharing-model §6.1). The token IS the
+  // capability, so this is intentionally NOT owner-gated — it's mounted
+  // OUTSIDE `ownedFileCtx`. A joiner who holds a `?share=<token>` needs
+  // to know, BEFORE opening the collab WS, whether a password is needed
+  // (so the client can prompt for `?sp=`) or whether the link is dead.
+  //
+  // Contract:
+  //   - valid, non-expired token → { valid: true, role, hasPassword, roomId }
+  //   - unknown / expired token  → { valid: false } and NOTHING else.
+  //
+  // `getLinkRole` bakes expiry into a null result and surfaces only
+  // `hasPassword` (a boolean) — the bcrypt `passwordHash` NEVER leaves
+  // the store, so it can't leak here. We deliberately do NOT distinguish
+  // unknown from expired in the response (both → { valid: false }) so a
+  // probe can't learn that a token ever existed.
+  app.get<{ Params: { token: string } }>('/files/shares/link/:token/meta', async (req, reply) => {
+    if (store.mode === 'none') {
+      // Personal store isn't even instantiated in anonymous-only
+      // deploys; mirror the rest of the surface with a 503 so the
+      // client can tell "feature off" from "bad token".
+      return reply.code(503).send({ error: 'personal-mode-disabled' });
+    }
+    const link = store.getLinkRole(req.params.token);
+    if (!link) {
+      return reply.send({ valid: false });
+    }
+    return reply.send({
+      valid: true,
+      role: link.role,
+      hasPassword: link.hasPassword,
+      roomId: link.roomId,
+    });
+  });
+
   // ── GET /files/:id/shares ───────────────────────────────────────────
   // List link tokens for a file. passwordHash is never returned — the
   // response carries `hasPassword` instead.
