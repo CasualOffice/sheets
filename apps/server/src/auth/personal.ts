@@ -95,6 +95,13 @@ export type ShareLink = {
   workbookId: string;
   token: string;
   role: ShareRole;
+  /** The collab room (Yjs `documentName`) this token is bound to at
+   *  mint time. Rooms are anonymous and NOT keyed by workbookId, so a
+   *  token scoped only to a workbook could be replayed on ANY room.
+   *  Binding to a specific roomId closes that replay gap — the
+   *  enforcement gate rejects a token whose roomId doesn't match the
+   *  room being joined. See `resolveJoinRole`. */
+  roomId: string;
   /** ms epoch, or null for a never-expiring link. */
   expiresAt: number | null;
   /** bcrypt hash of the optional join password, or null. Never leaves
@@ -110,6 +117,10 @@ export type ShareLink = {
  *  bakes in expiry (null when the token has lapsed). */
 export type ShareLinkRole = {
   workbookId: string;
+  /** The room this token is bound to. The enforcement gate compares
+   *  this against the `documentName` being joined and rejects on a
+   *  mismatch — a token minted for room A grants nothing on room B. */
+  roomId: string;
   role: ShareRole;
   hasPassword: boolean;
   passwordHash: string | null;
@@ -633,6 +644,10 @@ export class PersonalAuthStore {
    *  epoch or null for never. Returns the full persisted row. */
   createShareLink(opts: {
     workbookId: string;
+    /** The collab room this token authorises. Bound at mint time so the
+     *  enforcement gate can reject a token replayed against a different
+     *  room (rooms are anonymous + not keyed by workbookId). */
+    roomId: string;
     role: ShareRole;
     createdBy: number;
     expiresAt?: number | null;
@@ -648,12 +663,22 @@ export class PersonalAuthStore {
     this.db
       .prepare(
         `INSERT INTO share_links
-           (token, workbook_id, role, expires_at, password_hash, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (token, workbook_id, room_id, role, expires_at, password_hash, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(token, opts.workbookId, opts.role, expiresAt, passwordHash, now, opts.createdBy);
+      .run(
+        token,
+        opts.workbookId,
+        opts.roomId,
+        opts.role,
+        expiresAt,
+        passwordHash,
+        now,
+        opts.createdBy,
+      );
     return {
       workbookId: opts.workbookId,
+      roomId: opts.roomId,
       token,
       role: opts.role,
       expiresAt,
@@ -669,7 +694,7 @@ export class PersonalAuthStore {
   listShareLinks(workbookId: string): ShareLink[] {
     const rows = this.db
       .prepare(
-        `SELECT token, workbook_id, role, expires_at, password_hash, created_at, created_by
+        `SELECT token, workbook_id, room_id, role, expires_at, password_hash, created_at, created_by
            FROM share_links WHERE workbook_id = ? ORDER BY created_at DESC`,
       )
       .all(workbookId) as ShareLinkRow[];
@@ -681,7 +706,7 @@ export class PersonalAuthStore {
   getShareLink(token: string): ShareLink | null {
     const row = this.db
       .prepare(
-        `SELECT token, workbook_id, role, expires_at, password_hash, created_at, created_by
+        `SELECT token, workbook_id, room_id, role, expires_at, password_hash, created_at, created_by
            FROM share_links WHERE token = ?`,
       )
       .get(token) as ShareLinkRow | undefined;
@@ -736,6 +761,7 @@ export class PersonalAuthStore {
     if (link.expiresAt !== null && link.expiresAt <= now) return null;
     return {
       workbookId: link.workbookId,
+      roomId: link.roomId,
       role: link.role,
       hasPassword: link.passwordHash !== null,
       passwordHash: link.passwordHash,
@@ -804,9 +830,20 @@ export class PersonalAuthStore {
       -- FK to files(id): tokens outlive the row only briefly, but more
       -- importantly the file registry is the ownership boundary checked
       -- at the route layer, not here.
+      --
+      -- room_id binds the token to a specific collab room (the Yjs
+      -- documentName) at mint time. Rooms are anonymous and NOT keyed
+      -- by workbook_id, so without this binding a token could be
+      -- replayed against ANY room. The enforcement gate
+      -- (resolveJoinRole) rejects a token whose room_id != the room
+      -- being joined. Nullable at the SQL layer only so an ALTER on a
+      -- pre-enforcement DB doesn't fail; new rows always populate it,
+      -- and a null/empty room_id never matches a real room id (the gate
+      -- rejects), so legacy inert rows stay inert.
       CREATE TABLE IF NOT EXISTS share_links (
         token TEXT PRIMARY KEY,
         workbook_id TEXT NOT NULL,
+        room_id TEXT,
         role TEXT NOT NULL,
         expires_at INTEGER,
         password_hash TEXT,
@@ -817,6 +854,11 @@ export class PersonalAuthStore {
 
       CREATE INDEX IF NOT EXISTS idx_share_links_workbook ON share_links(workbook_id);
     `);
+
+    // Idempotent column migration — a pre-enforcement install created
+    // share_links without room_id. Same guard pattern as the user
+    // profile columns above (SQLite has no IF NOT EXISTS for ADD COLUMN).
+    this.addColumnIfMissing('share_links', 'room_id', 'TEXT');
 
     // Idempotent column migrations — a Batch-1 install predates the
     // profile columns. Trying ALTER on every boot is cheap; the
@@ -862,6 +904,10 @@ export class PersonalAuthStore {
 type ShareLinkRow = {
   token: string;
   workbook_id: string;
+  /** Null only for legacy pre-enforcement rows (see the migration note).
+   *  Normalised to '' by `rowToShareLink` so the gate's strict-equality
+   *  room check treats it as "matches no room". */
+  room_id: string | null;
   role: string;
   expires_at: number | null;
   password_hash: string | null;
@@ -872,6 +918,7 @@ type ShareLinkRow = {
 function rowToShareLink(row: ShareLinkRow): ShareLink {
   return {
     workbookId: row.workbook_id,
+    roomId: row.room_id ?? '',
     token: row.token,
     role: row.role as ShareRole,
     expiresAt: row.expires_at,

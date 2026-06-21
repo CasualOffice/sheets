@@ -155,6 +155,20 @@ app.log.info(`admin config: ${adminConfigPath}`);
 // so admin-panel edits to subscriptions take effect immediately.
 void webhooks;
 
+// Room registry created BEFORE the personal-mode routes so the share-link
+// route can validate that a minted token's `roomId` refers to a live room
+// (sharing-model §6.1 — tokens are bound to a specific room at mint time).
+const rooms = new RoomRegistry();
+rooms.start((evictedId) => {
+  // Fire-and-forget — storage.delete is best-effort, a failure just
+  // means the blob waits out Redis's 7-day TTL. We don't want a
+  // backend hiccup to stall the GC loop.
+  storage.delete(evictedId).catch((err) => {
+    app.log.warn({ err, roomId: evictedId }, 'storage delete failed for evicted room');
+  });
+});
+app.addHook('onClose', async () => rooms.stop());
+
 // Personal-mode auth store + routes. Off by default (`mode='none'`),
 // in which case the store is not even instantiated (no DB file
 // touched, no `/data` mount required) and `/auth/*` returns 503 via
@@ -176,10 +190,13 @@ if (personalMode !== 'none') {
   registerPersonalFilesRoutes(app, personalAuth, host, {
     maxUploadBytes: MAX_UPLOAD_BYTES,
   });
-  // Share-link CRUD (sharing-model §6.1). Persistence + gated routes
-  // only — tokens grant NO access until the join-handshake batch wires
-  // enforcement into the room manager.
-  registerPersonalSharesRoutes(app, personalAuth);
+  // Share-link CRUD (sharing-model §6.1). Tokens are bound to a specific
+  // room at mint time; enforcement lives in the collab gate (yjs.ts
+  // onAuthenticate → resolveJoinRole). The route validates that the
+  // posted roomId refers to a live room before minting.
+  registerPersonalSharesRoutes(app, personalAuth, {
+    roomExists: (roomId) => rooms.get(roomId) !== undefined,
+  });
   app.log.info(
     `personal auth: mode=${personalMode} db=${personalDbPath} users=${personalAuth.stats().userCount}`,
   );
@@ -206,17 +223,6 @@ if (personalMode !== 'none') {
 } else {
   app.log.info('personal auth: disabled (CASUAL_PERSONAL_MODE=none)');
 }
-
-const rooms = new RoomRegistry();
-rooms.start((evictedId) => {
-  // Fire-and-forget — storage.delete is best-effort, a failure just
-  // means the blob waits out Redis's 7-day TTL. We don't want a
-  // backend hiccup to stall the GC loop.
-  storage.delete(evictedId).catch((err) => {
-    app.log.warn({ err, roomId: evictedId }, 'storage delete failed for evicted room');
-  });
-});
-app.addHook('onClose', async () => rooms.stop());
 
 app.log.info(
   `room registry: max ${process.env.MAX_ROOMS ?? 256} concurrent, TTL ${process.env.ROOM_TTL_MIN ?? 60} min, upload ≤ ${MAX_UPLOAD_MB} MB`,
@@ -446,7 +452,17 @@ await app.listen({ port: PORT, host: HOST });
 // handler. Fastify exposes it after listen. Storage was created
 // earlier (right after the app instance) so the room registry could
 // register its eviction callback.
-const hocus = attachHocuspocus(app.server, rooms, storage);
+// In personal mode, hand the share-token resolver to the collab gate so
+// `?share=<token>` joins are validated against the persisted, room-bound
+// link tokens (sharing-model §6.1 enforcement). In anonymous-only
+// deploys `personalAuth` is null, so the gate rejects any share token and
+// only the legacy `?role=` / room-password path applies.
+const personalAuthForCollab = personalAuth;
+const hocus = attachHocuspocus(app.server, rooms, storage, '/yjs', {
+  resolveLinkRole: personalAuthForCollab
+    ? (token) => personalAuthForCollab.getLinkRole(token)
+    : null,
+});
 
 const shutdown = async () => {
   app.log.info('shutting down');

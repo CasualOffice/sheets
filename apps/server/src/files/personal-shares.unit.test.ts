@@ -42,7 +42,11 @@ async function makeApp(opts: { mode: 'single' | 'multi' | 'none' } = { mode: 'mu
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
   registerPersonalAuthRoutes(app, store);
   registerPersonalFilesRoutes(app, store, host, { maxUploadBytes: 5 * 1024 * 1024 });
-  registerPersonalSharesRoutes(app, store);
+  // A fixed set of "live" rooms so the share-link route's roomId
+  // existence check passes for the canonical test room and rejects an
+  // unknown one.
+  const liveRooms = new Set(['room-1', 'room-2']);
+  registerPersonalSharesRoutes(app, store, { roomExists: (id) => liveRooms.has(id) });
   await app.ready();
   return {
     app,
@@ -119,16 +123,18 @@ test('share link CRUD: create → list → patch → delete', async () => {
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie, 'content-type': 'application/json' },
-      payload: { role: 'edit', expiresInDays: 7, password: 'secret' },
+      payload: { roomId: 'room-1', role: 'edit', expiresInDays: 7, password: 'secret' },
     });
     assert.equal(r.statusCode, 201, r.body);
     const minted = JSON.parse(r.body) as {
       token: string;
+      roomId: string;
       role: string;
       expiresAt: number;
       url: string;
     };
     assert.equal(minted.role, 'edit');
+    assert.equal(minted.roomId, 'room-1', 'mint echoes the bound roomId');
     assert.ok(minted.token.length >= 40);
     assert.ok(minted.expiresAt > Date.now());
     assert.equal(minted.url, `?share=${minted.token}`);
@@ -174,7 +180,7 @@ test('share link: a no-password link reports hasPassword=false', async () => {
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie, 'content-type': 'application/json' },
-      payload: { role: 'view' },
+      payload: { roomId: 'room-1', role: 'view' },
     });
     assert.equal(r.statusCode, 201);
     assert.equal(JSON.parse(r.body).expiresAt, null);
@@ -202,7 +208,7 @@ test('share link: role validation rejects bad roles with 400', async () => {
         method: 'POST',
         url: `/files/${fileId}/shares/link`,
         headers: { cookie, 'content-type': 'application/json' },
-        payload: { role },
+        payload: { roomId: 'room-1', role },
       });
       assert.equal(r.statusCode, 400, `role=${String(role)} should 400`);
       assert.equal(JSON.parse(r.body).error, 'invalid-role');
@@ -225,7 +231,7 @@ test('share link: expiry validation rejects non-positive values with 400', async
         method: 'POST',
         url: `/files/${fileId}/shares/link`,
         headers: { cookie, 'content-type': 'application/json' },
-        payload: { role: 'view', expiresInDays },
+        payload: { roomId: 'room-1', role: 'view', expiresInDays },
       });
       assert.equal(r.statusCode, 400, `expiresInDays=${String(expiresInDays)} should 400`);
       assert.equal(JSON.parse(r.body).error, 'invalid-expiry');
@@ -253,7 +259,7 @@ test('share link: non-owner gets 404 (no existence leak), owner unaffected', asy
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie: bobCookie, 'content-type': 'application/json' },
-      payload: { role: 'view' },
+      payload: { roomId: 'room-1', role: 'view' },
     });
     assert.equal(r.statusCode, 404);
 
@@ -262,7 +268,7 @@ test('share link: non-owner gets 404 (no existence leak), owner unaffected', asy
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie: aliceCookie, 'content-type': 'application/json' },
-      payload: { role: 'view' },
+      payload: { roomId: 'room-1', role: 'view' },
     });
     assert.equal(r.statusCode, 201);
   } finally {
@@ -282,7 +288,7 @@ test('share link: admin reaches another user file (§4 RequireAdmin)', async () 
       method: 'POST',
       url: `/files/${bobFile}/shares/link`,
       headers: { cookie: adminCookie, 'content-type': 'application/json' },
-      payload: { role: 'edit' },
+      payload: { roomId: 'room-1', role: 'edit' },
     });
     assert.equal(r.statusCode, 201, 'admin should reach any file');
   } finally {
@@ -301,7 +307,7 @@ test('share link: token from a different workbook returns 404 on patch/delete', 
       method: 'POST',
       url: `/files/${fileA}/shares/link`,
       headers: { cookie, 'content-type': 'application/json' },
-      payload: { role: 'view' },
+      payload: { roomId: 'room-1', role: 'view' },
     });
     const token = JSON.parse(mint.body).token as string;
 
@@ -313,6 +319,73 @@ test('share link: token from a different workbook returns 404 on patch/delete', 
       headers: { cookie },
     });
     assert.equal(r.statusCode, 404);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link: missing / non-string roomId rejected with 400 (invalid-room)', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    // roomId omitted entirely, and a few non-string shapes.
+    for (const roomId of [undefined, 123, '', '   ']) {
+      const payload: Record<string, unknown> = { role: 'view' };
+      if (roomId !== undefined) payload.roomId = roomId;
+      const r = await app.inject({
+        method: 'POST',
+        url: `/files/${fileId}/shares/link`,
+        headers: { cookie, 'content-type': 'application/json' },
+        payload,
+      });
+      assert.equal(r.statusCode, 400, `roomId=${String(roomId)} should 400`);
+      assert.equal(JSON.parse(r.body).error, 'invalid-room');
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link: unknown roomId rejected with 404 (room-not-found)', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    const r = await app.inject({
+      method: 'POST',
+      url: `/files/${fileId}/shares/link`,
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { roomId: 'room-does-not-exist', role: 'view' },
+    });
+    assert.equal(r.statusCode, 404);
+    assert.equal(JSON.parse(r.body).error, 'room-not-found');
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link: list + mint surface the bound roomId', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    const mint = await app.inject({
+      method: 'POST',
+      url: `/files/${fileId}/shares/link`,
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { roomId: 'room-2', role: 'edit' },
+    });
+    assert.equal(mint.statusCode, 201);
+    assert.equal(JSON.parse(mint.body).roomId, 'room-2');
+
+    const list = await app.inject({
+      method: 'GET',
+      url: `/files/${fileId}/shares`,
+      headers: { cookie },
+    });
+    const links = JSON.parse(list.body).links as Array<{ roomId: string }>;
+    assert.equal(links[0]?.roomId, 'room-2', 'list surfaces roomId');
   } finally {
     await cleanup();
   }

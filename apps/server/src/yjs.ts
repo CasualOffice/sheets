@@ -4,6 +4,20 @@ import type { IncomingMessage, Server } from 'node:http';
 import * as Y from 'yjs';
 import type { RoomRegistry } from './rooms.js';
 import type { DocStorage } from './storage.js';
+import type { ShareLinkRole } from './auth/personal.js';
+import { resolveJoinRole } from './auth/join-role.js';
+
+/** Resolve a share token to its persisted role/room/password, respecting
+ *  expiry, or null. In production this is `PersonalAuthStore.getLinkRole`,
+ *  bound in index.ts; null in anonymous-only deploys (no personal store),
+ *  in which case any `?share=` token is treated as invalid and rejected. */
+export type ResolveLinkRole = (token: string) => ShareLinkRole | null;
+
+export type AttachHocuspocusOptions = {
+  /** Wired only in personal mode. When absent, share tokens can't be
+   *  validated, so a `?share=` join is rejected rather than trusted. */
+  resolveLinkRole?: ResolveLinkRole | null;
+};
 
 /**
  * Wire Hocuspocus to a Node http server. Hocuspocus owns the Yjs sync
@@ -16,7 +30,9 @@ export function attachHocuspocus(
   rooms: RoomRegistry,
   storage: DocStorage,
   pathPrefix = '/yjs',
+  options: AttachHocuspocusOptions = {},
 ): { hocuspocus: Hocuspocus; close: () => Promise<void> } {
+  const resolveLinkRole = options.resolveLinkRole ?? null;
   // Debounce per-room saves so a rapid burst of edits doesn't hammer Redis.
   // 500 ms feels right for "still feels live, doesn't write on every keystroke".
   const SAVE_DEBOUNCE_MS = 500;
@@ -61,11 +77,47 @@ export function attachHocuspocus(
      * reject any incoming sync update for that socket. Setting it
      * here is the only authoritative gate we control.
      *
-     * Auth otherwise stays open — the password gate runs in the
+     * Auth otherwise stays open — the room-password gate runs in the
      * upgrade handler (HTTP-level), and Hocuspocus's own auth flow is
      * effectively a no-op for anonymous rooms.
+     *
+     * Share-token enforcement (sharing-model §6.1): when the join URL
+     * carries `?share=<token>`, the server becomes AUTHORITATIVE. We
+     * IGNORE the client `?role=` entirely and derive the privilege from
+     * the persisted, room-bound token via the pure `resolveJoinRole`.
+     * Any token failure (invalid / expired / wrong room / bad share
+     * password) THROWS — Hocuspocus turns a throw in onAuthenticate into
+     * a closed connection (its `Unauthorized` close), matching the
+     * unauthorized pattern the upgrade handler uses for the room
+     * password. Without a token we fall through to the EXACT legacy
+     * anonymous behaviour below.
      */
-    async onAuthenticate({ requestParameters, connection }) {
+    async onAuthenticate({ requestParameters, connection, documentName }) {
+      const token = requestParameters.get('share');
+
+      const decision = resolveJoinRole({
+        token: token ?? null,
+        documentName,
+        sharePassword: requestParameters.get('sp') ?? null,
+        // No personal store wired (anonymous-only deploy) → no token can
+        // be validated, so treat every token as unknown (rejects below).
+        lookup: (t) => (resolveLinkRole ? resolveLinkRole(t) : null),
+      });
+
+      if ('reject' in decision) {
+        // Refuse the connection. Throwing is the documented way to fail
+        // Hocuspocus auth; it closes the socket. We deliberately do NOT
+        // leak WHICH check failed to the client (all reasons collapse to
+        // one error) — only the server log distinguishes them.
+        throw new Error(`share-token rejected: ${decision.reject}`);
+      }
+
+      if (decision.via === 'share-token') {
+        connection.readOnly = decision.readOnly;
+        return { role: decision.role, via: 'share-token' as const };
+      }
+
+      // ── No token → legacy anonymous path, unchanged. ────────────────
       const role = requestParameters.get('role');
       if (role === 'view') {
         connection.readOnly = true;
@@ -89,11 +141,7 @@ export function attachHocuspocus(
   // minimal — raw ws + manual upgrade routing.
   const wss = new WebSocketServer({ noServer: true });
 
-  const onUpgrade = (
-    req: IncomingMessage,
-    socket: import('node:net').Socket,
-    head: Buffer,
-  ) => {
+  const onUpgrade = (req: IncomingMessage, socket: import('node:net').Socket, head: Buffer) => {
     const rawUrl = req.url ?? '/';
     if (!rawUrl.startsWith(pathPrefix)) return;
     // Parse query string so the client can authenticate the WS upgrade
@@ -104,7 +152,8 @@ export function attachHocuspocus(
     const parsed = new URL(rawUrl, 'http://internal');
     const roomId = parsed.searchParams.get('room');
     const password = parsed.searchParams.get('p');
-    const passwordBad = roomId !== null && rooms.get(roomId) !== undefined && !rooms.passwordOk(roomId, password);
+    const passwordBad =
+      roomId !== null && rooms.get(roomId) !== undefined && !rooms.passwordOk(roomId, password);
     // Always complete the WS upgrade — even for bad-password rejections.
     // Pre-upgrade HTTP 401 responses surface in the browser only as
     // close-code 1006 ("abnormal"), indistinguishable from network
@@ -120,7 +169,11 @@ export function attachHocuspocus(
           ws.close(4401, 'unauthorized');
         } catch {
           // Best-effort — if close throws we just drop the socket.
-          try { ws.terminate(); } catch { /* swallow */ }
+          try {
+            ws.terminate();
+          } catch {
+            /* swallow */
+          }
         }
         return;
       }
@@ -133,7 +186,10 @@ export function attachHocuspocus(
   const handleConnection = (ws: WebSocket, req: IncomingMessage) => {
     // Hocuspocus expects (websocket, request, context). Context is optional
     // and we don't need auth tokens for anonymous rooms.
-    hocuspocus.handleConnection(ws as unknown as Parameters<typeof hocuspocus.handleConnection>[0], req);
+    hocuspocus.handleConnection(
+      ws as unknown as Parameters<typeof hocuspocus.handleConnection>[0],
+      req,
+    );
   };
 
   return {

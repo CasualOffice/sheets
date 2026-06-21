@@ -283,10 +283,12 @@ test('share link: create → list → get round-trips the row', () => {
     if (!admin.ok) throw new Error('seed failed');
     const link = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'edit',
       createdBy: admin.user.id,
     });
     assert.equal(link.workbookId, 'f-abc');
+    assert.equal(link.roomId, 'room-abc');
     assert.equal(link.role, 'edit');
     assert.equal(link.expiresAt, null);
     assert.equal(link.passwordHash, null);
@@ -295,9 +297,11 @@ test('share link: create → list → get round-trips the row', () => {
     const list = store.listShareLinks('f-abc');
     assert.equal(list.length, 1);
     assert.equal(list[0]?.token, link.token);
+    assert.equal(list[0]?.roomId, 'room-abc', 'roomId round-trips through list');
 
     const got = store.getShareLink(link.token);
     assert.equal(got?.role, 'edit');
+    assert.equal(got?.roomId, 'room-abc', 'roomId round-trips through get');
     assert.equal(store.getShareLink('no-such-token'), null);
     assert.deepEqual(store.listShareLinks('f-other'), []);
   } finally {
@@ -313,8 +317,12 @@ test('share link: tokens are unique CSPRNG values', () => {
     const tokens = new Set<string>();
     for (let i = 0; i < 50; i++) {
       tokens.add(
-        store.createShareLink({ workbookId: 'f-abc', role: 'view', createdBy: admin.user.id })
-          .token,
+        store.createShareLink({
+          workbookId: 'f-abc',
+          roomId: 'room-abc',
+          role: 'view',
+          createdBy: admin.user.id,
+        }).token,
       );
     }
     assert.equal(tokens.size, 50);
@@ -333,6 +341,7 @@ test('share link: getLinkRole respects expiry (live → role, lapsed → null)',
     // Never-expiring → always resolves.
     const forever = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'comment',
       createdBy: admin.user.id,
     });
@@ -341,16 +350,23 @@ test('share link: getLinkRole respects expiry (live → role, lapsed → null)',
     // Future expiry → live.
     const live = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'edit',
       createdBy: admin.user.id,
       expiresAt: now + 60_000,
     });
     assert.equal(store.getLinkRole(live.token, now)?.role, 'edit');
+    assert.equal(
+      store.getLinkRole(live.token, now)?.roomId,
+      'room-abc',
+      'getLinkRole surfaces the bound roomId',
+    );
 
     // Past expiry → null, as if it never existed, even though the row
     // is still on disk (history is kept per §8 q2).
     const dead = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'view',
       createdBy: admin.user.id,
       expiresAt: now - 1,
@@ -371,6 +387,7 @@ test('share link: optional password is bcrypt-hashed, never stored plain', () =>
     if (!admin.ok) throw new Error('seed failed');
     const link = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'view',
       createdBy: admin.user.id,
       password: 'hunter2',
@@ -384,6 +401,7 @@ test('share link: optional password is bcrypt-hashed, never stored plain', () =>
     // Empty string is treated as no password.
     const noPw = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'view',
       createdBy: admin.user.id,
       password: '',
@@ -404,6 +422,7 @@ test('share link: update flips role + expiry; clears expiry with null', () => {
     if (!admin.ok) throw new Error('seed failed');
     const link = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'view',
       createdBy: admin.user.id,
       expiresAt: Date.now() + 60_000,
@@ -424,6 +443,7 @@ test('share link: delete revokes; second delete is a no-op false', () => {
     if (!admin.ok) throw new Error('seed failed');
     const link = store.createShareLink({
       workbookId: 'f-abc',
+      roomId: 'room-abc',
       role: 'view',
       createdBy: admin.user.id,
     });

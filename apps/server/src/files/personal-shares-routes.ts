@@ -14,11 +14,12 @@ import { currentUser } from '../auth/personal-routes.js';
  * FOUNDATION). CRUD over the `share_links` table, gated on file
  * ownership exactly like `personal-files-routes.ts`.
  *
- * IMPORTANT: this batch is intentionally inert. Minting / listing /
- * editing tokens persists rows but grants NO access — the join
- * handshake (`rooms.ts` / `applyViewOnlyMode`) does not read them
- * yet. Enforcement lands in a separate, reviewed batch. So shipping
- * this is safe even before enforcement exists.
+ * Tokens are bound to a specific collab room (`roomId`) at mint time.
+ * Enforcement lives in the collab gate (`yjs.ts` onAuthenticate →
+ * `resolveJoinRole`), which validates a `?share=<token>` join against
+ * the persisted token's room + role + optional password. Rooms are
+ * anonymous and NOT keyed by workbookId, so without the room binding a
+ * token could be replayed against any room.
  *
  * Gating (matches the files routes):
  *   - owner  = file registry `ownerId === user.id`
@@ -38,8 +39,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *  overflow into a meaningless date. */
 const MAX_EXPIRES_DAYS = 100_000;
 const MAX_PASSWORD_LEN = 256;
+/** Defensive cap on the room id — real ids are 12-char base36, but a
+ *  caller could post anything. Bound it so a junk value can't bloat the
+ *  row. */
+const MAX_ROOM_ID_LEN = 128;
 
-export function registerPersonalSharesRoutes(app: FastifyInstance, store: PersonalAuthStore): void {
+export type SharesRoutesOptions = {
+  /** Validates that a posted roomId refers to a live room. When omitted
+   *  (e.g. a test that doesn't wire the registry), the roomId is accepted
+   *  opaquely — it's still bound to the token and the collab gate's
+   *  room-match check is the real enforcement. */
+  roomExists?: (roomId: string) => boolean;
+};
+
+export function registerPersonalSharesRoutes(
+  app: FastifyInstance,
+  store: PersonalAuthStore,
+  options: SharesRoutesOptions = {},
+): void {
+  const roomExists = options.roomExists ?? null;
   // ── GET /files/:id/shares ───────────────────────────────────────────
   // List link tokens for a file. passwordHash is never returned — the
   // response carries `hasPassword` instead.
@@ -51,19 +69,26 @@ export function registerPersonalSharesRoutes(app: FastifyInstance, store: Person
   });
 
   // ── POST /files/:id/shares/link ─────────────────────────────────────
-  // Mint a token. Body: { role, expiresInDays?, password? }.
+  // Mint a token bound to a specific collab room. Body:
+  //   { roomId, role, expiresInDays?, password? }.
+  // roomId is REQUIRED — the token is the capability to JOIN that room,
+  // and binding it at mint time is what stops a token from being replayed
+  // against another room (rooms are anonymous + not keyed by workbookId).
   app.post<{
     Params: { id: string };
-    Body: { role?: unknown; expiresInDays?: unknown; password?: unknown };
+    Body: { roomId?: unknown; role?: unknown; expiresInDays?: unknown; password?: unknown };
   }>('/files/:id/shares/link', async (req, reply) => {
     const ctx = ownedFileCtx(req, reply, store);
     if (!ctx) return;
     const body = (req.body ?? {}) as {
+      roomId?: unknown;
       role?: unknown;
       expiresInDays?: unknown;
       password?: unknown;
     };
 
+    const roomId = parseRoomId(body.roomId, reply, roomExists);
+    if (roomId === INVALID) return;
     if (!isShareRole(body.role)) {
       return reply.code(400).send({ error: 'invalid-role' });
     }
@@ -74,6 +99,7 @@ export function registerPersonalSharesRoutes(app: FastifyInstance, store: Person
 
     const link = store.createShareLink({
       workbookId: ctx.record.id,
+      roomId,
       role: body.role,
       createdBy: ctx.user.id,
       expiresAt,
@@ -84,6 +110,7 @@ export function registerPersonalSharesRoutes(app: FastifyInstance, store: Person
     // (the host owns its public URL). See sharing-model §3.5.
     return reply.code(201).send({
       token: link.token,
+      roomId: link.roomId,
       role: link.role,
       expiresAt: link.expiresAt,
       url: `?share=${link.token}`,
@@ -143,6 +170,7 @@ const INVALID = Symbol('invalid');
 function toPublicLink(link: ShareLink) {
   return {
     token: link.token,
+    roomId: link.roomId,
     role: link.role,
     expiresAt: link.expiresAt,
     hasPassword: link.passwordHash !== null,
@@ -204,6 +232,32 @@ function parseExpiry(raw: unknown, reply: FastifyReply): number | null | typeof 
     return INVALID;
   }
   return Date.now() + raw * DAY_MS;
+}
+
+/** Validate the REQUIRED roomId. Must be a non-empty, sanely-bounded
+ *  string. When a `roomExists` checker is supplied, the room must be
+ *  live — a 404 (not 400) so we don't confirm whether a guessed room id
+ *  exists to a caller who shouldn't know. Sends the error + returns
+ *  INVALID on failure. */
+function parseRoomId(
+  raw: unknown,
+  reply: FastifyReply,
+  roomExists: ((roomId: string) => boolean) | null,
+): string | typeof INVALID {
+  if (typeof raw !== 'string') {
+    reply.code(400).send({ error: 'invalid-room' });
+    return INVALID;
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_ROOM_ID_LEN) {
+    reply.code(400).send({ error: 'invalid-room' });
+    return INVALID;
+  }
+  if (roomExists && !roomExists(trimmed)) {
+    reply.code(404).send({ error: 'room-not-found' });
+    return INVALID;
+  }
+  return trimmed;
 }
 
 /** Validate the optional join password. Empty / omitted → no password
