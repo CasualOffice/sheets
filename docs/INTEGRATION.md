@@ -199,11 +199,26 @@ and is explicitly **not** covered by semver.
 interface CasualSheetsAPI {
   getSnapshot(): IWorkbookData | null; // current workbook
   loadSnapshot(data: IWorkbookData): void; // dispose unit + remount a new one
+  importXlsx(input: ArrayBuffer | Uint8Array | Blob): Promise<IWorkbookData>; // parse + load
+  exportXlsx(): Promise<Blob>; // serialize the active workbook
   getSelection(): RangeRef | null; // { unitId, sheetId, range }
   executeCommand(id: string, params?: object): Promise<boolean>;
   setTheme(appearance: 'light' | 'dark'): void; // imperative light/dark
   univer: FUniver; // escape hatch — NOT semver-covered
 }
+```
+
+`importXlsx` / `exportXlsx` lazy-load the ExcelJS converters as a separate chunk
+(via the `@casualoffice/sheets/xlsx` subpath), so the editor entry stays small
+for hosts that never touch a file:
+
+```ts
+// open a file the user picked
+await api.importXlsx(file); // File | Blob | ArrayBuffer | Uint8Array
+
+// save the current workbook
+const blob = await api.exportXlsx();
+// host decides what to do with the Blob (download, upload, …)
 ```
 
 ### Persistence pattern — the host stores, the SDK never does
@@ -336,11 +351,13 @@ from Univer's internal version churn. When you upgrade Univer, bump **all**
 
 ---
 
-## Roadmap (not yet on the API)
+## Roadmap
 
-These are designed in [`SDK_ARCHITECTURE.md`](./SDK_ARCHITECTURE.md) and land in
-follow-up releases; the type never advertises a method that throws, so they
-appear here, not on `CasualSheetsAPI`:
+`importXlsx` / `exportXlsx` are now on `CasualSheetsAPI` (see above); the SDK is
+a two-way xlsx surface. Remaining, optional follow-ups (designed in
+[`SDK_ARCHITECTURE.md`](./SDK_ARCHITECTURE.md)):
 
-- `importXlsx` / `exportXlsx` on the API. Today: use `@casualoffice/sheets/xlsx`
-  with `loadSnapshot`; the export converter is being lifted out of the host app.
+- A dedicated embed playground demonstrating the `<iframe>` path end-to-end.
+- Richer chart/pivot fidelity in the core exporter (today those app-level models
+  round-trip via the snapshot's resources; foreign readers see values + any
+  host-supplied chart images, not live objects).
