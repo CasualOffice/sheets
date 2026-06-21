@@ -37,6 +37,8 @@ import type { CasualSheetsAPI } from '../sheets/api';
 import { ensurePluginByName } from '../univer';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
+import { useDialogs, type DialogKind } from './dialog-context';
+import type { ChromeExtensions, MenuExtension } from './extensions';
 
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data' | 'help';
 
@@ -46,24 +48,7 @@ type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data' | 'help';
  * string is passed straight to the host hook; the `context` (when present)
  * carries the pre-resolved A1 selection so the host doesn't have to re-read it.
  */
-export type MenuDialogKind =
-  | 'format-cells'
-  | 'find-replace'
-  | 'insert-cells'
-  | 'delete-cells'
-  | 'paste-special'
-  | 'insert-chart'
-  | 'insert-pivot'
-  | 'insert-sparkline'
-  | 'insert-function'
-  | 'name-manager'
-  | 'goal-seek'
-  | 'data-validation'
-  | 'conditional-formatting'
-  | 'custom-sort'
-  | 'properties'
-  | 'about'
-  | 'keyboard-shortcuts';
+export type MenuDialogKind = DialogKind;
 
 type RunFn = (api: CasualSheetsAPI) => void;
 
@@ -1226,23 +1211,24 @@ function featureOn(feature: string | undefined, features: Record<string, boolean
 }
 
 /**
- * Keep an item if its feature is on AND — for a dialog item — the host provides
- * a dialog handler. Dialog items with no host hook are dropped (the SDK never
- * fakes a dialog). Submenus are filtered recursively and dropped when empty.
+ * Keep an item if its feature is on AND — for a dialog item — the chrome can
+ * open it (built-in dialog, host override, or `onDialogRequest`). Dialog items
+ * with no way to open are dropped (the SDK never fakes a dialog). Submenus are
+ * filtered recursively and dropped when empty.
  */
 function keepItem(
   item: MenuItemDef,
   features: Record<string, boolean>,
-  hasDialogHost: boolean,
+  canOpen: (kind: DialogKind) => boolean,
 ): MenuItemDef | null {
   if (!featureOn(item.feature, features)) return null;
   if (item.kind === 'separator') return item;
   if (item.kind === 'submenu') {
-    const items = filterItems(item.items, features, hasDialogHost);
+    const items = filterItems(item.items, features, canOpen);
     if (items.length === 0) return null;
     return { ...item, items };
   }
-  if (item.dialog && !hasDialogHost) return null;
+  if (item.dialog && !canOpen(item.dialog)) return null;
   return item;
 }
 
@@ -1250,10 +1236,10 @@ function keepItem(
 function filterItems(
   items: MenuItemDef[],
   features: Record<string, boolean>,
-  hasDialogHost: boolean,
+  canOpen: (kind: DialogKind) => boolean,
 ): MenuItemDef[] {
   const kept = items
-    .map((i) => keepItem(i, features, hasDialogHost))
+    .map((i) => keepItem(i, features, canOpen))
     .filter((i): i is MenuItemDef => i !== null);
   // Collapse separators: drop leading, trailing, and runs.
   const out: MenuItemDef[] = [];
@@ -1268,6 +1254,41 @@ function filterItems(
   return out;
 }
 
+/* ─────────────────────────── host extensions ──────────────────────────── */
+
+/**
+ * Append host menu extensions to their target top-level menu. Each extension
+ * becomes a normal `item` (with a leading separator before the first host item
+ * in that menu so it's visually grouped). Host items dispatch via `onClick` or
+ * route a `dialog` kind through the dialog host, exactly like built-ins.
+ */
+function withMenuExtensions(menus: MenuDef[], ext?: MenuExtension[]): MenuDef[] {
+  if (!ext || ext.length === 0) return menus;
+  const byMenu = new Map<MenuId, MenuExtension[]>();
+  for (const e of ext) {
+    const list = byMenu.get(e.menu) ?? [];
+    list.push(e);
+    byMenu.set(e.menu, list);
+  }
+  return menus.map((menu) => {
+    const extras = byMenu.get(menu.id);
+    if (!extras || extras.length === 0) return menu;
+    const items: MenuItemDef[] = [...menu.items, { kind: 'separator', id: `ext-sep-${menu.id}` }];
+    for (const e of extras) {
+      items.push({
+        kind: 'item',
+        id: `ext-${e.id}`,
+        label: e.label,
+        icon: e.icon,
+        shortcut: e.shortcut,
+        dialog: e.dialog,
+        run: e.onClick ? (api) => e.onClick?.(api) : undefined,
+      });
+    }
+    return { ...menu, items };
+  });
+}
+
 /* ───────────────────────────── component ──────────────────────────────── */
 
 export interface MenuBarProps {
@@ -1279,15 +1300,15 @@ export interface MenuBarProps {
    */
   features?: Record<string, boolean>;
   /**
-   * Host hook for actions the SDK can't render itself (Format Cells, Insert
-   * Chart, PivotTable, Find & Replace, Insert/Delete cells, …). Called with the
-   * dialog `kind` and an optional `context` (the active selection in A1 for
-   * range-seeded dialogs). When omitted, those items are not rendered.
+   * Host chrome extensions — custom menu items appended to their target menu.
+   * Dialogs/toolbar/panels are handled elsewhere; only `extensions.menu` is read
+   * here.
    */
-  onDialogRequest?: (kind: MenuDialogKind, context?: unknown) => void;
+  extensions?: ChromeExtensions;
 }
 
-export function MenuBar({ api, features = {}, onDialogRequest }: MenuBarProps) {
+export function MenuBar({ api, features = {}, extensions }: MenuBarProps) {
+  const dialogs = useDialogs();
   const [open, setOpen] = useState<MenuId | null>(null);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -1335,18 +1356,23 @@ export function MenuBar({ api, features = {}, onDialogRequest }: MenuBarProps) {
         item.dialog === 'insert-sparkline' ||
         item.dialog === 'insert-cells' ||
         item.dialog === 'delete-cells';
-      onDialogRequest?.(item.dialog, seeded ? selectionA1(api) : undefined);
+      // openDialog opens the SDK built-in by default; a host override / host-owned
+      // kind / onDialogRequest wins per the resolution rules in DialogProvider.
+      dialogs.openDialog(item.dialog, seeded ? selectionA1(api) : undefined);
       return;
     }
     item.run?.(api);
   };
 
-  // Compute the visible menus once per render (feature + dialog-host gating).
-  const hasDialogHost = !!onDialogRequest;
-  const visibleMenus = MENUS.map((menu) => ({
-    ...menu,
-    items: filterItems(menu.items, features, hasDialogHost),
-  })).filter((menu) => featureOn(menu.feature, features) && menu.items.length > 0);
+  // Compute the visible menus once per render (feature + dialog-open gating),
+  // then append host menu extensions to their target menu.
+  const baseMenus = withMenuExtensions(MENUS, extensions?.menu);
+  const visibleMenus = baseMenus
+    .map((menu) => ({
+      ...menu,
+      items: filterItems(menu.items, features, dialogs.canOpen),
+    }))
+    .filter((menu) => featureOn(menu.feature, features) && menu.items.length > 0);
 
   const renderItems = (items: MenuItemDef[]): ReactNode =>
     items.map((item) => {

@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { CasualSheetsAPI } from '../sheets/api';
 
 interface SheetTab {
@@ -302,45 +303,51 @@ export function SheetTabs({ api }: SheetTabsProps) {
         +
       </button>
 
-      {menu && (
-        <div
-          style={{ ...MENU_STYLE, left: menu.x, top: menu.y }}
-          data-testid="cs-tab-menu"
-          role="menu"
-          // Keep clicks inside the menu from closing it via the window handler.
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            style={MENU_ITEM_STYLE}
-            data-testid="cs-tab-menu-rename"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              const tab = tabs.find((t) => t.id === menu.sheetId);
-              if (tab) startRename(tab);
-            }}
+      {menu &&
+        createPortal(
+          <div
+            // Portaled to <body> so it escapes the tab strip's stacking context
+            // (otherwise the fixed menu renders BEHIND the status bar below the
+            // tabs). `translateY(-100%)` opens it UPWARD from the click since the
+            // tab strip sits at the bottom of the editor.
+            style={{ ...MENU_STYLE, left: menu.x, top: menu.y, transform: 'translateY(-100%)' }}
+            data-testid="cs-tab-menu"
+            role="menu"
+            // Keep clicks inside the menu from closing it via the window handler.
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            Rename
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            style={{
-              ...MENU_ITEM_STYLE,
-              opacity: visible.length <= 1 ? 0.5 : 1,
-              cursor: visible.length <= 1 ? 'not-allowed' : 'pointer',
-            }}
-            data-testid="cs-tab-menu-delete"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              deleteSheet(menu.sheetId);
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              role="menuitem"
+              style={MENU_ITEM_STYLE}
+              data-testid="cs-tab-menu-rename"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const tab = tabs.find((t) => t.id === menu.sheetId);
+                if (tab) startRename(tab);
+              }}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              style={{
+                ...MENU_ITEM_STYLE,
+                opacity: visible.length <= 1 ? 0.5 : 1,
+                cursor: visible.length <= 1 ? 'not-allowed' : 'pointer',
+              }}
+              data-testid="cs-tab-menu-delete"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                deleteSheet(menu.sheetId);
+              }}
+            >
+              Delete
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

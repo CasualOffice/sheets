@@ -69,6 +69,8 @@ import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univ
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
 import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
+import type { ChromeExtensions } from '../chrome/extensions';
+import type { DialogKind } from '../chrome/dialog-context';
 // Chrome is lazy-loaded from the `@casualoffice/sheets/chrome` subpath (NOT a
 // relative import — that would inline under this build's splitting:false). The
 // subpath is externalised in tsup, so the consumer's bundler code-splits it and
@@ -182,11 +184,21 @@ export interface CasualSheetsProps {
    *  capability to a boolean; `false` hides the control AND blocks its command.
    *  Omitted keys default to enabled. Only applies when `chrome` is shown. */
   features?: Record<string, boolean>;
-  /** Called when a chrome control backed by a dialog the SDK doesn't render
-   *  itself (Format Cells, Insert Chart, Find & Replace, …) is activated, so the
-   *  host can render its OWN dialog and apply via the API. Without it, those
-   *  controls are omitted (no fake dialog). */
+  /** Legacy host hook for dialog-backed chrome controls. The SDK now ships
+   *  BUILT-IN dialogs (Format Cells, Find & Replace, …) that open by default, so
+   *  this is no longer required. It still works for back-compat: kinds the SDK
+   *  has no built-in for (Insert Chart, PivotTable, …) fall through to it, and a
+   *  host can force specific kinds to it via `hostOwnedDialogs`. Prefer
+   *  `extensions.dialogs` to supply a React override component. */
   onDialogRequest?: (kind: string, context?: unknown) => void;
+  /** Kinds the host wants to handle via `onDialogRequest` even though the SDK has
+   *  a built-in (e.g. keep the SDK chrome but your own Format Cells). */
+  hostOwnedDialogs?: DialogKind[];
+  /** Host chrome extensions — the extensibility surface for `chrome="full"`.
+   *  Append custom toolbar items / menu items / side panels, and register or
+   *  OVERRIDE dialogs by kind. Built-ins are the defaults; host entries
+   *  append/override. See `ChromeExtensions` for the exact shape. */
+  extensions?: ChromeExtensions;
   /** Container style. Default fills the parent. */
   style?: CSSProperties;
   /** Container className for additional styling hooks. */
@@ -227,6 +239,8 @@ export function CasualSheets({
   chrome = 'none',
   features,
   onDialogRequest,
+  hostOwnedDialogs,
+  extensions,
   style,
   className,
   testId = 'casual-sheets',
@@ -463,7 +477,13 @@ export function CasualSheets({
       {/* Bars appear once their lazy chunk loads (a tick after first paint); the
           grid host is OUTSIDE Suspense so Univer mounts immediately. */}
       <Suspense fallback={null}>
-        <ChromeTop api={chromeApi} features={features} onDialogRequest={onDialogRequest} />
+        <ChromeTop
+          api={chromeApi}
+          features={features}
+          onDialogRequest={onDialogRequest}
+          hostOwnedDialogs={hostOwnedDialogs}
+          extensions={extensions}
+        />
       </Suspense>
       <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
       <Suspense fallback={null}>

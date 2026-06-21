@@ -116,9 +116,17 @@ const ICON_BTN_STYLE: CSSProperties = {
 export interface FindReplaceProps {
   /** Live API, or `null` until the editor is ready. */
   api: CasualSheetsAPI | null;
+  /**
+   * Imperative open trigger from the dialog host. Bump this counter to open the
+   * panel (e.g. when `openDialog('find-replace')` is called from a menu item).
+   * The panel still self-opens on Ctrl/Cmd+F·H independently.
+   */
+  openSignal?: number;
+  /** When the host opens it via `openSignal`, start in replace mode. */
+  openInReplaceMode?: boolean;
 }
 
-export function FindReplace({ api }: FindReplaceProps) {
+export function FindReplace({ api, openSignal, openInReplaceMode }: FindReplaceProps) {
   const [open, setOpen] = useState(false);
   const [showReplace, setShowReplace] = useState(false);
   const [query, setQuery] = useState('');
@@ -146,6 +154,20 @@ export function FindReplace({ api }: FindReplaceProps) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
+
+  // Host-driven open (openDialog('find-replace')). `openSignal === undefined`
+  // means "never opened by the host"; any defined value opens (and re-opening
+  // bumps the counter). Skip the initial undefined→defined? No — only react when
+  // a defined signal arrives.
+  const lastSignal = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (openSignal === undefined) return;
+    if (lastSignal.current === openSignal) return;
+    lastSignal.current = openSignal;
+    setShowReplace(!!openInReplaceMode);
+    setOpen(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [openSignal, openInReplaceMode]);
 
   const matches = useMemo(
     () => (api && open && query ? findMatches(api, query, matchCase) : []),

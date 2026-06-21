@@ -32,6 +32,8 @@ import { ensureChromeFonts } from './fonts';
 import { ColorPicker } from './ColorPicker';
 import { BordersPicker } from './BordersPicker';
 import { AutoSumPicker } from './AutoSumPicker';
+import { useDialogs } from './dialog-context';
+import type { ChromeExtensions, ToolbarExtension } from './extensions';
 
 interface ActiveStyle {
   bold: boolean;
@@ -401,12 +403,8 @@ export interface ToolbarProps {
    *   format-cells · insert-chart · pivot-table
    */
   features?: Record<string, boolean>;
-  /**
-   * Host hook for dialogs the SDK has no built-in UI for (Format Cells, Insert
-   * Chart, PivotTable). When provided, those controls render and call this with
-   * a `kind`; when omitted, they are not rendered (no fake dialog).
-   */
-  onDialogRequest?: (kind: string, context?: unknown) => void;
+  /** Host chrome extensions — only `extensions.toolbar` is read here. */
+  extensions?: ChromeExtensions;
 }
 
 /** A feature is on unless explicitly set to `false`. */
@@ -444,7 +442,8 @@ function isActive(id: string, s: ActiveStyle): boolean {
   }
 }
 
-export function Toolbar({ api, features, onDialogRequest }: ToolbarProps) {
+export function Toolbar({ api, features, extensions }: ToolbarProps) {
+  const dialogs = useDialogs();
   const [active, setActive] = useState<ActiveStyle>(NO_STYLE);
 
   useEffect(() => {
@@ -604,11 +603,23 @@ export function Toolbar({ api, features, onDialogRequest }: ToolbarProps) {
   const showAutoSum = enabled(features, 'autosum');
   const showNumberDropdown = enabled(features, 'number');
 
-  // Dialog-only controls: render ONLY when the host gave us a way to open them.
-  const showFormatCells = enabled(features, 'format-cells') && !!onDialogRequest;
-  const showInsertChart = enabled(features, 'insert-chart') && !!onDialogRequest;
-  const showPivotTable = enabled(features, 'pivot-table') && !!onDialogRequest;
+  // Dialog-backed controls: render when the chrome can open them — Format Cells
+  // is a built-in (always available); Insert Chart / PivotTable open only when a
+  // host registered/handles them.
+  const showFormatCells = enabled(features, 'format-cells') && dialogs.canOpen('format-cells');
+  const showInsertChart = enabled(features, 'insert-chart') && dialogs.canOpen('insert-chart');
+  const showPivotTable = enabled(features, 'pivot-table') && dialogs.canOpen('insert-pivot');
   const showDialogGroup = showFormatCells || showInsertChart || showPivotTable;
+
+  // Host toolbar extensions — appended after the built-in groups.
+  const toolbarExt = (extensions?.toolbar ?? []).filter(
+    (e) => !e.isVisible || (api ? e.isVisible(api) : false),
+  );
+  const runExt = (e: ToolbarExtension) => {
+    if (!api) return;
+    if (e.command) void api.executeCommand(e.command, e.commandParams);
+    else e.onClick?.(api);
+  };
 
   return (
     <div style={BAR_STYLE} data-testid="casual-sheets-toolbar" role="toolbar" aria-label="Editor">
@@ -705,7 +716,7 @@ export function Toolbar({ api, features, onDialogRequest }: ToolbarProps) {
               'format-cells',
               'Format Cells…',
               'format_shapes',
-              () => onDialogRequest?.('format-cells'),
+              () => dialogs.openDialog('format-cells'),
               'cs-format-cells',
             )}
           {showInsertChart &&
@@ -713,7 +724,7 @@ export function Toolbar({ api, features, onDialogRequest }: ToolbarProps) {
               'insert-chart',
               'Insert chart',
               'bar_chart',
-              () => onDialogRequest?.('insert-chart'),
+              () => dialogs.openDialog('insert-chart'),
               'cs-insert-chart',
             )}
           {showPivotTable &&
@@ -721,9 +732,18 @@ export function Toolbar({ api, features, onDialogRequest }: ToolbarProps) {
               'pivot-table',
               'Insert PivotTable',
               'pivot_table_chart',
-              () => onDialogRequest?.('pivot-table'),
+              () => dialogs.openDialog('insert-pivot'),
               'cs-pivot-table',
             )}
+        </>
+      )}
+
+      {toolbarExt.length > 0 && (
+        <>
+          <span style={DIVIDER_STYLE} aria-hidden />
+          {toolbarExt.map((e) =>
+            renderIconButton(e.id, e.label, e.icon, () => runExt(e), `cs-ext-${e.id}`),
+          )}
         </>
       )}
     </div>

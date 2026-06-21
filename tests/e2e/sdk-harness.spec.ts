@@ -537,7 +537,7 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
       { timeout: 30_000 },
     );
     await page.locator('[data-menu="view"]').click();
-    await expect(page.getByTestId('cs-menuitem-freeze')).toBeVisible();
+    await expect(page.getByTestId('cs-menuitem-freeze-row')).toBeVisible();
   });
 
   test('chrome color picker: text color applies + popover closes', async ({ page }) => {
