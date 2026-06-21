@@ -12,6 +12,7 @@ import { CommandSearchDialog, type CommandSearchItem } from './CommandSearchDial
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useToast } from './toast/toast-context';
+import { useActivity } from './activity-context';
 import { saveNamedVersion } from '../version-history/useVersionHistoryCapture';
 import { useUI } from '../use-ui';
 import { emptyWorkbook } from '../snapshot';
@@ -346,6 +347,7 @@ export function MenuBar() {
   const api = useUniverAPI();
   const workbook = useWorkbook();
   const toast = useToast();
+  const activity = useActivity();
   const saveStatus = useSaveStatus();
   const ui = useUI();
   const outlineActions = useOutlineActions();
@@ -1029,25 +1031,29 @@ export function MenuBar() {
     // UX_AUDIT.md §2.3.
     const onServerFileId = (fileId: string) => workbook.updateServerFileId(fileId);
     const onConflict = (expectedEtag: string) => {
+      // Conflicts (stale etag) are NOT retryable — blindly re-PUTting
+      // would clobber the newer server copy. Keep the bare error + the
+      // reload guidance; no Retry button (plain bridge entry via
+      // toast.error). The user must reload to pull the latest first.
       toast.error(
         `This file was changed elsewhere (server has ${expectedEtag.slice(0, 8)}…). ` +
           `Reload to pull the latest and try again.`,
       );
     };
-    try {
+    // The actual save, factored out so a failed save can be retried by
+    // re-running the SAME call. saveAsXlsx re-snapshots the workbook on
+    // every call, so the retry captures fresh data — no stale closure.
+    const runSave = () => {
       switch (workbook.meta.sourceFormat) {
         case 'ods':
-          await saveAsOds(api, name);
-          break;
+          return saveAsOds(api, name);
         case 'csv':
-          await saveAsCsv(api, name);
-          break;
+          return saveAsCsv(api, name);
         case 'tsv':
-          await saveAsTsv(api, name);
-          break;
+          return saveAsTsv(api, name);
         case 'xlsx':
         default:
-          await saveAsXlsx(api, name, {
+          return saveAsXlsx(api, name, {
             outline: outline.state,
             charts: charts.charts,
             pivots: pivots.pivots,
@@ -1059,6 +1065,9 @@ export function MenuBar() {
             onConflict,
           });
       }
+    };
+    try {
+      await runSave();
       const ext = (workbook.meta.sourceFormat || 'xlsx').toLowerCase();
       const displayName = /\.(xlsx|ods|csv|tsv)$/i.test(name) ? name : `${name}.${ext}`;
       toast.success(`Saved ${displayName}`);
@@ -1069,8 +1078,15 @@ export function MenuBar() {
       // Drive the title-bar SaveStatusPill (UX_AUDIT.md §4.3).
       saveStatus.markSaved();
     } catch (err) {
+      // A thrown error is a transient/operational failure (network
+      // blip, serializer OOM, disk full) — these ARE retryable. Push a
+      // persistent activity entry carrying the retry closure; suppress
+      // the toast's own bridge entry so the log shows ONE row (with the
+      // Retry button) instead of two. (Conflicts never throw — they go
+      // through onConflict above.)
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Couldn't save: ${msg}`);
+      toast.error(`Couldn't save: ${msg}`, { skipActivityLog: true });
+      activity.pushErrorWithRetry(`Couldn't save: ${msg}`, runSave, 'save');
       saveStatus.markError(msg);
     }
   };
@@ -1116,8 +1132,18 @@ export function MenuBar() {
       await runner();
       toast.success(`Exported ${displayName}`);
     } catch (err) {
+      // Export is local (no etag/conflict path) so every failure is
+      // retryable — `runner` re-snapshots on each call. One activity
+      // entry (with Retry); suppress the toast's bare bridge entry.
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Couldn't export ${displayName}: ${msg}`);
+      toast.error(`Couldn't export ${displayName}: ${msg}`, { skipActivityLog: true });
+      activity.pushErrorWithRetry(
+        `Couldn't export ${displayName}: ${msg}`,
+        async () => {
+          await runner();
+        },
+        'export',
+      );
     }
   };
 

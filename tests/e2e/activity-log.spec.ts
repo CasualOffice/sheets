@@ -55,6 +55,56 @@ test.describe('Activity log', () => {
     await expect(page.getByTestId('activity-pill-popover')).toContainText('1 entry');
   });
 
+  test('retryable entry shows a Retry button; click re-runs and success dismisses', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await waitForUniver(page);
+
+    // Push an entry WITH a retry handler via the DEV test seam (the
+    // window-event bridge can only carry serializable data, so it can't
+    // deliver a closure). The handler fails the first call and succeeds
+    // the second, mirroring a transient save failure that recovers.
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      w.__retryCalls = 0;
+      w.__activityRetry__.push(
+        "Couldn't save: network down",
+        async () => {
+          w.__retryCalls += 1;
+          if (w.__retryCalls === 1) throw new Error('still down');
+          // second call resolves → success
+        },
+        'save',
+      );
+    });
+
+    // Pill appears; open it.
+    await expect(page.getByTestId('activity-pill')).toBeVisible();
+    await page.getByTestId('activity-pill-trigger').click();
+    await expect(page.getByTestId('activity-pill-popover')).toBeVisible();
+    await expect(page.getByText("Couldn't save: network down")).toBeVisible();
+
+    // Retry button is present for the retryable entry.
+    const retry = page.getByTestId('activity-entry-retry');
+    await expect(retry).toBeVisible();
+
+    // First click fails — entry survives and a "Retry failed" entry is
+    // added, so the original is still there with its Retry button.
+    await retry.click();
+    await expect(page.getByText('Retry failed: still down')).toBeVisible();
+    await expect(page.getByText("Couldn't save: network down")).toBeVisible();
+
+    // Second click succeeds — the original entry is dismissed.
+    await page.getByTestId('activity-entry-retry').first().click();
+    await expect(page.getByText("Couldn't save: network down")).toHaveCount(0);
+
+    // The handler ran exactly twice.
+    const calls = await page.evaluate(() => (window as { __retryCalls?: number }).__retryCalls);
+    expect(calls).toBe(2);
+  });
+
   test('Clear all empties the log and removes the pill', async ({ page }) => {
     await page.goto('/');
     await waitForUniver(page);

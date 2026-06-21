@@ -3,6 +3,7 @@ import type { IWorkbookData } from '@univerjs/core';
 import { useWorkbook } from '../use-workbook';
 import { useCollab } from '../collab/collab-context';
 import { useToast } from '../shell/toast/toast-context';
+import { useActivity } from '../shell/activity-context';
 import { clearAutosave, readAutosave, type AutosaveRecord } from './store';
 
 /**
@@ -62,6 +63,7 @@ export function AutosaveRestoreBanner() {
   const workbook = useWorkbook();
   const collab = useCollab();
   const toast = useToast();
+  const activity = useActivity();
   const [rec, setRec] = useState<AutosaveRecord | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -100,6 +102,41 @@ export function AutosaveRestoreBanner() {
 
   const ago = formatAgo(Date.now() - rec.savedAt);
 
+  // The recovery action itself: swap in the snapshot, then clear the
+  // record + hide the banner. Throws on failure — the caller (and the
+  // activity context's retry path) own the UI feedback, so this stays a
+  // pure "do the restore or throw". Wrapping replaceWorkbook is
+  // paranoid (it's sync and shouldn't throw) but a future async
+  // unit-swap or a corrupt snapshot should surface a message, not a
+  // silently blank grid (audit finding 1.3).
+  //
+  // On FAILURE we keep the autosave record so a retry can re-read it.
+  const doRestore = async () => {
+    workbook.replaceWorkbook(
+      rec.data,
+      rec.sourceFormat as Parameters<typeof workbook.replaceWorkbook>[1],
+    );
+    toast.success(`Restored ${rec.name}`);
+    // Await the IDB delete so a fast reload (e.g. test harness) can't
+    // beat us to the next read and resurrect the banner.
+    await clearAutosave();
+    setDismissed(true);
+  };
+
+  // Click handler: run the restore; on failure surface ONE retryable
+  // activity entry whose closure re-runs `doRestore`. The activity
+  // context handles subsequent retry-failure messaging itself, so
+  // `doRestore` must not push its own entries.
+  const runRestore = async () => {
+    try {
+      await doRestore();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't restore ${rec.name}: ${msg}`, { skipActivityLog: true });
+      activity.pushErrorWithRetry(`Couldn't restore ${rec.name}: ${msg}`, doRestore, 'restore');
+    }
+  };
+
   return (
     <div className="autosave-banner" role="status" data-testid="autosave-banner">
       <span className="autosave-banner__text">
@@ -109,28 +146,7 @@ export function AutosaveRestoreBanner() {
         type="button"
         className="autosave-banner__btn autosave-banner__btn--primary"
         data-testid="autosave-restore"
-        onClick={async () => {
-          // Restore + clear + toast feedback. Wrapping
-          // replaceWorkbook in try/catch is paranoid — the function
-          // is sync and shouldn't throw — but if a future Univer
-          // upgrade makes unit-swap async or the snapshot turns out
-          // to be corrupt, we want the user to see a message
-          // instead of a silently blank grid (audit finding 1.3).
-          try {
-            workbook.replaceWorkbook(
-              rec.data,
-              rec.sourceFormat as Parameters<typeof workbook.replaceWorkbook>[1],
-            );
-            toast.success(`Restored ${rec.name}`);
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            toast.error(`Couldn't restore ${rec.name}: ${msg}`);
-          }
-          // Await the IDB delete so a fast reload (e.g. test harness)
-          // can't beat us to the next read and resurrect the banner.
-          await clearAutosave();
-          setDismissed(true);
-        }}
+        onClick={() => void runRestore()}
       >
         Restore
       </button>

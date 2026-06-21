@@ -59,6 +59,13 @@ export type ToastInput =
       kind?: ToastKind;
       duration?: number;
       action?: Toast['action'];
+      /**
+       * Skip the ActivityContext bridge for this toast. Use when the
+       * caller pushes its OWN activity entry (e.g. a retryable save
+       * failure via `pushErrorWithRetry`) and a second, bare bridge
+       * entry would be a duplicate. Only meaningful for `kind: 'error'`.
+       */
+      skipActivityLog?: boolean;
     };
 
 export interface ToastApi {
@@ -68,8 +75,12 @@ export interface ToastApi {
   info: (message: string, opts?: { duration?: number; action?: Toast['action'] }) => number;
   /** `kind: 'success'` shorthand. */
   success: (message: string, opts?: { duration?: number; action?: Toast['action'] }) => number;
-  /** `kind: 'error'` shorthand. Default duration is longer (6 s). */
-  error: (message: string, opts?: { duration?: number; action?: Toast['action'] }) => number;
+  /** `kind: 'error'` shorthand. Default duration is longer (6 s). Pass
+   *  `skipActivityLog` when the caller pushes its own activity entry. */
+  error: (
+    message: string,
+    opts?: { duration?: number; action?: Toast['action']; skipActivityLog?: boolean },
+  ) => number;
   /** Dismiss by id. No-op if the toast already cleared. */
   dismiss: (id: number) => void;
 }
@@ -137,8 +148,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       // (UX_AUDIT.md §4.1 / Phase 4 #14). Toasts vanish after 3.5–6 s;
       // the activity log keeps the failure surface around until the
       // user dismisses it. Window-event so the toast layer stays
-      // unaware of the activity layer.
-      if (normalized.kind === 'error') {
+      // unaware of the activity layer. Callers that push their own
+      // activity entry (retryable failures) opt out via `skipActivityLog`.
+      const skipBridge = typeof input === 'object' && input.skipActivityLog === true;
+      if (normalized.kind === 'error' && !skipBridge) {
         window.dispatchEvent(
           new CustomEvent('cd:activity-error', {
             detail: { message: normalized.message },
@@ -152,23 +165,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       }
       return id;
     },
-    [dismiss]
+    [dismiss],
   );
 
   const info = useCallback(
     (message: string, opts?: { duration?: number; action?: Toast['action'] }) =>
       push({ message, kind: 'info', ...opts }),
-    [push]
+    [push],
   );
   const success = useCallback(
     (message: string, opts?: { duration?: number; action?: Toast['action'] }) =>
       push({ message, kind: 'success', ...opts }),
-    [push]
+    [push],
   );
   const error = useCallback(
-    (message: string, opts?: { duration?: number; action?: Toast['action'] }) =>
-      push({ message, kind: 'error', ...opts }),
-    [push]
+    (
+      message: string,
+      opts?: { duration?: number; action?: Toast['action']; skipActivityLog?: boolean },
+    ) => push({ message, kind: 'error', ...opts }),
+    [push],
   );
 
   // Drain timers on unmount so HMR / tab-close doesn't leak handles.
@@ -182,7 +197,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ToastContextValue>(
     () => ({ toasts, push, info, success, error, dismiss }),
-    [toasts, push, info, success, error, dismiss]
+    [toasts, push, info, success, error, dismiss],
   );
 
   return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;

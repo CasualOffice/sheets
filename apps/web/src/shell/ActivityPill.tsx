@@ -9,10 +9,13 @@ import { useActivity } from './activity-context';
  * - Idle (no entries): renders nothing — the bar stays clean.
  * - With entries: bell icon; a red badge shows the unread count.
  * - Click opens a small popover with the latest N errors. Each row
- *   has a Dismiss button. Footer has "Clear all".
+ *   has a Dismiss button — and, for entries pushed with a recovery
+ *   action (save/export/restore), a Retry button that re-runs it.
+ *   Footer has "Clear all".
  */
 export function ActivityPill() {
-  const { entries, unread, markAllRead, dismiss, clearAll } = useActivity();
+  const { entries, unread, markAllRead, dismiss, clearAll, hasRetry, isRetrying, retryEntry } =
+    useActivity();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -106,8 +109,7 @@ export function ActivityPill() {
             background: '#fff',
             border: '1px solid #e2e8f0',
             borderRadius: 8,
-            boxShadow:
-              '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.10)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.10)',
             zIndex: 1000,
             overflow: 'hidden',
           }}
@@ -161,12 +163,39 @@ export function ActivityPill() {
                   >
                     {entry.message}
                   </div>
-                  <div
-                    style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}
-                  >
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
                     {formatTime(entry.timestamp)}
                   </div>
                 </div>
+                {hasRetry(entry.id) && (
+                  <button
+                    type="button"
+                    onClick={() => void retryEntry(entry.id)}
+                    disabled={isRetrying(entry.id)}
+                    aria-label="Retry"
+                    title="Retry"
+                    data-testid="activity-entry-retry"
+                    data-entry-retry={entry.id}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: isRetrying(entry.id) ? 'default' : 'pointer',
+                      color: isRetrying(entry.id) ? '#94a3b8' : '#2563eb',
+                      padding: 0,
+                      display: 'inline-flex',
+                    }}
+                  >
+                    <Icon
+                      name="refresh"
+                      size="sm"
+                      style={
+                        isRetrying(entry.id)
+                          ? { animation: 'spin 0.7s linear infinite' }
+                          : undefined
+                      }
+                    />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => dismiss(entry.id)}
