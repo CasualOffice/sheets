@@ -10,7 +10,6 @@ import type {
 } from '../auth/personal.js';
 import { isShareRole } from '../auth/personal.js';
 import { currentUser } from '../auth/personal-routes.js';
-import { personalRoomId } from '../auth/personal-room.js';
 
 /**
  * Personal-mode share-link routes (sharing-model §6.1 — the SAFE
@@ -51,21 +50,26 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *  overflow into a meaningless date. */
 const MAX_EXPIRES_DAYS = 100_000;
 const MAX_PASSWORD_LEN = 256;
+/** Defensive cap on the room id — real ids are 12-char base36, but a
+ *  caller could post anything. Bound it so a junk value can't bloat the
+ *  row. */
+const MAX_ROOM_ID_LEN = 128;
 
 export type SharesRoutesOptions = {
-  /** Deprecated / unused. The share-link room is now SERVER-DERIVED from
-   *  the file id (`pf-<workbookId>`), so a client-supplied or
-   *  registry-checked room is no longer part of the mint flow. Kept so an
-   *  existing caller passing `{ roomExists }` still type-checks; the value
-   *  is ignored. */
+  /** Validates that a posted roomId refers to a live room. When omitted
+   *  (e.g. a test that doesn't wire the registry), the roomId is accepted
+   *  opaquely — it's still bound to the token and the collab gate's
+   *  room-match check is the real enforcement. */
   roomExists?: (roomId: string) => boolean;
 };
 
 export function registerPersonalSharesRoutes(
   app: FastifyInstance,
   store: PersonalAuthStore,
-  _options: SharesRoutesOptions = {},
+  options: SharesRoutesOptions = {},
 ): void {
+  const roomExists = options.roomExists ?? null;
+
   // ── GET /files/shares/link/:token/meta ──────────────────────────────
   // PUBLIC pre-join discovery (sharing-model §6.1). The token IS the
   // capability, so this is intentionally NOT owner-gated — it's mounted
@@ -112,16 +116,11 @@ export function registerPersonalSharesRoutes(
   });
 
   // ── POST /files/:id/shares/link ─────────────────────────────────────
-  // Mint a token bound to the file's DETERMINISTIC personal-file room
-  // `pf-<workbookId>` (sharing-model §6.1 + §6.2). The room is now
-  // SERVER-DERIVED from the path `:id` — links + member access converge on
-  // the same room. Binding the token to that room at mint time is what
-  // stops a token from being replayed against another room (the
-  // enforcement gate rejects a token whose room_id != the room joined).
-  //
-  // Body: { role, expiresInDays?, password? }. A legacy client may still
-  // send `roomId`; it is IGNORED in favour of the server-derived value
-  // (never trust a client-supplied room for a capability binding).
+  // Mint a token bound to a specific collab room. Body:
+  //   { roomId, role, expiresInDays?, password? }.
+  // roomId is REQUIRED — the token is the capability to JOIN that room,
+  // and binding it at mint time is what stops a token from being replayed
+  // against another room (rooms are anonymous + not keyed by workbookId).
   app.post<{
     Params: { id: string };
     Body: { roomId?: unknown; role?: unknown; expiresInDays?: unknown; password?: unknown };
@@ -129,11 +128,14 @@ export function registerPersonalSharesRoutes(
     const ctx = ownedFileCtx(req, reply, store);
     if (!ctx) return;
     const body = (req.body ?? {}) as {
+      roomId?: unknown;
       role?: unknown;
       expiresInDays?: unknown;
       password?: unknown;
     };
 
+    const roomId = parseRoomId(body.roomId, reply, roomExists);
+    if (roomId === INVALID) return;
     if (!isShareRole(body.role)) {
       return reply.code(400).send({ error: 'invalid-role' });
     }
@@ -141,13 +143,6 @@ export function registerPersonalSharesRoutes(
     if (expiresAt === INVALID) return;
     const password = parsePassword(body.password, reply);
     if (password === INVALID) return;
-
-    // Server-derived room — NEVER a client-supplied one. `roomExists` is
-    // intentionally NOT consulted: a personal-file room is reachable by
-    // its deterministic id even before anyone has opened it (the room is
-    // created lazily on first join), so requiring a live room here would
-    // make minting a link impossible for a not-yet-open file.
-    const roomId = personalRoomId(ctx.record.id);
 
     const link = store.createShareLink({
       workbookId: ctx.record.id,
@@ -157,17 +152,6 @@ export function registerPersonalSharesRoutes(
       expiresAt,
       password,
     });
-    req.log.info(
-      {
-        evt: 'share.link.mint',
-        workbookId: ctx.record.id,
-        actor: ctx.user.id,
-        role: link.role,
-        hasPassword: link.passwordHash !== null,
-        expiresAt: link.expiresAt,
-      },
-      'share.link.mint',
-    );
     // The URL shape is a fragment query the client appends to whatever
     // room/file URL it's already on — we don't hardcode an origin here
     // (the host owns its public URL). See sharing-model §3.5.
@@ -205,16 +189,6 @@ export function registerPersonalSharesRoutes(
 
     const updated = store.updateShareLink(link.token, patch);
     if (!updated) return reply.code(404).send({ error: 'not-found' });
-    req.log.info(
-      {
-        evt: 'share.link.patch',
-        workbookId: ctx.record.id,
-        actor: ctx.user.id,
-        role: updated.role,
-        expiresAt: updated.expiresAt,
-      },
-      'share.link.patch',
-    );
     return reply.send(toPublicLink(updated));
   });
 
@@ -227,10 +201,6 @@ export function registerPersonalSharesRoutes(
       const link = tokenOnFileOr404(store, ctx.record.id, req.params.token, reply);
       if (!link) return;
       store.deleteShareLink(link.token);
-      req.log.info(
-        { evt: 'share.link.revoke', workbookId: ctx.record.id, actor: ctx.user.id },
-        'share.link.revoke',
-      );
       return reply.code(204).send();
     },
   );
@@ -286,16 +256,6 @@ export function registerPersonalSharesRoutes(
       role: body.role,
       createdBy: ctx.user.id,
     });
-    req.log.info(
-      {
-        evt: 'share.member.set',
-        workbookId: ctx.record.id,
-        actor: ctx.user.id,
-        member: member.id,
-        role: acl.role,
-      },
-      'share.member.set',
-    );
     return reply.code(201).send(
       toPublicMember({
         ...acl,
@@ -334,16 +294,6 @@ export function registerPersonalSharesRoutes(
     });
     const updated = store.listMemberAcls(ctx.record.id).find((m) => m.memberId === memberId);
     if (!updated) return reply.code(404).send({ error: 'not-found' });
-    req.log.info(
-      {
-        evt: 'share.member.set',
-        workbookId: ctx.record.id,
-        actor: ctx.user.id,
-        member: memberId,
-        role: updated.role,
-      },
-      'share.member.set',
-    );
     return reply.send(toPublicMember(updated));
   });
 
@@ -358,15 +308,6 @@ export function registerPersonalSharesRoutes(
       if (!store.deleteMemberAcl(ctx.record.id, memberId)) {
         return reply.code(404).send({ error: 'not-found' });
       }
-      req.log.info(
-        {
-          evt: 'share.member.remove',
-          workbookId: ctx.record.id,
-          actor: ctx.user.id,
-          member: memberId,
-        },
-        'share.member.remove',
-      );
       return reply.code(204).send();
     },
   );
@@ -479,6 +420,32 @@ function parseExpiry(raw: unknown, reply: FastifyReply): number | null | typeof 
     return INVALID;
   }
   return Date.now() + raw * DAY_MS;
+}
+
+/** Validate the REQUIRED roomId. Must be a non-empty, sanely-bounded
+ *  string. When a `roomExists` checker is supplied, the room must be
+ *  live — a 404 (not 400) so we don't confirm whether a guessed room id
+ *  exists to a caller who shouldn't know. Sends the error + returns
+ *  INVALID on failure. */
+function parseRoomId(
+  raw: unknown,
+  reply: FastifyReply,
+  roomExists: ((roomId: string) => boolean) | null,
+): string | typeof INVALID {
+  if (typeof raw !== 'string') {
+    reply.code(400).send({ error: 'invalid-room' });
+    return INVALID;
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_ROOM_ID_LEN) {
+    reply.code(400).send({ error: 'invalid-room' });
+    return INVALID;
+  }
+  if (roomExists && !roomExists(trimmed)) {
+    reply.code(404).send({ error: 'room-not-found' });
+    return INVALID;
+  }
+  return trimmed;
 }
 
 /** Validate the optional join password. Empty / omitted → no password

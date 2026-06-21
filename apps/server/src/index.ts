@@ -190,12 +190,13 @@ if (personalMode !== 'none') {
   registerPersonalFilesRoutes(app, personalAuth, host, {
     maxUploadBytes: MAX_UPLOAD_BYTES,
   });
-  // Share-link CRUD (sharing-model §6.1) + member ACLs (§6.2). Tokens are
-  // bound to the file's DETERMINISTIC personal-file room `pf-<workbookId>`
-  // (server-derived from the path :id) at mint time; enforcement lives in
-  // the collab gate (yjs.ts onAuthenticate → resolveMemberJoin), which
-  // converges link + member access on the same room.
-  registerPersonalSharesRoutes(app, personalAuth);
+  // Share-link CRUD (sharing-model §6.1). Tokens are bound to a specific
+  // room at mint time; enforcement lives in the collab gate (yjs.ts
+  // onAuthenticate → resolveJoinRole). The route validates that the
+  // posted roomId refers to a live room before minting.
+  registerPersonalSharesRoutes(app, personalAuth, {
+    roomExists: (roomId) => rooms.get(roomId) !== undefined,
+  });
   app.log.info(
     `personal auth: mode=${personalMode} db=${personalDbPath} users=${personalAuth.stats().userCount}`,
   );
@@ -461,27 +462,6 @@ const hocus = attachHocuspocus(app.server, rooms, storage, '/yjs', {
   resolveLinkRole: personalAuthForCollab
     ? (token) => personalAuthForCollab.getLinkRole(token)
     : null,
-  // Member/session enforcement on deterministic `pf-<workbookId>` rooms
-  // (sharing-model §6.2). Wired only in personal mode — in anonymous-only
-  // deploys this is null and the gate never touches a session (legacy
-  // anonymous path stays byte-identical). The file owner is read from the
-  // files registry (`ownerId`); member roles from the ACL table.
-  personalAuth: personalAuthForCollab
-    ? {
-        resolveSession: (sessionId) => {
-          const u = personalAuthForCollab.resolveSession(sessionId);
-          return u ? { userId: u.id, isAdmin: u.isAdmin } : null;
-        },
-        isOwner: (workbookId, userId) => {
-          const file = personalAuthForCollab.getFile(workbookId);
-          return file !== null && file.ownerId === userId;
-        },
-        memberRole: (workbookId, userId) => personalAuthForCollab.getMemberRole(workbookId, userId),
-      }
-    : null,
-  // §6.3 audit trail — emit join decisions through the server's pino
-  // logger. `app.log.info(obj, msg)` matches the AuditLogger shape.
-  logger: app.log,
 });
 
 const shutdown = async () => {

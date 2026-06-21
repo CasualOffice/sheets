@@ -4,9 +4,8 @@ import type { IncomingMessage, Server } from 'node:http';
 import * as Y from 'yjs';
 import type { RoomRegistry } from './rooms.js';
 import type { DocStorage } from './storage.js';
-import type { ShareLinkRole, ShareRole } from './auth/personal.js';
-import { resolveMemberJoin } from './auth/join-role.js';
-import { workbookIdForRoom } from './auth/personal-room.js';
+import type { ShareLinkRole } from './auth/personal.js';
+import { resolveJoinRole } from './auth/join-role.js';
 
 /** Resolve a share token to its persisted role/room/password, respecting
  *  expiry, or null. In production this is `PersonalAuthStore.getLinkRole`,
@@ -14,68 +13,11 @@ import { workbookIdForRoom } from './auth/personal-room.js';
  *  in which case any `?share=` token is treated as invalid and rejected. */
 export type ResolveLinkRole = (token: string) => ShareLinkRole | null;
 
-/** The authenticated joiner (resolved from the `cs_session` cookie), or
- *  null when anonymous. */
-export type SessionUser = { userId: number; isAdmin: boolean };
-
-/** Personal-mode hooks the collab gate needs to enforce member access on
- *  a deterministic `pf-<workbookId>` room (sharing-model §6.2). Bound in
- *  index.ts from the `PersonalAuthStore`; null in anonymous-only deploys,
- *  where the gate NEVER touches a session and the legacy anonymous path
- *  applies unchanged. */
-export type PersonalAuth = {
-  /** Resolve a `cs_session` cookie value to the signed-in user. */
-  resolveSession: (sessionId: string | null | undefined) => SessionUser | null;
-  /** True when `userId` owns `workbookId` (file registry `ownerId`). */
-  isOwner: (workbookId: string, userId: number) => boolean;
-  /** The member's ACL role on `workbookId`, or null. */
-  memberRole: (workbookId: string, userId: number) => ShareRole | null;
-};
-
 export type AttachHocuspocusOptions = {
   /** Wired only in personal mode. When absent, share tokens can't be
    *  validated, so a `?share=` join is rejected rather than trusted. */
   resolveLinkRole?: ResolveLinkRole | null;
-  /** Wired only in personal mode. When absent, the session/member gate is
-   *  skipped entirely — pf- rooms aren't reachable yet (next batch wires
-   *  the client open flow) and anonymous rooms keep legacy behaviour. */
-  personalAuth?: PersonalAuth | null;
-  /** Structured logger for the §6.3 audit trail. Defaults to a no-op so
-   *  tests / anonymous deploys don't require one. Shaped to match pino's
-   *  `(obj, msg)` signature (Fastify's `app.log`), kept structural so we
-   *  don't take a hard pino type dependency here. */
-  logger?: AuditLogger | null;
 };
-
-/** Minimal structured-logger shape — pino's `info(obj, msg?)`. Fastify's
- *  `app.log` satisfies this. */
-export type AuditLogger = {
-  info: (obj: Record<string, unknown>, msg?: string) => void;
-};
-
-/** The session cookie name — must match `personal-routes.ts` COOKIE_NAME. */
-const SESSION_COOKIE = 'cs_session';
-
-/** Parse a single cookie value out of a raw `Cookie:` header without a
- *  dependency. Cookies are `name=value; name2=value2`; values may be
- *  percent-encoded. Returns null when the name isn't present. */
-function readCookie(header: string | undefined, name: string): string | null {
-  if (!header) return null;
-  for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq === -1) continue;
-    if (part.slice(0, eq).trim() !== name) continue;
-    const raw = part.slice(eq + 1).trim();
-    try {
-      return decodeURIComponent(raw);
-    } catch {
-      // Malformed encoding — hand back the raw value rather than throw;
-      // an invalid session id just resolves to null downstream.
-      return raw;
-    }
-  }
-  return null;
-}
 
 /**
  * Wire Hocuspocus to a Node http server. Hocuspocus owns the Yjs sync
@@ -91,13 +33,6 @@ export function attachHocuspocus(
   options: AttachHocuspocusOptions = {},
 ): { hocuspocus: Hocuspocus; close: () => Promise<void> } {
   const resolveLinkRole = options.resolveLinkRole ?? null;
-  const personalAuth = options.personalAuth ?? null;
-  const auditLog = options.logger ?? null;
-  /** Emit a §6.3 audit event. No-op when no logger is wired. NEVER pass
-   *  a token value or password through here — only the fields below. */
-  const audit = (event: Record<string, unknown>) => {
-    auditLog?.info(event, 'share.audit');
-  };
   // Debounce per-room saves so a rapid burst of edits doesn't hammer Redis.
   // 500 ms feels right for "still feels live, doesn't write on every keystroke".
   const SAVE_DEBOUNCE_MS = 500;
@@ -149,92 +84,40 @@ export function attachHocuspocus(
      * Share-token enforcement (sharing-model §6.1): when the join URL
      * carries `?share=<token>`, the server becomes AUTHORITATIVE. We
      * IGNORE the client `?role=` entirely and derive the privilege from
-     * the persisted, room-bound token via the pure resolver.
-     *
-     * Member enforcement (sharing-model §6.2): when the room is a
-     * deterministic `pf-<workbookId>` personal-file room AND no token is
-     * present, we derive the privilege from the joiner's SESSION (the
-     * `cs_session` cookie → owner / admin / member ACL). An anonymous
-     * joiner on a pf- room is REJECTED. The session/member gate runs ONLY
-     * when `personalAuth` is wired AND the room is a pf- room — anonymous
-     * random rooms NEVER pass through it.
-     *
-     * Any reject (token failure OR no-access) THROWS — Hocuspocus turns a
-     * throw in onAuthenticate into a closed connection (its `Unauthorized`
-     * close), matching the unauthorized pattern the upgrade handler uses
-     * for the room password. Without a token AND on a non-pf- room we fall
-     * through to the EXACT legacy anonymous behaviour below.
-     *
-     * NOTE (scope): this member gate is INERT until the next batch wires
-     * the CLIENT open flow to connect personal files to `pf-` rooms — no
-     * client reaches a pf- room yet, so in practice only the §6.1 token
-     * path + the legacy anonymous path fire today. That's expected.
+     * the persisted, room-bound token via the pure `resolveJoinRole`.
+     * Any token failure (invalid / expired / wrong room / bad share
+     * password) THROWS — Hocuspocus turns a throw in onAuthenticate into
+     * a closed connection (its `Unauthorized` close), matching the
+     * unauthorized pattern the upgrade handler uses for the room
+     * password. Without a token we fall through to the EXACT legacy
+     * anonymous behaviour below.
      */
-    async onAuthenticate({ requestParameters, requestHeaders, connection, documentName }) {
-      const token = requestParameters.get('share') ?? null;
-      const sharePassword = requestParameters.get('sp') ?? null;
+    async onAuthenticate({ requestParameters, connection, documentName }) {
+      const token = requestParameters.get('share');
 
-      // Resolve the signed-in user from the cs_session cookie — ONLY when
-      // a personal store is wired. The cookie rides the WS upgrade request
-      // headers (Hocuspocus surfaces them as `requestHeaders`).
-      const session = personalAuth
-        ? personalAuth.resolveSession(readCookie(requestHeaders.cookie, SESSION_COOKIE))
-        : null;
-
-      const decision = resolveMemberJoin({
+      const decision = resolveJoinRole({
+        token: token ?? null,
         documentName,
-        token,
-        sharePassword,
-        session,
+        sharePassword: requestParameters.get('sp') ?? null,
         // No personal store wired (anonymous-only deploy) → no token can
         // be validated, so treat every token as unknown (rejects below).
-        lookupLink: (t) => (resolveLinkRole ? resolveLinkRole(t) : null),
-        isOwner: (workbookId, userId) =>
-          personalAuth ? personalAuth.isOwner(workbookId, userId) : false,
-        memberRole: (workbookId, userId) =>
-          personalAuth ? personalAuth.memberRole(workbookId, userId) : null,
+        lookup: (t) => (resolveLinkRole ? resolveLinkRole(t) : null),
       });
-
-      const workbookId = workbookIdForRoom(documentName);
 
       if ('reject' in decision) {
         // Refuse the connection. Throwing is the documented way to fail
         // Hocuspocus auth; it closes the socket. We deliberately do NOT
         // leak WHICH check failed to the client (all reasons collapse to
         // one error) — only the server log distinguishes them.
-        audit({
-          evt: 'share.join',
-          workbookId,
-          actor: session?.userId ?? null,
-          role: null,
-          via: 'reject',
-          reason: decision.reject,
-        });
-        throw new Error(`join rejected: ${decision.reject}`);
+        throw new Error(`share-token rejected: ${decision.reject}`);
       }
 
-      if (
-        decision.via === 'share-token' ||
-        decision.via === 'owner' ||
-        decision.via === 'admin' ||
-        decision.via === 'member'
-      ) {
-        // comment → readOnly (binary). Fine-grained comment-mode (permit
-        // comment mutations, block cell edits) is the same DEFERRED
-        // follow-up noted in resolveJoinRole — it needs Univer-permission
-        // work in the client, not this server gate.
+      if (decision.via === 'share-token') {
         connection.readOnly = decision.readOnly;
-        audit({
-          evt: 'share.join',
-          workbookId,
-          actor: session?.userId ?? null,
-          role: decision.role,
-          via: decision.via === 'share-token' ? 'token' : decision.via,
-        });
-        return { role: decision.role, via: decision.via };
+        return { role: decision.role, via: 'share-token' as const };
       }
 
-      // ── No token, non-pf- room → legacy anonymous path, unchanged. ──
+      // ── No token → legacy anonymous path, unchanged. ────────────────
       const role = requestParameters.get('role');
       if (role === 'view') {
         connection.readOnly = true;

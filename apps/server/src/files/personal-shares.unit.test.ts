@@ -42,9 +42,11 @@ async function makeApp(opts: { mode: 'single' | 'multi' | 'none' } = { mode: 'mu
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
   registerPersonalAuthRoutes(app, store);
   registerPersonalFilesRoutes(app, store, host, { maxUploadBytes: 5 * 1024 * 1024 });
-  // The share-link room is now SERVER-DERIVED (`pf-<fileId>`), so no
-  // room-existence wiring is needed — a posted roomId is ignored.
-  registerPersonalSharesRoutes(app, store);
+  // A fixed set of "live" rooms so the share-link route's roomId
+  // existence check passes for the canonical test room and rejects an
+  // unknown one.
+  const liveRooms = new Set(['room-1', 'room-2']);
+  registerPersonalSharesRoutes(app, store, { roomExists: (id) => liveRooms.has(id) });
   await app.ready();
   return {
     app,
@@ -132,11 +134,7 @@ test('share link CRUD: create → list → patch → delete', async () => {
       url: string;
     };
     assert.equal(minted.role, 'edit');
-    assert.equal(
-      minted.roomId,
-      `pf-${fileId}`,
-      'mint binds to the SERVER-DERIVED personal-file room (ignores body roomId)',
-    );
+    assert.equal(minted.roomId, 'room-1', 'mint echoes the bound roomId');
     assert.ok(minted.token.length >= 40);
     assert.ok(minted.expiresAt > Date.now());
     assert.equal(minted.url, `?share=${minted.token}`);
@@ -326,15 +324,13 @@ test('share link: token from a different workbook returns 404 on patch/delete', 
   }
 });
 
-test('share link: a client-supplied roomId is IGNORED — room is server-derived', async () => {
+test('share link: missing / non-string roomId rejected with 400 (invalid-room)', async () => {
   const { app, cleanup } = await makeApp();
   try {
     const cookie = await signup(app, 'alice', 'longpassword');
     const fileId = await uploadFile(app, cookie);
-    // An attacker-controlled body roomId must never bind the token to an
-    // arbitrary room — the server derives `pf-<fileId>` regardless. We
-    // also cover omitting roomId entirely (no longer required).
-    for (const roomId of [undefined, 'attacker-room', 123, '']) {
+    // roomId omitted entirely, and a few non-string shapes.
+    for (const roomId of [undefined, 123, '', '   ']) {
       const payload: Record<string, unknown> = { role: 'view' };
       if (roomId !== undefined) payload.roomId = roomId;
       const r = await app.inject({
@@ -343,19 +339,33 @@ test('share link: a client-supplied roomId is IGNORED — room is server-derived
         headers: { cookie, 'content-type': 'application/json' },
         payload,
       });
-      assert.equal(r.statusCode, 201, `roomId=${String(roomId)} should still mint`);
-      assert.equal(
-        JSON.parse(r.body).roomId,
-        `pf-${fileId}`,
-        `roomId=${String(roomId)} must bind to the server-derived room`,
-      );
+      assert.equal(r.statusCode, 400, `roomId=${String(roomId)} should 400`);
+      assert.equal(JSON.parse(r.body).error, 'invalid-room');
     }
   } finally {
     await cleanup();
   }
 });
 
-test('share link: list + mint surface the server-derived roomId', async () => {
+test('share link: unknown roomId rejected with 404 (room-not-found)', async () => {
+  const { app, cleanup } = await makeApp();
+  try {
+    const cookie = await signup(app, 'alice', 'longpassword');
+    const fileId = await uploadFile(app, cookie);
+    const r = await app.inject({
+      method: 'POST',
+      url: `/files/${fileId}/shares/link`,
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: { roomId: 'room-does-not-exist', role: 'view' },
+    });
+    assert.equal(r.statusCode, 404);
+    assert.equal(JSON.parse(r.body).error, 'room-not-found');
+  } finally {
+    await cleanup();
+  }
+});
+
+test('share link: list + mint surface the bound roomId', async () => {
   const { app, cleanup } = await makeApp();
   try {
     const cookie = await signup(app, 'alice', 'longpassword');
@@ -364,10 +374,10 @@ test('share link: list + mint surface the server-derived roomId', async () => {
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie, 'content-type': 'application/json' },
-      payload: { role: 'edit' },
+      payload: { roomId: 'room-2', role: 'edit' },
     });
     assert.equal(mint.statusCode, 201);
-    assert.equal(JSON.parse(mint.body).roomId, `pf-${fileId}`);
+    assert.equal(JSON.parse(mint.body).roomId, 'room-2');
 
     const list = await app.inject({
       method: 'GET',
@@ -375,7 +385,7 @@ test('share link: list + mint surface the server-derived roomId', async () => {
       headers: { cookie },
     });
     const links = JSON.parse(list.body).links as Array<{ roomId: string }>;
-    assert.equal(links[0]?.roomId, `pf-${fileId}`, 'list surfaces the server-derived roomId');
+    assert.equal(links[0]?.roomId, 'room-2', 'list surfaces roomId');
   } finally {
     await cleanup();
   }
@@ -419,7 +429,7 @@ test('share link /meta: valid token returns role + hasPassword + roomId (no hash
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie, 'content-type': 'application/json' },
-      payload: { role: 'edit', password: 'secret' },
+      payload: { roomId: 'room-1', role: 'edit', password: 'secret' },
     });
     assert.equal(mint.statusCode, 201, mint.body);
     const token = JSON.parse(mint.body).token as string;
@@ -431,7 +441,7 @@ test('share link /meta: valid token returns role + hasPassword + roomId (no hash
     assert.equal(body.valid, true);
     assert.equal(body.role, 'edit');
     assert.equal(body.hasPassword, true);
-    assert.equal(body.roomId, `pf-${fileId}`);
+    assert.equal(body.roomId, 'room-1');
     // The bcrypt hash must NEVER appear in the public response.
     assert.equal(body.passwordHash, undefined, 'passwordHash must not leak');
     assert.ok(!('passwordHash' in body), 'no passwordHash key at all');
@@ -449,7 +459,7 @@ test('share link /meta: a no-password link reports hasPassword=false', async () 
       method: 'POST',
       url: `/files/${fileId}/shares/link`,
       headers: { cookie, 'content-type': 'application/json' },
-      payload: { role: 'view' },
+      payload: { roomId: 'room-2', role: 'view' },
     });
     const token = JSON.parse(mint.body).token as string;
 
@@ -459,7 +469,7 @@ test('share link /meta: a no-password link reports hasPassword=false', async () 
     assert.equal(body.valid, true);
     assert.equal(body.role, 'view');
     assert.equal(body.hasPassword, false);
-    assert.equal(body.roomId, `pf-${fileId}`);
+    assert.equal(body.roomId, 'room-2');
   } finally {
     await cleanup();
   }
