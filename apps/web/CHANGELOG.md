@@ -1,5 +1,12 @@
 # @sheet/web
 
+## 0.4.7
+
+### Patch Changes
+
+- Updated dependencies [7606355]
+  - @casualoffice/sheets@0.15.1
+
 ## 0.4.6
 
 ### Patch Changes
