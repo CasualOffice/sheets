@@ -123,6 +123,20 @@ export type ChartFormat = {
    *  survives reload + xlsx round-trip via the chart's `format`
    *  payload. */
   seriesColors?: Record<string, string>;
+  /** Combo charts: per-series render-kind override, keyed by series
+   *  name. Lets a column/bar/line/area chart mix bar + line series
+   *  (Excel's "Combo" chart type). Missing entries fall back to the
+   *  chart's base `type`. Only `'bar'` and `'line'` are offered; pie /
+   *  doughnut / scatter / 100%-stacked ignore this. */
+  seriesTypes?: Record<string, 'bar' | 'line'>;
+  /** Dual axis: when a series name maps to `true`, that series is
+   *  plotted against a secondary value axis (Excel's "Secondary Axis"
+   *  checkbox in the Format Data Series pane). The chart then renders
+   *  with two value axes — primary on the left, secondary on the
+   *  right. Only meaningful for the bar / column / line / area
+   *  families; ignored by pie / doughnut / scatter / 100%-stacked
+   *  (a shared 0–100% scale defeats the purpose). */
+  secondaryAxis?: Record<string, boolean>;
 };
 
 export type ChartPalette = 'office' | 'mono' | 'vivid' | 'pastel';
@@ -143,12 +157,12 @@ export function defaultFormat(model: Pick<ChartModel, 'title'>): ResolvedChartFo
     palette: 'office',
     trendline: false,
     seriesColors: {},
+    seriesTypes: {},
+    secondaryAxis: {},
   };
 }
 
-export function mergeFormat(
-  model: Pick<ChartModel, 'title' | 'format'>,
-): ResolvedChartFormat {
+export function mergeFormat(model: Pick<ChartModel, 'title' | 'format'>): ResolvedChartFormat {
   const base = defaultFormat(model);
   const f = model.format ?? {};
   return {
@@ -159,6 +173,8 @@ export function mergeFormat(
     palette: f.palette ?? base.palette,
     trendline: f.trendline ?? base.trendline,
     seriesColors: f.seriesColors ?? base.seriesColors,
+    seriesTypes: f.seriesTypes ?? base.seriesTypes,
+    secondaryAxis: f.secondaryAxis ?? base.secondaryAxis,
     xAxisTitle: f.xAxisTitle,
     yAxisTitle: f.yAxisTitle,
   };
@@ -168,24 +184,24 @@ export function mergeFormat(
  *  Excel's default colour sets so the look stays familiar. */
 export const PALETTES: Record<ChartPalette, string[]> = {
   office: ['#5B9BD5', '#ED7D31', '#A5A5A5', '#FFC000', '#4472C4', '#70AD47', '#264478', '#9E480E'],
-  mono:   ['#1F77B4', '#3F8FBC', '#5FA7C5', '#7FBFCD', '#9FD7D6', '#BFEFDE', '#5A8DAA', '#3D6E89'],
-  vivid:  ['#E63946', '#F1A208', '#06A77D', '#005F73', '#9B5DE5', '#F15BB5', '#00BBF9', '#00F5D4'],
+  mono: ['#1F77B4', '#3F8FBC', '#5FA7C5', '#7FBFCD', '#9FD7D6', '#BFEFDE', '#5A8DAA', '#3D6E89'],
+  vivid: ['#E63946', '#F1A208', '#06A77D', '#005F73', '#9B5DE5', '#F15BB5', '#00BBF9', '#00F5D4'],
   pastel: ['#A3CEF1', '#FFD6A5', '#CAFFBF', '#FFADAD', '#BDB2FF', '#FDFFB6', '#FFC6FF', '#9BF6FF'],
 };
 
 export const PALETTE_LABELS: Record<ChartPalette, string> = {
   office: 'Office',
-  mono:   'Monochromatic',
-  vivid:  'Vivid',
+  mono: 'Monochromatic',
+  vivid: 'Vivid',
   pastel: 'Pastel',
 };
 
 export const LEGEND_POSITIONS: { id: NonNullable<ChartFormat['legend']>; label: string }[] = [
   { id: 'bottom', label: 'Bottom' },
-  { id: 'top',    label: 'Top' },
-  { id: 'right',  label: 'Right' },
-  { id: 'left',   label: 'Left' },
-  { id: 'none',   label: 'None' },
+  { id: 'top', label: 'Top' },
+  { id: 'right', label: 'Right' },
+  { id: 'left', label: 'Left' },
+  { id: 'none', label: 'None' },
 ];
 
 export function newChartId(): string {

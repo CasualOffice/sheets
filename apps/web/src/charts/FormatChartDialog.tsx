@@ -43,6 +43,16 @@ export function FormatChartDialog({ model, seriesNames, onCancel, onConfirm }: P
   const merged = mergeFormat(model);
   const family = CHART_FAMILY_OF[model.type];
   const isAxisFamily = family !== 'pie';
+  // Combo (mix bar + line) and a secondary value axis only make sense
+  // on a vertical, absolute-scale chart: column / line / area. 100%-
+  // stacked variants pin every series to a shared 0–100% scale, and
+  // horizontal bars swap the axes so "secondary axis on the right"
+  // stops reading like Excel — mirror the gate in `build-option.ts`.
+  const is100 = model.type === 'column-stacked-100' || model.type === 'bar-stacked-100';
+  const isHorizontalBar = family === 'bar';
+  const supportsComboAndDualAxis =
+    isAxisFamily && family !== 'scatter' && !is100 && !isHorizontalBar;
+  const baseSeriesKind: 'bar' | 'line' = family === 'line' || family === 'area' ? 'line' : 'bar';
   const [title, setTitle] = useState(model.title ?? '');
   const [showTitle, setShowTitle] = useState(merged.showTitle);
   const [legend, setLegend] = useState(merged.legend);
@@ -55,6 +65,12 @@ export function FormatChartDialog({ model, seriesNames, onCancel, onConfirm }: P
   const [seriesColors, setSeriesColors] = useState<Record<string, string>>(
     merged.seriesColors ?? {},
   );
+  const [seriesTypes, setSeriesTypes] = useState<Record<string, 'bar' | 'line'>>(
+    merged.seriesTypes ?? {},
+  );
+  const [secondaryAxis, setSecondaryAxis] = useState<Record<string, boolean>>(
+    merged.secondaryAxis ?? {},
+  );
 
   const confirm = () => {
     // Strip empty / palette-matching overrides so the payload only
@@ -62,6 +78,22 @@ export function FormatChartDialog({ model, seriesNames, onCancel, onConfirm }: P
     const trimmedSeriesColors: Record<string, string> = {};
     for (const [name, color] of Object.entries(seriesColors)) {
       if (color && color.trim()) trimmedSeriesColors[name] = color;
+    }
+    // Only persist series-kind overrides that actually differ from the
+    // chart's base kind, and secondary-axis flags that are `true`, so
+    // the payload stays minimal (and toggling back to the default
+    // cleanly removes the override).
+    const trimmedSeriesTypes: Record<string, 'bar' | 'line'> = {};
+    if (supportsComboAndDualAxis) {
+      for (const [name, kind] of Object.entries(seriesTypes)) {
+        if (kind && kind !== baseSeriesKind) trimmedSeriesTypes[name] = kind;
+      }
+    }
+    const trimmedSecondaryAxis: Record<string, boolean> = {};
+    if (supportsComboAndDualAxis) {
+      for (const [name, on] of Object.entries(secondaryAxis)) {
+        if (on) trimmedSecondaryAxis[name] = true;
+      }
     }
     onConfirm({
       showTitle,
@@ -73,6 +105,8 @@ export function FormatChartDialog({ model, seriesNames, onCancel, onConfirm }: P
       palette,
       trendline,
       seriesColors: trimmedSeriesColors,
+      seriesTypes: trimmedSeriesTypes,
+      secondaryAxis: trimmedSecondaryAxis,
       // Title text is part of the chart's identity (`ChartModel.title`)
       // not its format. The caller reads the trimmed title via the
       // form input below and applies it alongside the format patch.
@@ -225,6 +259,59 @@ export function FormatChartDialog({ model, seriesNames, onCancel, onConfirm }: P
           </Section>
         )}
 
+        {/* Combo + dual axis — per-series render-kind (bar/line) and a
+            secondary value axis. Only shown for column / line / area
+            charts where it's meaningful, and when the caller supplied
+            series names. */}
+        {supportsComboAndDualAxis && seriesNames && seriesNames.length > 0 && (
+          <Section legend="Series type & axis">
+            <p className="format-chart__hint">
+              Mix bars and lines, and plot a series against a secondary (right) axis.
+            </p>
+            <div className="format-chart__series-rows">
+              {seriesNames.map((name, idx) => {
+                const kind = seriesTypes[name] ?? baseSeriesKind;
+                const onSecondary = Boolean(secondaryAxis[name]);
+                return (
+                  <div
+                    key={name}
+                    className="format-chart__series-row"
+                    data-testid={`format-chart-combo-${idx}`}
+                  >
+                    <span className="format-chart__series-name">{name}</span>
+                    <select
+                      className="format-chart__series-kind"
+                      data-testid={`format-chart-series-kind-${idx}`}
+                      aria-label={`${name} chart type`}
+                      value={kind}
+                      onChange={(e) =>
+                        setSeriesTypes({
+                          ...seriesTypes,
+                          [name]: e.target.value as 'bar' | 'line',
+                        })
+                      }
+                    >
+                      <option value="bar">Bars</option>
+                      <option value="line">Line</option>
+                    </select>
+                    <label className="format-chart__checkbox format-chart__series-secondary">
+                      <input
+                        type="checkbox"
+                        data-testid={`format-chart-secondary-axis-${idx}`}
+                        checked={onSecondary}
+                        onChange={(e) =>
+                          setSecondaryAxis({ ...secondaryAxis, [name]: e.target.checked })
+                        }
+                      />
+                      <span>Secondary axis</span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+        )}
+
         <Section legend="Colors">
           <div className="format-chart__palettes" role="radiogroup" aria-label="Color palette">
             {(Object.keys(PALETTES) as ChartPalette[]).map((p) => (
@@ -278,9 +365,7 @@ export function FormatChartDialog({ model, seriesNames, onCancel, onConfirm }: P
                       className="format-chart__series-color"
                       data-testid={`format-chart-series-color-${idx}`}
                       value={override || defaultColor}
-                      onChange={(e) =>
-                        setSeriesColors({ ...seriesColors, [name]: e.target.value })
-                      }
+                      onChange={(e) => setSeriesColors({ ...seriesColors, [name]: e.target.value })}
                     />
                     {override && (
                       <button

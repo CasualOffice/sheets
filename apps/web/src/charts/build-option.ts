@@ -68,7 +68,15 @@ export function buildEChartsOption(api: FUniver, model: ChartModel): EChartsOpti
   // 2024) than the literal category strings. Pie/scatter/doughnut
   // ignore this (no category axis); buildOptionForType branches on it.
   const dates = detectDateCategories(categories);
-  return buildOptionForType(model.type, headers, categories, seriesData, model.title, format, dates);
+  return buildOptionForType(
+    model.type,
+    headers,
+    categories,
+    seriesData,
+    model.title,
+    format,
+    dates,
+  );
 }
 
 /**
@@ -128,9 +136,7 @@ function buildOptionForType(
           radius: type === 'doughnut' ? ['40%', '70%'] : '60%',
           center: ['50%', titleNode ? '52%' : '48%'],
           data: pieData,
-          label: format.dataLabels
-            ? { formatter: '{b}: {c}' }
-            : { formatter: '{b}' },
+          label: format.dataLabels ? { formatter: '{b}: {c}' } : { formatter: '{b}' },
         },
       ],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -182,6 +188,19 @@ function buildOptionForType(
 
   const isHorizontalBar = type === 'bar' || type === 'bar-stacked' || type === 'bar-stacked-100';
   const is100 = type === 'column-stacked-100' || type === 'bar-stacked-100';
+  // Combo + dual-axis only make sense on a plain (non-100%, non-
+  // horizontal) value-vs-category chart: column / line / area. A 100%-
+  // stacked chart already pins both series to a shared 0–100% scale,
+  // and horizontal bars swap the axes so a "secondary value axis on
+  // the right" no longer reads as Excel does it. Gate the features
+  // here so the rest of the branch can assume vertical, absolute axes.
+  const allowComboAndDualAxis = !is100 && !isHorizontalBar;
+  // Per-series secondary-axis flags, restricted to series that actually
+  // exist in this chart. Empty unless the feature applies.
+  const secondarySeries = allowComboAndDualAxis
+    ? headers.filter((name) => format.secondaryAxis?.[name])
+    : [];
+  const hasSecondaryAxis = secondarySeries.length > 0;
   const isStacked =
     type === 'column-stacked' ||
     type === 'column-stacked-100' ||
@@ -211,14 +230,16 @@ function buildOptionForType(
 
   const series = headers.map((name, sIdx) => {
     const raw = rawSeries[sIdx] ?? [];
-    const dataRaw = is100 && sumPerCat
-      ? raw.map((v, i) => (typeof v === 'number' ? (v / sumPerCat[i]) * 100 : null))
-      : raw;
+    const dataRaw =
+      is100 && sumPerCat
+        ? raw.map((v, i) => (typeof v === 'number' ? (v / sumPerCat[i]) * 100 : null))
+        : raw;
     // ECharts' time axis wants `[timestamp, value]` pairs. The
     // category axis takes plain values aligned with the axis labels.
-    const data = useTimeAxis && dateCategories
-      ? (dataRaw as Array<number | null>).map((v, i) => [dateCategories[i], v])
-      : dataRaw;
+    const data =
+      useTimeAxis && dateCategories
+        ? (dataRaw as Array<number | null>).map((v, i) => [dateCategories[i], v])
+        : dataRaw;
     const trendlineMark = format.trendline
       ? buildTrendlineMark(dataRaw as Array<number | null>)
       : undefined;
@@ -226,16 +247,32 @@ function buildOptionForType(
     // colour for this series in the Format Chart dialog, it wins over
     // the palette's default. Stored on `format.seriesColors[name]`.
     const overrideColor = format.seriesColors?.[name];
+    // Combo: a per-series render-kind override turns this single series
+    // into a bar or line regardless of the chart's base type. Only
+    // honoured on the column / line / area families (see
+    // `allowComboAndDualAxis`). Area's fill is preserved only when the
+    // series stays a line; an explicit `bar` override drops the fill.
+    const seriesKind = allowComboAndDualAxis ? format.seriesTypes?.[name] : undefined;
+    const resolvedType: 'bar' | 'line' = seriesKind ?? echartsType;
+    const seriesIsLine = resolvedType === 'line';
+    const seriesIsArea = isArea && seriesIsLine && !seriesKind;
+    // Dual axis: route this series to yAxisIndex 1 (the secondary,
+    // right-hand value axis) when flagged. `yAxis` becomes a two-entry
+    // array below; primary series keep the default index 0.
+    const onSecondary = allowComboAndDualAxis && Boolean(format.secondaryAxis?.[name]);
     return {
       name,
-      type: echartsType,
+      type: resolvedType,
       data,
-      ...(isStacked ? { stack: 'all' as const } : {}),
-      ...(isArea ? { areaStyle: {} } : {}),
-      ...(isLine ? { smooth: false, symbol: 'circle' as const, symbolSize: 4 } : {}),
+      ...(hasSecondaryAxis ? { yAxisIndex: onSecondary ? 1 : 0 } : {}),
+      ...(isStacked && !seriesKind ? { stack: 'all' as const } : {}),
+      ...(seriesIsArea ? { areaStyle: {} } : {}),
+      ...(seriesIsLine ? { smooth: false, symbol: 'circle' as const, symbolSize: 4 } : {}),
       ...(trendlineMark ? { markLine: trendlineMark } : {}),
-      ...(overrideColor ? { itemStyle: { color: overrideColor }, lineStyle: { color: overrideColor } } : {}),
-      label: dataLabelConfig(format, isHorizontalBar, isLine || isArea),
+      ...(overrideColor
+        ? { itemStyle: { color: overrideColor }, lineStyle: { color: overrideColor } }
+        : {}),
+      label: dataLabelConfig(format, isHorizontalBar, seriesIsLine),
     };
   });
 
@@ -265,6 +302,34 @@ function buildOptionForType(
     valueAxis.axisLabel = { formatter: '{value}%' };
   }
 
+  // Dual axis: build a second value axis aligned to the right. Its name
+  // defaults to the secondary series' name(s) so the reader can tell
+  // which line/bars it scales. `gridlines` is left off the secondary
+  // axis to avoid two overlapping splitLine grids fighting each other.
+  const secondaryValueAxis: Record<string, unknown> | null = hasSecondaryAxis
+    ? {
+        type: 'value' as const,
+        name: secondarySeries.join(' / '),
+        nameLocation: 'middle',
+        nameGap: 40,
+        position: 'right',
+        splitLine: { show: false },
+      }
+    : null;
+
+  // The value axis lives on Y for vertical charts. When a secondary
+  // axis is requested we emit `yAxis: [primary, secondary]` and the
+  // series above carry `yAxisIndex`. Horizontal bars + 100%-stacked
+  // never reach here with `hasSecondaryAxis` (gated by
+  // `allowComboAndDualAxis`), so the single-axis path stays unchanged
+  // for them.
+  const yAxisNode =
+    !isHorizontalBar && secondaryValueAxis
+      ? [valueAxis, secondaryValueAxis]
+      : isHorizontalBar
+        ? categoryAxis
+        : valueAxis;
+
   return {
     color: colors,
     title: titleNode,
@@ -273,9 +338,9 @@ function buildOptionForType(
       ...(is100 ? { valueFormatter: (v: unknown) => `${Math.round(Number(v))}%` } : {}),
     },
     legend: legendNode,
-    grid: chartGrid(format, titleNode != null),
+    grid: chartGrid(format, titleNode != null, hasSecondaryAxis),
     xAxis: isHorizontalBar ? valueAxis : categoryAxis,
-    yAxis: isHorizontalBar ? categoryAxis : valueAxis,
+    yAxis: yAxisNode,
     series,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
@@ -306,13 +371,14 @@ function legendOption(format: ResolvedChartFormat): Record<string, unknown> | un
 function chartGrid(
   format: ResolvedChartFormat,
   hasTitle: boolean,
+  hasSecondaryAxis = false,
 ): Record<string, unknown> {
   // Make room for legend / title / axis-name labels by padding the
   // plot area. Without this the value axis name gets clipped by the
   // legend at the bottom.
   const grid: Record<string, unknown> = {
     left: 56,
-    right: 24,
+    right: hasSecondaryAxis ? 56 : 24,
     top: hasTitle ? 40 : 16,
     bottom: 56,
     containLabel: true,
@@ -325,7 +391,9 @@ function chartGrid(
       grid.left = 96;
       break;
     case 'right':
-      grid.right = 96;
+      // A right-side legend AND a secondary axis both compete for the
+      // right margin; widen further so neither clips the other.
+      grid.right = hasSecondaryAxis ? 128 : 96;
       break;
     case 'none':
       grid.bottom = 32;
@@ -356,7 +424,7 @@ function buildTrendlineMark(data: Array<number | null>): Record<string, unknown>
   const points: Array<{ x: number; y: number }> = [];
   for (let i = 0; i < data.length; i += 1) {
     const v = data[i];
-    if (typeof v === "number" && !Number.isNaN(v)) points.push({ x: i, y: v });
+    if (typeof v === 'number' && !Number.isNaN(v)) points.push({ x: i, y: v });
   }
   if (points.length < 2) return undefined;
   const n = points.length;
@@ -380,8 +448,13 @@ function buildTrendlineMark(data: Array<number | null>): Record<string, unknown>
   const yAtMax = slope * xMax + intercept;
   return {
     silent: true,
-    symbol: "none",
-    lineStyle: { type: "dashed", width: 2, opacity: 0.75 },
-    data: [[{ xAxis: xMin, yAxis: yAtMin }, { xAxis: xMax, yAxis: yAtMax }]],
+    symbol: 'none',
+    lineStyle: { type: 'dashed', width: 2, opacity: 0.75 },
+    data: [
+      [
+        { xAxis: xMin, yAxis: yAtMin },
+        { xAxis: xMax, yAxis: yAtMax },
+      ],
+    ],
   };
 }

@@ -100,7 +100,18 @@ export function ChartOverlay({ model, rect, canvasOffset, scroll }: Props) {
     if (!api) return;
     const refresh = () => {
       const opt = buildEChartsOption(api, model);
-      if (opt) echartRef.current?.setOption(opt, true);
+      if (opt) {
+        echartRef.current?.setOption(opt, true);
+        // Expose the resolved ECharts option per chart id so e2e specs
+        // (and manual debugging) can assert on the live config — e.g.
+        // dual-axis charts emit a two-entry `yAxis`. Mirrors the
+        // `window.__univerAPI` test hook; carries no secrets.
+        const w = window as unknown as {
+          __casualChartOptions?: Record<string, unknown>;
+        };
+        w.__casualChartOptions = w.__casualChartOptions ?? {};
+        w.__casualChartOptions[model.id] = opt;
+      }
     };
     refresh();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
