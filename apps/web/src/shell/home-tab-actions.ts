@@ -71,6 +71,17 @@ export function setVerticalAlignment(api: FUniver, alignment: 'top' | 'middle' |
   activeRange(api)?.setVerticalAlignment(alignment);
 }
 
+/**
+ * Text rotation in degrees, -90..90 (0 = horizontal). Maps to Univer's cell
+ * `tr.a` angle via the sheets `FRange.setTextRotation` facade extension.
+ */
+export function setTextRotation(api: FUniver, degrees: number) {
+  const range = activeRange(api) as unknown as {
+    setTextRotation?: (d: number) => unknown;
+  } | null;
+  range?.setTextRotation?.(degrees);
+}
+
 export function setFontFamily(api: FUniver, family: string) {
   activeRange(api)?.setFontFamily(family || null);
 }

@@ -15,6 +15,7 @@ import {
   setNumberFormat,
   setUnderline,
   setVerticalAlignment,
+  setTextRotation,
   setWrap,
   type BorderChoice,
   type NumberFormatKey,
@@ -30,6 +31,7 @@ type DialogState = {
   align: Exclude<HAlign, 'unset'>;
   vAlign: Exclude<VAlign, 'unset'>;
   wrap: boolean;
+  rotation: number;
   fontFamily: string;
   fontSize: string;
   bold: boolean;
@@ -94,6 +96,7 @@ function buildInitialState(state: ReturnType<typeof useActiveCellState>, style: 
     align: state.align === 'unset' ? 'left' : state.align,
     vAlign: state.vAlign === 'unset' ? 'bottom' : state.vAlign,
     wrap: state.isWrapped,
+    rotation: (style as { tr?: { a?: number } } | null)?.tr?.a ?? 0,
     fontFamily: state.fontFamily || 'Calibri',
     fontSize: String(state.fontSize || 11),
     bold: state.isBold,
@@ -131,6 +134,7 @@ export function FormatCellsDialog({ onClose }: Props) {
     setAlignment(api, dialogState.align);
     setVerticalAlignment(api, dialogState.vAlign);
     setWrap(api, dialogState.wrap);
+    setTextRotation(api, dialogState.rotation);
     setFontFamily(api, dialogState.fontFamily);
     setFontSize(api, Number(dialogState.fontSize));
     setBold(api, dialogState.bold);
@@ -251,6 +255,24 @@ export function FormatCellsDialog({ onClose }: Props) {
                   <option value="top">Top</option>
                   <option value="middle">Middle</option>
                   <option value="bottom">Bottom</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="format-cells-rotation">
+                  Text orientation
+                </label>
+                <select
+                  id="format-cells-rotation"
+                  className="input"
+                  data-testid="format-cells-rotation"
+                  value={String(dialogState.rotation)}
+                  onChange={(e) => update('rotation', Number(e.target.value))}
+                >
+                  <option value="0">None (horizontal)</option>
+                  <option value="45">Angle up (45°)</option>
+                  <option value="-45">Angle down (−45°)</option>
+                  <option value="90">Rotate up (90°)</option>
+                  <option value="-90">Rotate down (−90°)</option>
                 </select>
               </div>
               <label className="format-cells__check" data-testid="format-cells-wrap-label">
