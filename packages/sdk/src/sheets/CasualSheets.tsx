@@ -68,7 +68,12 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univerjs/rpc';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
-import { eagerLoadForSnapshot, idleLoadAll, setUniverForLazyLoad } from '../univer/lazy-plugins';
+import {
+  eagerLoadForSnapshot,
+  ensurePlugin,
+  idleLoadAll,
+  setUniverForLazyLoad,
+} from '../univer/lazy-plugins';
 import type { ChromeExtensions } from '../chrome/extensions';
 import type { DialogKind } from '../chrome/dialog-context';
 // Chrome is lazy-loaded from the `@casualoffice/sheets/chrome` subpath (NOT a
@@ -336,6 +341,15 @@ export function CasualSheets({
       // reads the snapshot. Skipped entirely when lazyPlugins is false.
       if (lazyPlugins) {
         await eagerLoadForSnapshot(univer, initialData);
+        if (cancelled) return;
+        // Drawing/image is the one feature whose trigger (Insert ▸ Image) opens
+        // a FILE PICKER — which needs the user's click gesture. If the plugin
+        // lazy-loads on click, the await loses the gesture and the picker never
+        // opens ("can't insert image"); if it idle-loads, a quick click before
+        // it's ready silently no-ops. So load it eagerly here (tracked by
+        // ensurePlugin, so idleLoadAll won't double-register) — image works on
+        // the first click, in-gesture. Other features open panels (no gesture).
+        await ensurePlugin(univer, 'drawing');
         if (cancelled) return;
       }
 
