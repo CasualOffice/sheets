@@ -1854,13 +1854,48 @@ export function MenuBar() {
           label: 'Cell styles',
           icon: 'palette',
           items: [
-            { kind: 'item', id: 'cell-style-normal', label: 'Normal', run: (a) => applyCellStyle(a, 'normal') },
-            { kind: 'item', id: 'cell-style-good', label: 'Good', run: (a) => applyCellStyle(a, 'good') },
-            { kind: 'item', id: 'cell-style-bad', label: 'Bad', run: (a) => applyCellStyle(a, 'bad') },
-            { kind: 'item', id: 'cell-style-neutral', label: 'Neutral', run: (a) => applyCellStyle(a, 'neutral') },
-            { kind: 'item', id: 'cell-style-title', label: 'Title', run: (a) => applyCellStyle(a, 'title') },
-            { kind: 'item', id: 'cell-style-heading1', label: 'Heading 1', run: (a) => applyCellStyle(a, 'heading1') },
-            { kind: 'item', id: 'cell-style-heading2', label: 'Heading 2', run: (a) => applyCellStyle(a, 'heading2') },
+            {
+              kind: 'item',
+              id: 'cell-style-normal',
+              label: 'Normal',
+              run: (a) => applyCellStyle(a, 'normal'),
+            },
+            {
+              kind: 'item',
+              id: 'cell-style-good',
+              label: 'Good',
+              run: (a) => applyCellStyle(a, 'good'),
+            },
+            {
+              kind: 'item',
+              id: 'cell-style-bad',
+              label: 'Bad',
+              run: (a) => applyCellStyle(a, 'bad'),
+            },
+            {
+              kind: 'item',
+              id: 'cell-style-neutral',
+              label: 'Neutral',
+              run: (a) => applyCellStyle(a, 'neutral'),
+            },
+            {
+              kind: 'item',
+              id: 'cell-style-title',
+              label: 'Title',
+              run: (a) => applyCellStyle(a, 'title'),
+            },
+            {
+              kind: 'item',
+              id: 'cell-style-heading1',
+              label: 'Heading 1',
+              run: (a) => applyCellStyle(a, 'heading1'),
+            },
+            {
+              kind: 'item',
+              id: 'cell-style-heading2',
+              label: 'Heading 2',
+              run: (a) => applyCellStyle(a, 'heading2'),
+            },
           ],
         },
         { kind: 'separator', id: 'sep-format-cells' },
@@ -2261,6 +2296,7 @@ export function MenuBar() {
             source,
             target,
             rowFieldColumns,
+            colFieldColumns,
             valueFieldColumn,
             aggregation,
             filters,
@@ -2288,7 +2324,10 @@ export function MenuBar() {
               // matches what compute.ts expects. The array is outer-first; an
               // empty array means Grand-Total-only.
               rows: rowFieldColumns.map((column) => ({ column })),
-              cols: [],
+              // A non-empty cols list switches compute.ts to the cross-tab
+              // / matrix layout (value fans out one block per distinct
+              // column-field value). Empty keeps the classic row layout.
+              cols: colFieldColumns.map((column) => ({ column })),
               values: [{ column: valueFieldColumn, agg: aggregation }],
               filters,
               title: `PivotTable ${pivots.pivots.length + 1}`,

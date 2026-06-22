@@ -13,6 +13,10 @@ type Props = {
     target: { row: number; column: number };
     /** Outermost row field first; an empty array means Grand-Total-only. */
     rowFieldColumns: number[];
+    /** Column fields → cross-tab / matrix layout. Empty means no column
+     *  field (the classic single-column-per-value layout). P2 ships a
+     *  single column field; the array shape leaves room for nesting. */
+    colFieldColumns: number[];
     valueFieldColumn: number;
     aggregation: PivotAggregation;
     filters: PivotFilter[];
@@ -25,15 +29,17 @@ type Props = {
  *
  *   - Source range (pre-filled from the active selection).
  *   - Target cell (A1) — where the pivot's top-left will land.
- *   - Row field (which source column groups records).
+ *   - Row field (+ optional sub-row field for compact multi-row).
+ *   - Column field (optional) → cross-tab / matrix layout.
  *   - Value field + aggregation (Sum / Count / Average / Min / Max).
+ *   - Filter field (optional).
  *
  * Headers are derived from the source's first row as soon as the user
  * tabs away from the source input, so the row/value pickers populate
  * with real column names — same instant feedback Excel gives.
  *
- * P0 ships one row field + one value field. The fielddrop-zone UI
- * (multi-field, drag-and-drop) lands in P1.
+ * The full drag-and-drop field list (Excel's PivotTable Fields pane) is
+ * still deferred — this single-screen dialog covers the common cases.
  */
 export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }: Props) {
   const [sourceA1, setSourceA1] = useState(defaultSourceA1);
@@ -43,6 +49,10 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
   // grouping. -1 means "no sub-row". A full drag-and-drop field list
   // (Excel's PivotTable Fields pane) is still deferred.
   const [subRowField, setSubRowField] = useState<number>(-1);
+  // P2 — optional column field → cross-tab / matrix layout. -1 means
+  // "no column field" (classic row-only layout). When set, the value
+  // field fans out across one column per distinct value of this field.
+  const [colField, setColField] = useState<number>(-1);
   const [valueField, setValueField] = useState<number>(1);
   const [aggregation, setAggregation] = useState<PivotAggregation>('sum');
   // P1 — filter field. -1 means "no filter".
@@ -143,10 +153,18 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
     if (subRowField >= 0 && subRowField !== rowField) {
       rowFieldColumns.push(subRowField);
     }
+    // Compose the column-field list. A column field must differ from the
+    // row fields — using the same column on both axes produces a
+    // degenerate matrix (every off-diagonal cell empty), so we drop it.
+    const colFieldColumns: number[] = [];
+    if (colField >= 0 && !rowFieldColumns.includes(colField)) {
+      colFieldColumns.push(colField);
+    }
     onConfirm({
       source,
       target,
       rowFieldColumns,
+      colFieldColumns,
       valueFieldColumn: valueField,
       aggregation,
       filters,
@@ -196,8 +214,8 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
             }}
           />
           <p className="insert-pivot__hint">
-            First row is treated as headers — the field pickers below populate
-            from the column names.
+            First row is treated as headers — the field pickers below populate from the column
+            names.
           </p>
         </fieldset>
 
@@ -216,8 +234,8 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
             }}
           />
           <p className="insert-pivot__hint">
-            Top-left cell of the pivot output. The pivot will overwrite any
-            existing values starting here — pick an empty area.
+            Top-left cell of the pivot output. The pivot will overwrite any existing values starting
+            here — pick an empty area.
           </p>
         </fieldset>
 
@@ -245,6 +263,23 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
               data-testid="insert-pivot-sub-row-field"
               value={subRowField}
               onChange={(e) => setSubRowField(Number(e.target.value))}
+              disabled={headers.length === 0}
+            >
+              <option value={-1}>— None —</option>
+              {headers.map((h, i) => (
+                <option key={i} value={i}>
+                  {h}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="insert-pivot__field">
+            <span className="insert-pivot__field-label">Column field</span>
+            <select
+              className="insert-pivot__select"
+              data-testid="insert-pivot-col-field"
+              value={colField}
+              onChange={(e) => setColField(Number(e.target.value))}
               disabled={headers.length === 0}
             >
               <option value={-1}>— None —</option>
@@ -308,10 +343,7 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
             </select>
           </label>
           {filterField >= 0 && filterValues.length > 0 && (
-            <div
-              className="insert-pivot__filter-values"
-              data-testid="insert-pivot-filter-values"
-            >
+            <div className="insert-pivot__filter-values" data-testid="insert-pivot-filter-values">
               {filterValues.map((v) => (
                 <label key={v} className="insert-pivot__filter-value">
                   <input
@@ -364,8 +396,11 @@ function shiftCol(letters: string, by: number): string {
   return out || 'A';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseRange(ws: any, a1: string): {
+function parseRange(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ws: any,
+  a1: string,
+): {
   startRow: number;
   endRow: number;
   startColumn: number;

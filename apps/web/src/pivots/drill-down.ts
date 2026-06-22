@@ -65,11 +65,6 @@ export function computeDrillDown(
   row: number,
   col: number,
 ): DrillDownResult | null {
-  // `col` is currently unused — drilling on any column within a row
-  // returns the same set of contributing source records. Reserved
-  // for a future per-value-field projection that only includes the
-  // clicked value column.
-  void col;
   const wb = api.getActiveWorkbook();
   if (!wb) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,46 +81,78 @@ export function computeDrillDown(
   // Same filter pass compute uses — drill rows must match what's
   // visible in the pivot above.
   const filters = pivot.filters ?? [];
-  const filtered = filters.length === 0
-    ? source.records
-    : source.records.filter((rec) => {
-        for (const f of filters) {
-          const allowed = new Set(f.allowedValues);
-          const v = rec[f.column];
-          const key = v == null ? '' : String(v);
-          if (!allowed.has(key)) return false;
-        }
-        return true;
-      });
+  const filtered =
+    filters.length === 0
+      ? source.records
+      : source.records.filter((rec) => {
+          for (const f of filters) {
+            const allowed = new Set(f.allowedValues);
+            const v = rec[f.column];
+            const key = v == null ? '' : String(v);
+            if (!allowed.has(key)) return false;
+          }
+          return true;
+        });
 
-  // Re-run compute to get the rowMeta. Cheap (output grids are tiny)
-  // and avoids duplicating the bucket-and-walk logic here.
-  const { rowMeta } = computePivot(source, pivot);
+  // Re-run compute to get the rowMeta (and, for matrix pivots, colMeta).
+  // Cheap (output grids are tiny) and avoids duplicating the
+  // bucket-and-walk logic here.
+  const { rowMeta, colMeta } = computePivot(source, pivot);
   const meta = rowMeta[offsetRow];
   if (!meta) return null;
+
+  // For a matrix (column-field) pivot, the clicked COLUMN further
+  // narrows the records to those whose column-field value matches the
+  // key under that column. Drilling the label column or the right-hand
+  // grand-total block applies no column constraint. Non-matrix pivots
+  // leave colMeta undefined → no column narrowing (legacy behaviour).
+  const colFieldCol = pivot.cols?.[0]?.column;
+  let colKey: string | null = null;
+  if (colMeta && colFieldCol != null) {
+    const offsetCol = col - pivot.target.column;
+    const cm = colMeta[offsetCol];
+    // A click on the label column is not drillable in a matrix.
+    if (cm?.kind === 'label') return null;
+    if (cm?.kind === 'value') colKey = cm.colKey;
+  }
+  const matchesCol = (rec: PivotCell[]): boolean => {
+    if (colKey == null || colFieldCol == null) return true;
+    const v = rec[colFieldCol];
+    return (v == null ? '' : String(v)) === colKey;
+  };
+  const colLabel = (): string => {
+    if (colKey == null || colFieldCol == null) return '';
+    const fieldName = source.headers[colFieldCol] ?? 'value';
+    return ` · ${fieldName} = "${colKey || '(blank)'}"`;
+  };
 
   switch (meta.kind) {
     case 'header':
       return null;
-    case 'grand-total':
+    case 'grand-total': {
+      const records = filtered.filter(matchesCol);
       return {
         headers: source.headers,
-        rows: filtered,
-        summary: `Grand Total · ${filtered.length} rows`,
+        rows: records,
+        summary: `Grand Total${colLabel()} · ${records.length} rows`,
       };
+    }
     case 'subtotal':
     case 'leaf': {
       // Filter to records matching every row-field value along the
       // path. For a single-row pivot the path is one entry — same as
       // the pre-compact behavior. For multi-row the path narrows
-      // progressively as the depth increases.
-      const records = filtered.filter((rec) =>
-        meta.keyPath.every((key, i) => {
-          const col = pivot.rows[i]?.column;
-          if (col == null) return false;
-          const v = rec[col];
-          return (v == null ? '' : String(v)) === key;
-        }),
+      // progressively as the depth increases. A matrix pivot adds the
+      // clicked column-field key on top.
+      const records = filtered.filter(
+        (rec) =>
+          matchesCol(rec) &&
+          meta.keyPath.every((key, i) => {
+            const c = pivot.rows[i]?.column;
+            if (c == null) return false;
+            const v = rec[c];
+            return (v == null ? '' : String(v)) === key;
+          }),
       );
       const labels = meta.keyPath.map((key, i) => {
         const fieldName = source.headers[pivot.rows[i]?.column ?? -1] ?? 'value';
@@ -134,7 +161,7 @@ export function computeDrillDown(
       return {
         headers: source.headers,
         rows: records,
-        summary: `${labels.join(' · ')} · ${records.length} rows`,
+        summary: `${labels.join(' · ')}${colLabel()} · ${records.length} rows`,
       };
     }
   }
