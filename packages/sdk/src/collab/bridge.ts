@@ -42,6 +42,17 @@ const MUTATION_TO_LAZY_GROUP: Record<string, LazyPluginGroup> = {
   'data-validation.mutation.removeRule': 'dv',
   'data-validation.mutation.updateRule': 'dv',
   'sheet.mutation.set-drawing-apply': 'drawing',
+  // Thread comments (thread-comment + sheets-thread-comment). The
+  // mutation handlers live in @univerjs/thread-comment; the
+  // sheets-thread-comment(-ui) plugins are the lazy-loaded integration
+  // our `threadComment` group registers. A joiner that hasn't opened
+  // the Comments pane yet has none of these mounted, so the replay
+  // would drop the peer's comment silently — gate on plugin load.
+  'thread-comment.mutation.add-comment': 'threadComment',
+  'thread-comment.mutation.update-comment': 'threadComment',
+  'thread-comment.mutation.update-comment-ref': 'threadComment',
+  'thread-comment.mutation.resolve-comment': 'threadComment',
+  'thread-comment.mutation.delete-comment': 'threadComment',
 };
 // y-protocols ships type declarations only as ESM and our tsconfig
 // doesn't pick them up cleanly; loose-type the Awareness surface we
@@ -163,6 +174,24 @@ export const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   'data-validation.mutation.addRule',
   'data-validation.mutation.removeRule',
   'data-validation.mutation.updateRule',
+  // Thread comments (thread-comment + sheets-thread-comment). The
+  // five mutations are self-contained and JSON-friendly: `add-comment`
+  // carries the full IThreadComment (client-generated id + threadId, so
+  // concurrent adds converge), `update-comment` / `resolve-comment` /
+  // `delete-comment` carry the comment id, and `update-comment-ref`
+  // carries the new A1 ref when an edit moves the anchored cell. All
+  // use `unitId` (rewritten to the local unit) + `subUnitId` (the
+  // deterministic sheet id), so they replay cleanly on peers. Without
+  // these, a comment added / resolved / deleted in a shared room never
+  // reaches co-editors — the in-cell thread and the Comments pane stay
+  // out of sync. Existing comments in a downloaded seed already load
+  // via the workbook's thread-comment resource channel; these cover
+  // the deltas during the session.
+  'thread-comment.mutation.add-comment',
+  'thread-comment.mutation.update-comment',
+  'thread-comment.mutation.update-comment-ref',
+  'thread-comment.mutation.resolve-comment',
+  'thread-comment.mutation.delete-comment',
   // Drawings / images (sheets-drawing). Single all-purpose mutation
   // wraps add / remove / update via a JSON-1 op + an enum type. Params
   // can be large (embedded image blobs) — accept the bandwidth hit

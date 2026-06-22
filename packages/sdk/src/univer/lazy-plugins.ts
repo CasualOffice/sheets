@@ -52,20 +52,14 @@ const LOADERS: Record<LazyPluginGroup, Loader> = {
       import('@univerjs/sheets-data-validation'),
       import('@univerjs/sheets-data-validation-ui'),
     ]);
-    return [
-      [base.UniverSheetsDataValidationPlugin],
-      [ui.UniverSheetsDataValidationUIPlugin],
-    ];
+    return [[base.UniverSheetsDataValidationPlugin], [ui.UniverSheetsDataValidationUIPlugin]];
   },
   hyperlink: async () => {
     const [base, ui] = await Promise.all([
       import('@univerjs/sheets-hyper-link'),
       import('@univerjs/sheets-hyper-link-ui'),
     ]);
-    return [
-      [base.UniverSheetsHyperLinkPlugin],
-      [ui.UniverSheetsHyperLinkUIPlugin],
-    ];
+    return [[base.UniverSheetsHyperLinkPlugin], [ui.UniverSheetsHyperLinkUIPlugin]];
   },
   note: async () => {
     const [base, ui] = await Promise.all([
@@ -87,6 +81,13 @@ const LOADERS: Record<LazyPluginGroup, Loader> = {
       import('@univerjs/thread-comment-ui'),
       import('@univerjs/sheets-thread-comment'),
       import('@univerjs/sheets-thread-comment-ui'),
+      // Side-effect imports: install FWorksheet.getComments / FRange.
+      // getComments / addCommentAsync on the facade prototype. Without
+      // these the CommentsPanel's `getActiveSheet().getComments()` and
+      // any facade-driven comment flow (e2e, future shell glue) see an
+      // undefined method even though the plugin is registered — mirrors
+      // the `drawing` group's facade imports above.
+      import('@univerjs/sheets-thread-comment/facade'),
     ]);
     return [
       [tc.UniverThreadCommentPlugin],

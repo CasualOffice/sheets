@@ -28,6 +28,7 @@ export default defineConfig({
     '**/coedit-conditional-formatting.spec.ts',
     '**/coedit-data-validation.spec.ts',
     '**/coedit-workbook-metadata.spec.ts',
+    '**/coedit-comments.spec.ts',
     '**/coedit-drawings.spec.ts', // runs against prod stack via playwright.docker.config.ts
     // coedit-compaction spawns its own Hocuspocus on :3060 and drives a heavy
     // 220-mutation → op-log-compaction → joiner-replay flow. Against the cold
