@@ -804,15 +804,21 @@ export function unfreezePanes(api: FUniver) {
   api.executeCommand('sheet.command.cancel-frozen');
 }
 
-export function toggleGridlines(api: FUniver, current: boolean) {
+export function toggleGridlines(api: FUniver) {
   const wb = api.getActiveWorkbook();
   const sheet = wb?.getActiveSheet();
   if (!wb || !sheet) return;
-  // BooleanNumber: 0 = hide, 1 = show
+  const sId = sheet.getSheetId();
+  // Read the CURRENT state and flip it. (Was hardcoded `current=true`, so it
+  // always sent showGridlines:0 — gridlines could be hidden but never shown.)
+  // BooleanNumber: 1 = show (default when unset), 0 = hide.
+  const snap = saveWorkbook(wb);
+  const cfg = snap?.sheets?.[sId] as { showGridlines?: number } | undefined;
+  const shown = cfg?.showGridlines !== 0;
   api.executeCommand('sheet.command.toggle-gridlines', {
     unitId: wb.getId(),
-    subUnitId: sheet.getSheetId(),
-    showGridlines: current ? 0 : 1,
+    subUnitId: sId,
+    showGridlines: shown ? 0 : 1,
   });
 }
 

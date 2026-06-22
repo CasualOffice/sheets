@@ -1543,7 +1543,7 @@ export function MenuBar() {
           id: 'toggle-gridlines',
           label: 'Gridlines',
           icon: 'grid_on',
-          onClick: () => api && toggleGridlines(api, true),
+          onClick: () => api && toggleGridlines(api),
         },
         {
           kind: 'item',
@@ -2129,7 +2129,13 @@ export function MenuBar() {
               onItemClick={(item) => {
                 if (item.kind !== 'item') return;
                 if (item.disabled) return;
-                if (item.run && api) item.run(api);
+                // `run` may be async (lazy-plugin loaders await
+                // ensurePluginByName before dispatching). Fire-and-forget the
+                // promise — but DO invoke it so its async work runs; previously
+                // the result was discarded synchronously, which still ran sync
+                // actions but is brittle. Keep onClose immediate so the menu
+                // closes responsively while the action resolves.
+                if (item.run && api) void item.run(api);
                 if (item.onClick) item.onClick();
                 onClose();
               }}
