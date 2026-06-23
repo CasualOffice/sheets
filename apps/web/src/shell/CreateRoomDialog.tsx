@@ -6,13 +6,14 @@ import { useFileSource } from '../file-source/context';
 import { useCharts } from '../charts/charts-context';
 import { exportCurrentWorkbookAsXlsxBlob, loadSpreadsheetFile } from './file-actions';
 
-type Role = 'write' | 'view';
+type Role = 'write' | 'comment' | 'view';
 
 type Stage = 'configure' | 'creating' | 'ready';
 
 type Created = {
   roomId: string;
   writeUrl: string;
+  commentUrl: string;
   viewUrl: string;
 };
 
@@ -132,8 +133,9 @@ export function CreateRoomDialog({ onClose }: { onClose: () => void }) {
 
       const origin = window.location.origin;
       const writeUrl = `${origin}/r/${body.roomId}`;
+      const commentUrl = `${origin}/r/${body.roomId}?role=comment`;
       const viewUrl = `${origin}/r/${body.roomId}?role=view`;
-      setCreated({ roomId: body.roomId, writeUrl, viewUrl });
+      setCreated({ roomId: body.roomId, writeUrl, commentUrl, viewUrl });
       setStage('ready');
     } catch (err) {
       console.error('[share-room] create failed', err);
@@ -303,6 +305,20 @@ export function CreateRoomDialog({ onClose }: { onClose: () => void }) {
                   <button
                     type="button"
                     role="radio"
+                    aria-checked={defaultRole === 'comment'}
+                    className={
+                      'share-room__seg-opt' +
+                      (defaultRole === 'comment' ? ' share-room__seg-opt--active' : '')
+                    }
+                    data-testid="share-room-role-comment"
+                    onClick={() => setDefaultRole('comment')}
+                  >
+                    <span>Comment</span>
+                    <span className="share-room__seg-opt-desc">Can comment, not edit cells</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
                     aria-checked={defaultRole === 'view'}
                     className={
                       'share-room__seg-opt' +
@@ -331,7 +347,7 @@ export function CreateRoomDialog({ onClose }: { onClose: () => void }) {
           {stage === 'ready' && created && (
             <div className="share-room">
               <p className="share-room__hint" style={{ marginTop: 0 }}>
-                Both links go to the same room — pick whichever fits the person you're sharing with.
+                All links go to the same room — pick whichever fits the person you're sharing with.
               </p>
               <ShareUrlRow
                 label="Edit link"
@@ -339,6 +355,13 @@ export function CreateRoomDialog({ onClose }: { onClose: () => void }) {
                 url={created.writeUrl}
                 emphasis={defaultRole === 'write'}
                 testidPrefix="share-room-write"
+              />
+              <ShareUrlRow
+                label="Comment link"
+                description="Anyone with this link can comment, but not edit cells."
+                url={created.commentUrl}
+                emphasis={defaultRole === 'comment'}
+                testidPrefix="share-room-comment"
               />
               <ShareUrlRow
                 label="View-only link"
