@@ -80,6 +80,29 @@ export function CommentsPanel() {
     }
   };
 
+  // Resolve a comment. The command + collab sync already exist — this surfaces
+  // them in the panel. Resolving removes the comment from the cell-location
+  // index, so it leaves the list (the active view shows open threads only;
+  // a resolved-comments view + reopen is a follow-up — see #111).
+  const resolveComment = (r: CommentRow) => {
+    if (!api) return;
+    try {
+      const wb = api.getActiveWorkbook();
+      const ws = wb?.getActiveSheet();
+      if (!wb || !ws) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const subUnitId = (ws as any).getSheetId?.() ?? (ws as any).getId?.();
+      api.executeCommand('thread-comment.command.resolve-comment', {
+        unitId: wb.getId(),
+        subUnitId,
+        commentId: r.id,
+        resolved: true,
+      });
+    } catch {
+      /* command unavailable — plugin not loaded */
+    }
+  };
+
   return (
     <aside className="side-panel comments-panel" data-testid="comments-panel">
       <header className="side-panel__header">
@@ -138,6 +161,15 @@ export function CommentsPanel() {
                     )}
                   </span>
                   <span className="comments-panel__text">{r.text}</span>
+                </button>
+                <button
+                  type="button"
+                  className="comments-panel__resolve"
+                  data-testid={`comments-panel-resolve-${r.id}`}
+                  title="Resolve comment"
+                  onClick={() => resolveComment(r)}
+                >
+                  <Icon name="check_circle" size="sm" />
                 </button>
               </li>
             ))}

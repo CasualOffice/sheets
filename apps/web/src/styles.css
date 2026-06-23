@@ -1633,11 +1633,16 @@ button {
 }
 
 /* Comments task pane rows */
+.comments-panel__row {
+  display: flex;
+  align-items: center;
+}
 .comments-panel__open {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: var(--space-3);
   border: 0;
   border-radius: var(--radius-md);
@@ -1649,6 +1654,28 @@ button {
 }
 .comments-panel__open:hover {
   background: var(--color-hover);
+}
+/* Resolve / reopen toggle (Phase 3, T3.2). */
+.comments-panel__resolve {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin-right: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+.comments-panel__resolve:hover {
+  background: var(--color-hover);
+  color: var(--color-success, #188038);
 }
 .comments-panel__row-top {
   display: flex;
