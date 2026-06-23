@@ -16,6 +16,7 @@ import { WorkbookContext } from './workbook-context';
 import { registerExtraPlugins } from './univer/extra-plugins';
 import { extendContextMenu } from './context-menu-extensions';
 import { registerPasteMergeHook } from './univer/paste-merge-hook';
+import { registerPasteGrowthHook } from './univer/paste-growth-hook';
 import { installDevHelpers } from './univer/dev-helpers';
 import { disableUniverZoomShortcut } from './univer/disable-zoom-shortcut';
 
@@ -77,6 +78,8 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
     const teardowns: Array<() => void> = [];
     const pasteMerge = registerPasteMergeHook(api.univer);
     if (pasteMerge) teardowns.push(pasteMerge);
+    const pasteGrowth = registerPasteGrowthHook(api.univer);
+    if (pasteGrowth) teardowns.push(pasteGrowth);
     teardowns.push(installDevHelpers(api.univer));
     teardowns.push(disableUniverZoomShortcut(api.univer));
     teardownsRef.current = teardowns;
