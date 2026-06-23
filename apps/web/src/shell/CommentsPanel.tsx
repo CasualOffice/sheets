@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { SheetsThreadCommentModel } from '@univerjs/sheets-thread-comment';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
 import { Icon } from './Icon';
 import { showCommentModal } from './tab-actions';
+import {
+  commentAuthorsVersion,
+  getCommentAuthor,
+  subscribeCommentAuthors,
+} from '../collab/comment-authors';
+import { initials } from '../collab/presence';
 
 /**
  * Comments task pane — our own React panel so it shares the exact
@@ -76,12 +82,37 @@ function readResolved(api: any): CommentRow[] {
   }
 }
 
+/**
+ * Author byline for a comment — a colored initial avatar + name, resolved
+ * from the authorship store (`comment-authors.ts`). Renders nothing for
+ * comments with no recorded author (e.g. threads loaded from an xlsx written
+ * elsewhere) rather than a misleading placeholder.
+ */
+function AuthorByline({ id }: { id: string }) {
+  const author = getCommentAuthor(id);
+  if (!author) return null;
+  return (
+    <span className="comments-panel__author" data-testid={`comments-panel-author-${id}`}>
+      <span
+        className="comments-panel__author-avatar"
+        style={{ backgroundColor: author.color }}
+        aria-hidden="true"
+      >
+        {initials(author.name)}
+      </span>
+      <span className="comments-panel__author-name">{author.name}</span>
+    </span>
+  );
+}
+
 export function CommentsPanel() {
   const api = useUniverAPI();
   const ui = useUI();
   const [rows, setRows] = useState<CommentRow[]>([]);
   const [resolved, setResolved] = useState<CommentRow[]>([]);
   const [showResolved, setShowResolved] = useState(false);
+  // Re-render when authorship arrives (local stamp or a peer's via Yjs).
+  useSyncExternalStore(subscribeCommentAuthors, commentAuthorsVersion);
 
   useEffect(() => {
     if (!api) return;
@@ -196,6 +227,7 @@ export function CommentsPanel() {
                       </span>
                     )}
                   </span>
+                  <AuthorByline id={r.id} />
                   <span className="comments-panel__text">{r.text}</span>
                 </button>
                 <button
@@ -242,6 +274,7 @@ export function CommentsPanel() {
                       <span className="comments-panel__row-top">
                         <span className="comments-panel__ref">{r.ref || 'Comment'}</span>
                       </span>
+                      <AuthorByline id={r.id} />
                       <span className="comments-panel__text">{r.text}</span>
                     </button>
                     <button
