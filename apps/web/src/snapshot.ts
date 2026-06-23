@@ -17,8 +17,16 @@ export const INITIAL_ROWS = 1024;
 // count, so a 128-wide start cost ~5× the boot allocation for columns the
 // user almost never reaches before `useWorkbookGrowth` extends them.
 export const INITIAL_COLUMNS = 26;
-export const MAX_ROWS = 8192;
-export const MAX_COLUMNS = 1024;
+// Interactive growth ceiling. Cost scales with how far the user navigates, not
+// with these constants: `useWorkbookGrowth` extends rowCount/columnCount in
+// small chunks on demand, and the render skeleton's accumulation arrays
+// (vendor/univer-revamp/.../sheet-skeleton.ts) are only as large as the grown
+// extent. At 65,536 × 16,384 a full accumulation rebuild is sub-millisecond and
+// ~0.5 MB — safe without lazy allocation. Excel-parity 1,048,576 rows is gated
+// behind the fork's lazy-accumulation work (see docs/COMPETITIVE_ROADMAP.md
+// Phase 1, T1.2 / UNIVER_FORK_PERF.md item 7), not this constant.
+export const MAX_ROWS = 65536;
+export const MAX_COLUMNS = 16384;
 
 export function emptyWorkbook(): IWorkbookData {
   const nowIso = new Date().toISOString();
