@@ -39,6 +39,7 @@ import { usePresenceWire } from './usePresenceWire';
 import { NamePrompt } from './NamePrompt';
 import { PresenceLayer } from './PresenceLayer';
 import { applyViewOnlyMode } from './view-mode';
+import { applyCommentOnly } from '@casualoffice/sheets/sheets';
 import { useCurrentUser } from '../auth/auth-context';
 import { parseShareMeta, shareMetaUrl, sharePasswordKey, type ShareMeta } from './share-meta';
 
@@ -392,7 +393,10 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
         room: id,
         server: wsUrl(),
         password: password || undefined,
-        role: joinRole,
+        // The bridge only knows view|write. A `comment` joiner broadcasts like a
+        // writer (so their comment mutations sync) — the applyCommentOnly veto
+        // already stops cell mutations from firing, so none reach the bridge.
+        role: joinRole === 'comment' ? 'write' : joinRole,
         share,
         // Map the SDK's coarse status onto our richer CollabStatus (which also
         // carries 'off' / 'denied', driven elsewhere in this component).
@@ -405,11 +409,14 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
         onSnapshot: async (wb) => {
           workbook.replaceWorkbook(wb, 'xlsx');
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-          if (joinRole === 'view' && api) {
+          if ((joinRole === 'view' || joinRole === 'comment') && api) {
             const swapped = api.getActiveWorkbook();
             if (swapped) {
               viewModeDisposeRef.current?.();
-              viewModeDisposeRef.current = applyViewOnlyMode(api, swapped.getId());
+              viewModeDisposeRef.current =
+                joinRole === 'comment'
+                  ? applyCommentOnly(api)
+                  : applyViewOnlyMode(api, swapped.getId());
             }
           }
         },
@@ -493,12 +500,15 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       // mutations) becomes belt-and-braces rather than the only line of
       // defence. Apply after the first frame so the workbook unit is
       // wired into the facade.
-      if (joinRole === 'view' && api) {
+      if ((joinRole === 'view' || joinRole === 'comment') && api) {
         requestAnimationFrame(() => {
           const wb = api.getActiveWorkbook();
           if (!wb) return;
           viewModeDisposeRef.current?.();
-          viewModeDisposeRef.current = applyViewOnlyMode(api, wb.getId());
+          viewModeDisposeRef.current =
+            joinRole === 'comment'
+              ? applyCommentOnly(api)
+              : applyViewOnlyMode(api, wb.getId());
         });
       }
 
@@ -735,6 +745,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
         {needsSelfHost && <SelfHostBanner />}
         {shareInvalid && <ShareInvalidBanner />}
         {role === 'view' && roomId && status === 'live' && <ViewOnlyBanner />}
+        {role === 'comment' && roomId && status === 'live' && <CommentOnlyBanner />}
         {roomId && status === 'offline' && <OfflineBanner queuedLocal={queuedLocal} />}
         {passwordPrompt && (
           <PasswordPrompt
@@ -836,6 +847,22 @@ function ViewOnlyBanner() {
       <div className="collab-banner__body">
         <strong>View only.</strong> You're joined as a viewer — your edits stay local and don't sync
         to others. Ask the owner for the edit link if you need to change the sheet.
+      </div>
+    </div>
+  );
+}
+
+/** Banner for the `comment` share-role: cells are locked but comments work. */
+function CommentOnlyBanner() {
+  return (
+    <div
+      className="collab-banner collab-banner--neutral"
+      data-testid="comment-only-banner"
+      role="status"
+    >
+      <div className="collab-banner__body">
+        <strong>Comment only.</strong> You can add and reply to comments, but cell edits are locked.
+        Ask the owner for the edit link to change the sheet.
       </div>
     </div>
   );
@@ -1083,7 +1110,10 @@ function readRoomFromLocation(): string | null {
 
 function readRoleFromLocation(): CollabRole {
   const params = new URLSearchParams(window.location.search);
-  return params.get('role') === 'view' ? 'view' : 'write';
+  const r = params.get('role');
+  if (r === 'view') return 'view';
+  if (r === 'comment') return 'comment';
+  return 'write';
 }
 
 /**
@@ -1151,7 +1181,7 @@ function wireChartsSync(
   let applyingRemote = false;
 
   const onLocal = (next: ChartModel[]) => {
-    if (role === 'view') return;
+    if (role !== 'write') return; // view + comment are read-only for charts
     if (applyingRemote) return;
     doc.transact(() => {
       const nextIds = new Set(next.map((c) => c.id));

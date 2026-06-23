@@ -3,7 +3,9 @@ import type * as Y from 'yjs';
 import type { ReplayFailureRecord } from '@casualoffice/sheets/collab';
 
 export type CollabStatus = 'off' | 'connecting' | 'live' | 'offline' | 'denied';
-export type CollabRole = 'view' | 'write';
+// Share link-roles (sharing-model §6). `comment` is the middle tier: cells are
+// read-only but threaded comments stay usable (enforced via applyCommentOnly).
+export type CollabRole = 'view' | 'comment' | 'write';
 /**
  * `in-sync`   — local Y.Doc state vector matches every visible peer.
  *               Common steady state.

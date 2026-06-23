@@ -3,7 +3,7 @@
  */
 export { CasualSheets, type CasualSheetsProps } from './CasualSheets';
 export { createCasualSheetsAPI, type CasualSheetsAPI, type RangeRef } from './api';
-export { applyReadOnly, getEditable } from './read-only';
+export { applyReadOnly, applyCommentOnly, getEditable } from './read-only';
 export {
   CasualSheetsIframe,
   type CasualSheetsIframeProps,

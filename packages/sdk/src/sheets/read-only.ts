@@ -1,19 +1,9 @@
 import { CustomCommandExecutionError, ICommandService, IPermissionService } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import { WorkbookEditablePermission } from '@univerjs/sheets';
+import { isCommentOnlyBlocked, READONLY_BLOCK } from './read-only-predicate';
 
-/**
- * Command ids that MUTATE a sheet — opening the cell editor, writing values,
- * styling, structural edits, clipboard paste. The read-only veto cancels any
- * command whose id matches. Navigation (selection, scroll, zoom, sheet switch),
- * copy, and undo/redo deliberately fall through so preview stays usable.
- *
- * `set-cell-edit-visible` / `set-activate-cell-edit` are the editor-open
- * operations — blocking them is what actually stops keyboard typing, since the
- * cell editor never opens. The rest stop programmatic / paste / menu mutations.
- */
-const READONLY_BLOCK =
-  /(set-cell-edit-visible|set-activate-cell-edit|set-range-values|set-style|set-bold|set-italic|set-underline|set-strike|set-font|set-background|set-text|set-horizontal|set-vertical|set-wrap|set-rotation|set-border|set-number-format|insert-|delete-|remove-|clear-selection|cut-content|paste|move-range|move-rows|move-cols|merge|split|add-worksheet|set-worksheet-name|set-worksheet-row|set-worksheet-col|auto-fill|reorder|set-defined-name|set-tab-color|set-frozen-cancel)/;
+export { isCommentOnlyBlocked, isReadOnlyBlocked } from './read-only-predicate';
 
 /**
  * Make a workbook genuinely READ-ONLY.
@@ -87,6 +77,36 @@ export function applyReadOnly(
       /* swallow */
     }
   };
+}
+
+/**
+ * Make a workbook **comment-only** (share role `comment`): cells are read-only,
+ * but threaded comments and their editor stay fully usable. This is the middle
+ * tier between `view` (read-only, no comments) and `edit` (full), enforced at
+ * the engine layer via the same command veto as {@link applyReadOnly} — minus
+ * the comment commands.
+ *
+ * No `WorkbookEditablePermission` flip here: on a full host that point also
+ * disables comment affordances, which would defeat the role. The command veto is
+ * the load-bearing layer (and the only one the minimal embed enforces anyway).
+ *
+ * Returns a disposer that removes the veto.
+ */
+export function applyCommentOnly(
+  univerApi: FUniver,
+  onBlock?: (commandId: string) => void,
+): () => void {
+  const injector = (univerApi as unknown as { _injector?: { get(t: unknown): unknown } })._injector;
+  const cmd = injector?.get(ICommandService) as
+    | { beforeCommandExecuted(l: (info: { id: string }) => void): { dispose(): void } }
+    | undefined;
+  const vetoDisposable = cmd?.beforeCommandExecuted((info) => {
+    if (isCommentOnlyBlocked(info.id)) {
+      onBlock?.(info.id);
+      throw new CustomCommandExecutionError(`comment-only: blocked ${info.id}`);
+    }
+  });
+  return () => vetoDisposable?.dispose();
 }
 
 /**
