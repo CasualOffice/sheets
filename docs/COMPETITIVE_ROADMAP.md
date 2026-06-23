@@ -101,7 +101,12 @@ Each phase is a GitHub **milestone**; each phase has one **epic tracker** issue 
 task checklist. Work proceeds on dedicated branches with PRs and green CI per
 `CONTRIBUTING.md`.
 
-### Phase 1 — Grid Scale & Capacity  *(foundation; in progress)*
+### Phase 1 — Grid Scale & Capacity  *(foundation; ✅ complete)*
+
+> **Outcome:** ceiling raised to Excel parity 1,048,576 × 16,384 (#115); paste-to-fit
+> growth (#116); 100k-row open validated ~0.85 s (#117); selection stats clamped to
+> the used range so full-column stats work at scale (#118). T1.2 (lazy allocation)
+> dropped — measured unnecessary.
 
 Goal: the grid holds real-world data. Interactive ceiling toward Excel parity, enabled by
 lazy metadata so boot/growth stay fast.
@@ -121,7 +126,16 @@ lazy metadata so boot/growth stay fast.
 - **T1.5** Selection stats + Ctrl+A at scale — keep stats cell-cap honest so big selections
   don't freeze. (`apps/web/src/shell/StatusBar.tsx`, `docs/ARCHITECTURE.md:204`)
 
-### Phase 2 — Performance Hardening  *(foundation)*
+### Phase 2 — Performance Hardening  *(foundation; ✅ complete)*
+
+> **Outcome:** T2.1 zebra-refresh guard shipped (#119) — insert-row @1M 241→158 ms,
+> profile-found. T2.2/T2.4 measured already-handled by Univer 0.25 (`getDiscreteRanges`
+> consolidation; bulk edits fire one mutation). T2.3 (incremental dep-tree) investigated
+> → no-go: single-edit cost is floored by an intentional 100 ms recalc debounce, leaving
+> only ~66 ms behind it — not worth the highest corruption risk. T2.5 (stages 5–6) already
+> shipped (hyperlinks-in-snapshot + op-log compaction). **Net: 1 real win + 4 risk-avoidances** —
+> the pre-0.25 fork-perf items were largely already addressed; measuring first avoided weeks
+> of high-risk fork surgery for marginal gain.
 
 Goal: make the now-bigger grid fast. Sequences the deferred items in `UNIVER_FORK_PERF.md`.
 
@@ -183,9 +197,9 @@ ordered.
 
 | Phase | Milestone | Epic | Status |
 | --- | --- | --- | --- |
-| 1 — Grid Scale | Milestone 1 | #109 | in progress |
-| 2 — Perf Hardening | Milestone 2 | #110 | planned |
-| 3 — Collab Depth | Milestone 3 | #111 | planned |
+| 1 — Grid Scale | Milestone 1 | #109 | ✅ complete |
+| 2 — Perf Hardening | Milestone 2 | #110 | ✅ complete |
+| 3 — Collab Depth | Milestone 3 | #111 | next |
 | 4 — Feature Depth | Milestone 4 | #112 | planned |
 | 5 — Automation | Milestone 5 | #113 | planned |
 | 6 — Mobile | Milestone 6 | #114 | planned |
