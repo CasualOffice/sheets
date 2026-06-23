@@ -45,3 +45,45 @@ test('resolving a comment removes it from the active list', async ({ page }) => 
   expect(result.cmdRes).toBe(true); // resolve command succeeded
   expect(result.after).toBe(0); // resolved → no longer in the active list
 });
+
+/**
+ * Reopen — Phase 3, T3.2 reopen slice. A resolved comment leaves the active list
+ * (it's surfaced in the panel's "Resolved" section, read from the model). Reopen
+ * (`resolved:false`) restores it to the active list — the mechanism the panel's
+ * reopen button drives.
+ */
+test('reopen restores a resolved comment to the active list', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await waitForUniver(page);
+  await page.evaluate(() => window.__ensurePlugin__?.('threadComment'));
+
+  const r = await page.evaluate(async () => {
+    const api = window.__univerAPI!;
+    const wb = api.getActiveWorkbook()!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws = wb.getActiveSheet() as any;
+    const unitId = wb.getId();
+    const subUnitId = ws.getSheetId?.() ?? ws.getId?.();
+    await ws.getRange('A1').addComment({ dataStream: 'review me\r\n' });
+    const c0 = ws.getRange('A1').getComments?.()[0];
+    const commentId = c0?.id ?? c0?.getCommentData?.()?.id;
+
+    const resolveCmd = (resolved: boolean) =>
+      api.executeCommand('thread-comment.command.resolve-comment', {
+        unitId,
+        subUnitId,
+        commentId,
+        resolved,
+      });
+
+    await resolveCmd(true);
+    const activeAfterResolve = ws.getRange('A1').getComments?.()?.length ?? 0;
+    await resolveCmd(false);
+    const activeAfterReopen = ws.getRange('A1').getComments?.()?.length ?? 0;
+    return { activeAfterResolve, activeAfterReopen };
+  });
+
+  expect(r.activeAfterResolve).toBe(0); // resolved → out of active list
+  expect(r.activeAfterReopen).toBe(1); // reopen → back in active list
+});
