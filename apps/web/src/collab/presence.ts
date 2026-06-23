@@ -8,6 +8,28 @@
 
 const NAME_KEY = 'casual.collab.displayName';
 const NAME_PROMPTED_KEY = 'casual.collab.namePrompted';
+const USER_ID_KEY = 'casual.collab.userId';
+
+/**
+ * Stable per-browser user id, persisted in localStorage. Distinct from the Yjs
+ * awareness `clientId` (which is per-tab-connection and changes on reconnect):
+ * this id is what we set as the Univer `UserManagerService` current-user id and
+ * broadcast in awareness, so a comment's `personId` resolves to a name across
+ * peers and reconnects. Generated once, then reused.
+ */
+export function getUserId(): string {
+  try {
+    let v = localStorage.getItem(USER_ID_KEY);
+    if (!v) {
+      v = `u-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+      localStorage.setItem(USER_ID_KEY, v);
+    }
+    return v;
+  } catch {
+    // Private mode — fall back to an ephemeral per-session id.
+    return `u-eph-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
 
 export type Identity = {
   name: string;
@@ -108,6 +130,9 @@ export function initials(name: string): string {
 export type PeerAwareness = {
   name: string;
   color: string;
+  /** Stable user id (see getUserId). Broadcast so a peer's comment authorship
+   *  (`personId`) resolves to their name via UserManagerService. */
+  userId?: string;
   sel?: {
     u: string;
     s: string;
@@ -138,6 +163,9 @@ export type PeerAwareness = {
 export type Peer = {
   /** Yjs awareness clientId — stable per browser tab connection. */
   clientId: number;
+  /** Stable cross-reconnect user id (see getUserId). Falls back to the
+   *  clientId string for peers on older builds that don't broadcast it. */
+  userId: string;
   name: string;
   color: string;
   selection: PeerAwareness['sel'];
