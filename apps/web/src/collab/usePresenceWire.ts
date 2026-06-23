@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type { FUniver } from '@univerjs/core/facade';
 import * as Y from 'yjs';
-import { colorForName, getUserId, type Identity, type Peer, type PeerAwareness } from './presence';
-import { syncCollabUsers } from './user-manager-sync';
+import { colorForName, type Identity, type Peer, type PeerAwareness } from './presence';
 
 /**
  * Wires Yjs awareness to Univer selection events:
@@ -34,21 +33,8 @@ export function usePresenceWire(
   useEffect(() => {
     if (!awareness || !identity) return;
     const prev = (awareness.getLocalState() ?? {}) as PeerAwareness;
-    awareness.setLocalState({
-      ...prev,
-      name: identity.name,
-      color: identity.color,
-      userId: getUserId(),
-    });
+    awareness.setLocalState({ ...prev, name: identity.name, color: identity.color });
   }, [awareness, identity]);
-
-  // Mirror the collab roster into Univer's UserManagerService so comment
-  // authorship + @mention candidates resolve to display names (the service is
-  // otherwise empty → authors show the default user). Best-effort, idempotent.
-  useEffect(() => {
-    if (!api || !identity) return;
-    syncCollabUsers(api, { userID: getUserId(), name: identity.name }, peers);
-  }, [api, identity, peers]);
 
   // Subscribe to peer-state changes.
   useEffect(() => {
@@ -70,7 +56,6 @@ export function usePresenceWire(
         if (!s || typeof s.name !== 'string') return;
         out.push({
           clientId,
-          userId: typeof s.userId === 'string' ? s.userId : String(clientId),
           name: s.name,
           color: typeof s.color === 'string' ? s.color : colorForName(s.name),
           selection: s.sel,
