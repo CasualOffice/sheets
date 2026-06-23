@@ -39,7 +39,12 @@ import { usePresenceWire } from './usePresenceWire';
 import { NamePrompt } from './NamePrompt';
 import { PresenceLayer } from './PresenceLayer';
 import { applyViewOnlyMode } from './view-mode';
-import { applyCommentOnly } from '@casualoffice/sheets/sheets';
+import {
+  applyCommentOnly,
+  setMentionProvider,
+  filterMentionCandidates,
+  type MentionCandidate,
+} from '@casualoffice/sheets/sheets';
 import { useCurrentUser } from '../auth/auth-context';
 import { parseShareMeta, shareMetaUrl, sharePasswordKey, type ShareMeta } from './share-meta';
 
@@ -506,9 +511,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
           if (!wb) return;
           viewModeDisposeRef.current?.();
           viewModeDisposeRef.current =
-            joinRole === 'comment'
-              ? applyCommentOnly(api)
-              : applyViewOnlyMode(api, wb.getId());
+            joinRole === 'comment' ? applyCommentOnly(api) : applyViewOnlyMode(api, wb.getId());
         });
       }
 
@@ -534,6 +537,21 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   // Presence wire — runs in this effect so the same instance feeds both
   // the avatar stack and the overlay through context.
   const { peers } = usePresenceWire(api, provider, identity);
+
+  // Standalone @mention source: the people you're co-editing with. Feeds the
+  // SDK's pluggable mention provider, which backs the comment editor's
+  // @-autocomplete (CasualMentionIOService). When the SDK is embedded, the
+  // host installs its own provider instead — last writer wins. Cleared on
+  // unmount so a stale closure can't outlive the session.
+  useEffect(() => {
+    setMentionProvider((search) => {
+      const all: MentionCandidate[] = [];
+      if (identity) all.push({ id: `self:${identity.name}`, label: identity.name });
+      for (const p of peers) all.push({ id: `peer:${p.clientId}`, label: p.name });
+      return filterMentionCandidates(all, search);
+    });
+    return () => setMentionProvider(null);
+  }, [peers, identity]);
 
   // Divergence detector — peers broadcast their Y.Doc state-vector hex
   // every 5 s via awareness. Compute aggregate sync health: in-sync

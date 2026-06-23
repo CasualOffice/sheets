@@ -1,8 +1,13 @@
-import { CustomRangeType, type IWorkbookData } from '@univerjs/core';
+import { CustomRangeType, IMentionIOService, type IWorkbookData } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import { ISheetClipboardService } from '@univerjs/sheets-ui';
 import { SheetTableService } from '@univerjs/sheets-table';
 import { ensurePluginByName, type LazyPluginGroup } from '@casualoffice/sheets/univer';
+import {
+  setMentionProvider,
+  filterMentionCandidates,
+  type MentionCandidate,
+} from '@casualoffice/sheets/sheets';
 
 type HyperLinkDump = {
   subUnitId: string;
@@ -36,6 +41,10 @@ declare global {
     __getHyperLinks__?: () => HyperLinkDump[];
     __legacyPasteHtml__?: (html: string, text?: string) => Promise<boolean>;
     __parseHtmlClipboard__?: (html: string) => ParsedClipboardDump | null;
+    /** Test hook: install a fixed @mention candidate list. */
+    __setMentionProvider__?: (candidates: MentionCandidate[]) => void;
+    /** Test hook: resolve the live IMentionIOService and return candidate labels. */
+    __mentionList__?: (search?: string) => Promise<string[] | null>;
   }
 }
 
@@ -73,9 +82,7 @@ export function installDevHelpers(api: FUniver): () => void {
     const svc = (wb as any)._injector?.get(SheetTableService) as
       | {
           _tableManager?: {
-            getTable: (u: string, t: string) =>
-              | { getTableStyleId: () => string }
-              | undefined;
+            getTable: (u: string, t: string) => { getTableStyleId: () => string } | undefined;
           };
         }
       | undefined;
@@ -130,9 +137,7 @@ export function installDevHelpers(api: FUniver): () => void {
   };
   window.__legacyPasteHtml__ = async (html, text = '') => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const injector = (api as any)._injector as
-      | { get: (token: unknown) => unknown }
-      | undefined;
+    const injector = (api as any)._injector as { get: (token: unknown) => unknown } | undefined;
     if (!injector) return false;
     const svc = injector.get(ISheetClipboardService) as
       | {
@@ -144,9 +149,7 @@ export function installDevHelpers(api: FUniver): () => void {
   };
   window.__parseHtmlClipboard__ = (html) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const injector = (api as any)._injector as
-      | { get: (token: unknown) => unknown }
-      | undefined;
+    const injector = (api as any)._injector as { get: (token: unknown) => unknown } | undefined;
     if (!injector) return null;
     const svc = injector.get(ISheetClipboardService) as
       | {
@@ -187,6 +190,28 @@ export function installDevHelpers(api: FUniver): () => void {
       colProperties: parsed.colProperties ?? [],
     };
   };
+  // @mention test hooks. `__setMentionProvider__` installs a fixed candidate
+  // list (the app's real provider only has data inside a room); `__mentionList__`
+  // resolves the LIVE IMentionIOService off the injector and returns the labels
+  // it produces — proving the CasualSheets DI override is in effect and reads
+  // our provider, end-to-end through Univer, without driving the in-cell popup.
+  window.__setMentionProvider__ = (candidates) => {
+    setMentionProvider((search) => filterMentionCandidates(candidates, search));
+  };
+  window.__mentionList__ = async (search = '') => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const injector = (api as any)._injector;
+    const svc = injector?.get?.(IMentionIOService) as
+      | {
+          list: (p: {
+            search?: string;
+          }) => Promise<{ list: Array<{ mentions: Array<{ label: string }> }> }>;
+        }
+      | undefined;
+    if (!svc?.list) return null;
+    const res = await svc.list({ search });
+    return res.list.flatMap((g) => g.mentions.map((m) => m.label));
+  };
 
   return () => {
     delete window.__univerAPI;
@@ -195,5 +220,7 @@ export function installDevHelpers(api: FUniver): () => void {
     delete window.__getHyperLinks__;
     delete window.__legacyPasteHtml__;
     delete window.__parseHtmlClipboard__;
+    delete window.__setMentionProvider__;
+    delete window.__mentionList__;
   };
 }

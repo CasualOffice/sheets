@@ -5,6 +5,14 @@ export { CasualSheets, type CasualSheetsProps } from './CasualSheets';
 export { createCasualSheetsAPI, type CasualSheetsAPI, type RangeRef } from './api';
 export { applyReadOnly, applyCommentOnly, getEditable } from './read-only';
 export {
+  setMentionProvider,
+  getMentionProvider,
+  filterMentionCandidates,
+  type MentionCandidate,
+  type MentionProvider,
+} from './mention-source';
+export { CasualMentionIOService } from './mention-io';
+export {
   CasualSheetsIframe,
   type CasualSheetsIframeProps,
   type CasualSheetsIframeRef,

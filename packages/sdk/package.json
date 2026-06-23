@@ -77,6 +77,7 @@
     "@univerjs/core": "^0.25.0",
     "@univerjs/design": "^0.25.0",
     "@univerjs/docs": "^0.25.0",
+    "@univerjs/docs-mention-ui": "^0.25.0",
     "@univerjs/docs-ui": "^0.25.0",
     "@univerjs/drawing": "^0.25.0",
     "@univerjs/drawing-ui": "^0.25.0",
@@ -126,6 +127,9 @@
       "optional": true
     },
     "@univerjs/docs": {
+      "optional": true
+    },
+    "@univerjs/docs-mention-ui": {
       "optional": true
     },
     "@univerjs/docs-ui": {
@@ -256,6 +260,7 @@
     "@univerjs/core": "0.25.0",
     "@univerjs/design": "0.25.0",
     "@univerjs/docs": "0.25.0",
+    "@univerjs/docs-mention-ui": "0.25.0",
     "@univerjs/docs-ui": "0.25.0",
     "@univerjs/drawing": "0.25.0",
     "@univerjs/drawing-ui": "0.25.0",

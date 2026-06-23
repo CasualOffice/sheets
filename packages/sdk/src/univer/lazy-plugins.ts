@@ -76,11 +76,16 @@ const LOADERS: Record<LazyPluginGroup, Loader> = {
     return [[base.UniverSheetsTablePlugin], [ui.UniverSheetsTableUIPlugin]];
   },
   threadComment: async () => {
-    const [tc, tcUi, sheetsTc, sheetsTcUi] = await Promise.all([
+    const [tc, tcUi, sheetsTc, sheetsTcUi, mentionUi] = await Promise.all([
       import('@univerjs/thread-comment'),
       import('@univerjs/thread-comment-ui'),
       import('@univerjs/sheets-thread-comment'),
       import('@univerjs/sheets-thread-comment-ui'),
+      // @-mention autocomplete for the comment editor. Lists candidates via the
+      // core IMentionIOService, which CasualSheets overrides with the
+      // host-pluggable CasualMentionIOService (see mention-source.ts). Riding
+      // the comment group means it loads exactly when comments do.
+      import('@univerjs/docs-mention-ui'),
       // Side-effect imports: install FWorksheet.getComments / FRange.
       // getComments / addCommentAsync on the facade prototype. Without
       // these the CommentsPanel's `getActiveSheet().getComments()` and
@@ -94,6 +99,7 @@ const LOADERS: Record<LazyPluginGroup, Loader> = {
       [tcUi.UniverThreadCommentUIPlugin],
       [sheetsTc.UniverSheetsThreadCommentPlugin],
       [sheetsTcUi.UniverSheetsThreadCommentUIPlugin],
+      [mentionUi.UniverDocsMentionUIPlugin],
     ];
   },
   drawing: async () => {

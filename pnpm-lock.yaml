@@ -374,6 +374,9 @@ importers:
       '@univerjs/docs':
         specifier: link:../../vendor/univer-revamp/packages/docs
         version: link:../../vendor/univer-revamp/packages/docs
+      '@univerjs/docs-mention-ui':
+        specifier: link:../../vendor/univer-revamp/packages/docs-mention-ui
+        version: link:../../vendor/univer-revamp/packages/docs-mention-ui
       '@univerjs/docs-ui':
         specifier: link:../../vendor/univer-revamp/packages/docs-ui
         version: link:../../vendor/univer-revamp/packages/docs-ui

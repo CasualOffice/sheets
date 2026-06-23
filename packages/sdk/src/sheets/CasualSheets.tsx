@@ -39,6 +39,7 @@ import {
 } from 'react';
 import {
   ICommandService,
+  IMentionIOService,
   LocaleType,
   LogLevel,
   ThemeService,
@@ -49,6 +50,7 @@ import {
   type IWorkbookData,
   type ILocales,
 } from '@univerjs/core';
+import { CasualMentionIOService } from './mention-io';
 import { FUniver } from '@univerjs/core/facade';
 import { defaultTheme } from '@univerjs/themes';
 
@@ -281,6 +283,10 @@ export function CasualSheets({
       locale,
       locales,
       logLevel,
+      // Replace the default mention IO (hardwired to the current user) with our
+      // host-pluggable source so comment @-mentions can list real collaborators.
+      // No-op until a provider is installed via `setMentionProvider`.
+      override: [[IMentionIOService, { useClass: CasualMentionIOService }]],
     });
 
     const uiOpts = { ...DEFAULT_UI, ...ui, container };
