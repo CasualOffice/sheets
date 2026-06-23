@@ -180,10 +180,33 @@ export function useActiveCellState(): ActiveCellState {
       let stats: ActiveCellState['stats'] = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sel = (sheet as any).getSelection?.();
-      const ranges: { getValues: () => unknown[][]; getWidth: () => number; getHeight: () => number }[] =
-        sel?.getActiveRangeList?.() ?? [selection];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawRanges: any[] = sel?.getActiveRangeList?.() ?? [selection];
+      // Clamp each selected range to the used range before materializing values.
+      // A full-column / full-row / Ctrl+A selection spans the whole grid (now up
+      // to 1,048,576 × 16,384), which alone would blow the cap and hide stats that
+      // Excel happily shows. The populated extent is tiny by comparison, so clamp
+      // to [lastRow, lastColumn] — `getValues()` then only materializes cells that
+      // can actually hold data, and the cap still guards a genuinely huge *dense*
+      // selection.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lastRow = (sheet as any).getLastRow?.() ?? -1;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lastCol = (sheet as any).getLastColumn?.() ?? -1;
+      const ranges: { getValues: () => unknown[][]; getWidth: () => number; getHeight: () => number }[] = [];
       let totalCells = 0;
-      for (const r of ranges) totalCells += r.getWidth() * r.getHeight();
+      for (const r of rawRanges) {
+        const sr = r.getRow();
+        const sc = r.getColumn();
+        let er = sr + r.getHeight() - 1;
+        let ec = sc + r.getWidth() - 1;
+        if (lastRow >= 0) er = Math.min(er, lastRow);
+        if (lastCol >= 0) ec = Math.min(ec, lastCol);
+        if (er < sr || ec < sc) continue; // selection lies entirely past the data
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ranges.push((sheet as any).getRange(sr, sc, er - sr + 1, ec - sc + 1));
+        totalCells += (er - sr + 1) * (ec - sc + 1);
+      }
       if (totalCells > 0 && totalCells <= SELECTION_STATS_CAP) {
         let cellCount = 0;
         let count = 0;
