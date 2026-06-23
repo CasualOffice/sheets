@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SheetsThreadCommentModel } from '@univerjs/sheets-thread-comment';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
 import { Icon } from './Icon';
@@ -45,14 +46,49 @@ function readComments(api: any): CommentRow[] {
   return rows;
 }
 
+/**
+ * Resolved comments leave the cell-location index, so `getComments()` (the
+ * active list) no longer returns them. Read them straight from the model — the
+ * only path to a "resolved" view + reopen.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readResolved(api: any): CommentRow[] {
+  try {
+    const injector = api?._injector;
+    const model = injector?.get?.(SheetsThreadCommentModel);
+    const wb = api?.getActiveWorkbook?.();
+    const ws = wb?.getActiveSheet?.();
+    if (!model?.getSubUnitAll || !wb || !ws) return [];
+    const unitId = wb.getId();
+    const subUnitId = ws.getSheetId?.() ?? ws.getId?.();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const all: any[] = model.getSubUnitAll(unitId, subUnitId) ?? [];
+    const rows: CommentRow[] = [];
+    for (const c of all) {
+      if (!c?.resolved) continue;
+      const stream: string = c.text?.dataStream ?? '';
+      const text = stream.replace(/[\r\n\t]+/g, ' ').trim() || '(empty comment)';
+      rows.push({ id: c.id, text, ref: c.ref ?? '', replies: c.children?.length ?? 0 });
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 export function CommentsPanel() {
   const api = useUniverAPI();
   const ui = useUI();
   const [rows, setRows] = useState<CommentRow[]>([]);
+  const [resolved, setResolved] = useState<CommentRow[]>([]);
+  const [showResolved, setShowResolved] = useState(false);
 
   useEffect(() => {
     if (!api) return;
-    const read = () => setRows(readComments(api));
+    const read = () => {
+      setRows(readComments(api));
+      setResolved(readResolved(api));
+    };
     read();
     const disp = api.addEvent(api.Event.CommandExecuted, (e) => {
       const id = (e as { id?: string }).id;
@@ -68,7 +104,7 @@ export function CommentsPanel() {
     return () => disp.dispose();
   }, [api]);
 
-  const empty = rows.length === 0;
+  const empty = rows.length === 0 && resolved.length === 0;
 
   const openThread = (r: CommentRow) => {
     if (!api || !r.ref) return;
@@ -80,11 +116,11 @@ export function CommentsPanel() {
     }
   };
 
-  // Resolve a comment. The command + collab sync already exist — this surfaces
-  // them in the panel. Resolving removes the comment from the cell-location
-  // index, so it leaves the list (the active view shows open threads only;
-  // a resolved-comments view + reopen is a follow-up — see #111).
-  const resolveComment = (r: CommentRow) => {
+  // Resolve / reopen a comment. The command + collab sync already exist — this
+  // surfaces them. Resolving removes the comment from the cell-location index
+  // (it moves to the Resolved section, read straight from the model); reopening
+  // restores it to the active list.
+  const setResolvedState = (commentId: string, value: boolean) => {
     if (!api) return;
     try {
       const wb = api.getActiveWorkbook();
@@ -95,8 +131,8 @@ export function CommentsPanel() {
       api.executeCommand('thread-comment.command.resolve-comment', {
         unitId: wb.getId(),
         subUnitId,
-        commentId: r.id,
-        resolved: true,
+        commentId,
+        resolved: value,
       });
     } catch {
       /* command unavailable — plugin not loaded */
@@ -137,7 +173,7 @@ export function CommentsPanel() {
               Add comment
             </button>
           </div>
-        ) : (
+        ) : rows.length > 0 ? (
           <ul className="side-panel__rows comments-panel__list">
             {rows.map((r) => (
               <li
@@ -167,13 +203,61 @@ export function CommentsPanel() {
                   className="comments-panel__resolve"
                   data-testid={`comments-panel-resolve-${r.id}`}
                   title="Resolve comment"
-                  onClick={() => resolveComment(r)}
+                  onClick={() => setResolvedState(r.id, true)}
                 >
                   <Icon name="check_circle" size="sm" />
                 </button>
               </li>
             ))}
           </ul>
+        ) : null}
+
+        {!empty && resolved.length > 0 && (
+          <div className="comments-panel__resolved">
+            <button
+              type="button"
+              className="comments-panel__resolved-toggle"
+              data-testid="comments-panel-resolved-toggle"
+              aria-expanded={showResolved}
+              onClick={() => setShowResolved((v) => !v)}
+            >
+              <Icon name={showResolved ? 'expand_more' : 'chevron_right'} size="sm" />
+              Resolved
+              <span className="side-panel__count">{resolved.length}</span>
+            </button>
+            {showResolved && (
+              <ul className="side-panel__rows comments-panel__list">
+                {resolved.map((r) => (
+                  <li
+                    className="side-panel__row comments-panel__row comments-panel__row--resolved"
+                    key={r.id}
+                    data-testid={`comments-panel-resolved-row-${r.id}`}
+                  >
+                    <button
+                      type="button"
+                      className="comments-panel__open"
+                      onClick={() => openThread(r)}
+                      title={`Go to ${r.ref || 'comment'}`}
+                    >
+                      <span className="comments-panel__row-top">
+                        <span className="comments-panel__ref">{r.ref || 'Comment'}</span>
+                      </span>
+                      <span className="comments-panel__text">{r.text}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="comments-panel__resolve"
+                      data-testid={`comments-panel-reopen-${r.id}`}
+                      title="Reopen comment"
+                      onClick={() => setResolvedState(r.id, false)}
+                    >
+                      <Icon name="undo" size="sm" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
     </aside>

@@ -1677,6 +1677,30 @@ button {
   background: var(--color-hover);
   color: var(--color-success, #188038);
 }
+/* Resolved-comments section (Phase 3, T3.2 reopen). */
+.comments-panel__resolved {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-2);
+}
+.comments-panel__resolved-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.comments-panel__resolved-toggle:hover {
+  color: var(--color-text);
+}
+.comments-panel__row--resolved .comments-panel__text {
+  opacity: 0.7;
+}
 .comments-panel__row-top {
   display: flex;
   align-items: center;
