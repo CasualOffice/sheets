@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { CustomRangeType } from '@univerjs/core';
 import { SheetsThreadCommentModel } from '@univerjs/sheets-thread-comment';
 import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
@@ -9,7 +10,8 @@ import {
   getCommentAuthor,
   subscribeCommentAuthors,
 } from '../collab/comment-authors';
-import { initials } from '../collab/presence';
+import { commentMentionsName } from '../collab/comment-mentions';
+import { getDisplayName, initials } from '../collab/presence';
 
 /**
  * Comments task pane — our own React panel so it shares the exact
@@ -23,13 +25,14 @@ import { initials } from '../collab/presence';
  * the thread (reply / resolve / edit). "Add comment" opens the same
  * comment-on-cell modal as Review → New comment.
  */
-type CommentRow = { id: string; text: string; ref: string; replies: number };
+type CommentRow = { id: string; text: string; ref: string; replies: number; mentionsMe: boolean };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function readComments(api: any): CommentRow[] {
   const ws = api?.getActiveWorkbook?.()?.getActiveSheet?.();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const all: any[] = ws?.getComments?.() ?? [];
+  const me = getDisplayName();
   const rows: CommentRow[] = [];
   for (const c of all) {
     try {
@@ -44,7 +47,15 @@ function readComments(api: any): CommentRow[] {
         /* range no longer resolvable */
       }
       const replies = c.getReplies?.()?.length ?? 0;
-      rows.push({ id: c.id ?? data.id ?? ref, text, ref, replies });
+      // "Mentions you" covers the whole thread: the root or any reply @-ing me.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const replyBodies: any[] = c.getReplies?.() ?? [];
+      const mentionsMe =
+        commentMentionsName(data.text, CustomRangeType.MENTION, me) ||
+        replyBodies.some((r) =>
+          commentMentionsName(r?.getCommentData?.()?.text, CustomRangeType.MENTION, me),
+        );
+      rows.push({ id: c.id ?? data.id ?? ref, text, ref, replies, mentionsMe });
     } catch {
       /* skip malformed thread */
     }
@@ -69,12 +80,24 @@ function readResolved(api: any): CommentRow[] {
     const subUnitId = ws.getSheetId?.() ?? ws.getId?.();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const all: any[] = model.getSubUnitAll(unitId, subUnitId) ?? [];
+    const me = getDisplayName();
     const rows: CommentRow[] = [];
     for (const c of all) {
       if (!c?.resolved) continue;
       const stream: string = c.text?.dataStream ?? '';
       const text = stream.replace(/[\r\n\t]+/g, ' ').trim() || '(empty comment)';
-      rows.push({ id: c.id, text, ref: c.ref ?? '', replies: c.children?.length ?? 0 });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const children: any[] = c.children ?? [];
+      const mentionsMe =
+        commentMentionsName(c.text, CustomRangeType.MENTION, me) ||
+        children.some((r) => commentMentionsName(r?.text, CustomRangeType.MENTION, me));
+      rows.push({
+        id: c.id,
+        text,
+        ref: c.ref ?? '',
+        replies: children.length,
+        mentionsMe,
+      });
     }
     return rows;
   } catch {
@@ -208,7 +231,9 @@ export function CommentsPanel() {
           <ul className="side-panel__rows comments-panel__list">
             {rows.map((r) => (
               <li
-                className="side-panel__row comments-panel__row"
+                className={`side-panel__row comments-panel__row${
+                  r.mentionsMe ? ' comments-panel__row--mentions-me' : ''
+                }`}
                 key={r.id}
                 data-testid={`comments-panel-row-${r.id}`}
               >
@@ -220,6 +245,16 @@ export function CommentsPanel() {
                 >
                   <span className="comments-panel__row-top">
                     <span className="comments-panel__ref">{r.ref || 'Comment'}</span>
+                    {r.mentionsMe && (
+                      <span
+                        className="comments-panel__mention-badge"
+                        data-testid={`comments-panel-mentions-me-${r.id}`}
+                        title="You were mentioned"
+                      >
+                        <Icon name="alternate_email" size="sm" />
+                        You
+                      </span>
+                    )}
                     {r.replies > 0 && (
                       <span className="comments-panel__replies" title={`${r.replies} replies`}>
                         <Icon name="reply" size="sm" />
