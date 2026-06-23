@@ -33,7 +33,7 @@ services:
       - |
         npm install -g pnpm@10.33.4
         pnpm install --frozen-lockfile
-        pnpm --filter @sheet/server dev &
+        pnpm --filter @casualoffice/collab dev &
         pnpm --filter @sheet/web dev --host 0.0.0.0 &
         wait
     volumes:

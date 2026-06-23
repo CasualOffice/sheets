@@ -43,7 +43,7 @@ export default defineConfig({
     command: [
       `mkdir -p ${SCRATCH}/workbooks`,
       `pnpm --filter @sheet/web build`,
-      `CASUAL_JWT_SECRET=wopi-e2e-secret-min-16chars-fine CASUAL_ADMIN_USERNAME=admin CASUAL_ADMIN_PASSWORD=adminpassword CASUAL_STORAGE=local CASUAL_LOCAL_PATH=${SCRATCH}/workbooks PORT=${PORT} RATE_LIMIT_ENABLED=false pnpm --filter @sheet/server start`,
+      `CASUAL_JWT_SECRET=wopi-e2e-secret-min-16chars-fine CASUAL_ADMIN_USERNAME=admin CASUAL_ADMIN_PASSWORD=adminpassword CASUAL_STORAGE=local CASUAL_LOCAL_PATH=${SCRATCH}/workbooks PORT=${PORT} RATE_LIMIT_ENABLED=false pnpm --filter @casualoffice/collab start`,
     ].join(' && '),
     url: `http://127.0.0.1:${PORT}/health`,
     timeout: 180_000,

@@ -3,6 +3,9 @@ dist/
 build/
 .turbo/
 vendor/
+# Collab server is a git submodule (CasualOffice/collab) with its own
+# formatting + CI — don't reformat vendored code.
+apps/server/
 pnpm-lock.yaml
 test-results/
 playwright-report/

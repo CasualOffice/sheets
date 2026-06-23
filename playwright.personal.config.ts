@@ -57,7 +57,7 @@ export default defineConfig({
       `mkdir -p ${SCRATCH}/workbooks`,
       `rm -f ${SCRATCH}/users.db ${SCRATCH}/users.db-wal ${SCRATCH}/users.db-shm`,
       `pnpm --filter @sheet/web build`,
-      `CASUAL_PERSONAL_MODE=single CASUAL_USERS_DB_PATH=${SCRATCH}/users.db CASUAL_STORAGE=local CASUAL_LOCAL_PATH=${SCRATCH}/workbooks PORT=${PORT} RATE_LIMIT_ENABLED=false pnpm --filter @sheet/server start`,
+      `CASUAL_PERSONAL_MODE=single CASUAL_USERS_DB_PATH=${SCRATCH}/users.db CASUAL_STORAGE=local CASUAL_LOCAL_PATH=${SCRATCH}/workbooks PORT=${PORT} RATE_LIMIT_ENABLED=false pnpm --filter @casualoffice/collab start`,
     ].join(' && '),
     url: `http://127.0.0.1:${PORT}/health`,
     timeout: 180_000,

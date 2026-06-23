@@ -51,6 +51,12 @@ services:
       HOST: ${HOST:-0.0.0.0}
       PORT: ${PORT:-3000}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # The collab server (now a product-agnostic submodule vendored across
+      # Docs/Sheets) namespaces Redis room keys by prefix. Pin the legacy
+      # Sheets prefix so rooms persisted by pre-submodule images — which used
+      # a hardcoded `casual-sheets:room:` — stay readable after upgrading.
+      # Safe to drop on a fresh deployment with no existing Redis snapshots.
+      CASUAL_REDIS_PREFIX: ${CASUAL_REDIS_PREFIX:-casual-sheets:room:}
       # Eviction window for idle rooms (minutes). The previous 15-min
       # window was short enough that a user closing a laptop for coffee
       # came back to a blank sheet. Only "throwaway" rooms (no

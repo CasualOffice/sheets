@@ -7,7 +7,7 @@
   "packageManager": "pnpm@10.33.4",
   "scripts": {
     "dev:web": "pnpm --filter @sheet/web dev",
-    "dev:server": "pnpm --filter @sheet/server dev",
+    "dev:server": "pnpm --filter @casualoffice/collab dev",
     "build:web": "pnpm --filter @sheet/web build",
     "lint": "eslint .",
     "format": "prettier --write .",

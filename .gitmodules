@@ -4,3 +4,6 @@
 [submodule "vendor/design-system"]
 	path = vendor/design-system
 	url = git@github.com:CasualOffice/design-book.git
+[submodule "apps/server"]
+	path = apps/server
+	url = git@github.com:CasualOffice/collab.git

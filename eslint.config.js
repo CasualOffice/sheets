@@ -14,6 +14,10 @@ export default tseslint.config(
       '**/build/**',
       '**/.turbo/**',
       'vendor/**',
+      // The collab server (apps/server) is a git submodule — CasualOffice/collab,
+      // a product-agnostic server shared with Docs. It owns its own lint/format/CI;
+      // we don't restyle vendored code. (Same treatment as vendor/**.)
+      'apps/server/**',
       // Agent git worktrees live here — they're full copies of the repo (incl.
       // built JS), so linting them double-counts everything and breaks `lint`.
       '.claude/**',
