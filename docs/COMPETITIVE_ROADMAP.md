@@ -147,16 +147,30 @@ Goal: make the now-bigger grid fast. Sequences the deferred items in `UNIVER_FOR
 - **T2.5** Large-file pipeline stages 5–6 — hyperlinks-in-snapshot + Yjs op-log compaction
   (`docs/LARGE_FILE_PIPELINE.md`).
 
-### Phase 3 — Collaboration Depth
+### Phase 3 — Collaboration Depth  *(partial — T3.1/T3.3 blocked)*
 
 Goal: close the Google collaboration-polish gap. Builds on existing collab + presence.
 
-- **T3.1** Comments — @mentions (autocomplete from room peers / personal-mode users).
-- **T3.2** Comments — resolve / reopen + assignment.
-- **T3.3** Comments — in-app notifications (email via Drive/SMTP deferred).
-- **T3.4** Hybrid sharing — link roles (viewer / commenter / editor) enforced at the Univer
-  engine + collab layer in this repo; full RBAC / invites / SSO deferred to Casual Drive.
-  (`apps/web/src/collab/`, `docs/SHARING_MODEL.md`)
+- **T3.4** Hybrid sharing — link roles (viewer / commenter / editor). ✅ **shipped** (#121):
+  `applyCommentOnly` engine-layer veto (cells locked, comments work) wired into CollabDriver;
+  anonymous `?role=comment` works end-to-end. Server-token comment enforcement (per-mutation
+  filtering) + the share-UI 3-way picker remain follow-ups.
+- **T3.2** Comments — resolve / reopen. ✅ **shipped** (#123 resolve, #124 reopen): panel
+  Resolve button + a "Resolved" section (read from `SheetsThreadCommentModel`) with reopen.
+  **Assignment** remains — needs a new `assignee` field on `IThreadComment` (a fork model
+  change), so it's deferred.
+- **T3.1** Comments — @mentions. ⛔ **BLOCKED.** The slice-1 identity foundation (#122)
+  populated `UserManagerService` so authorship/mentions resolve to names — but
+  `setCurrentUser(<custom id>)` **breaks collab cell-sync**: `currentUser$` feeds Univer's
+  permission layer (`sheets-ui/menu/permission-menu-util.ts`), so an unknown current-user id
+  makes peers treat the client as a non-editor and stop applying grid mutations. Bisected to
+  `setCurrentUser` (`addUser` is safe); reverted on main (#125). Re-asserting
+  `WorkbookEditablePermission` after `setCurrentUser` does **not** fix it (tested) — the block
+  is a deeper Univer permission mechanism. Unblocking needs dedicated Univer-internals work
+  (grant the custom user real edit permission) **or** an app/render-layer name resolver that
+  never touches Univer's current user. See #111.
+- **T3.3** Comments — in-app notifications (email via Drive/SMTP deferred). **Blocked** on
+  T3.1 (mentions are the trigger).
 
 ### Phase 4 — Feature Depth
 
@@ -199,7 +213,7 @@ ordered.
 | --- | --- | --- | --- |
 | 1 — Grid Scale | Milestone 1 | #109 | ✅ complete |
 | 2 — Perf Hardening | Milestone 2 | #110 | ✅ complete |
-| 3 — Collab Depth | Milestone 3 | #111 | next |
+| 3 — Collab Depth | Milestone 3 | #111 | partial — T3.4 + T3.2(resolve/reopen) shipped; T3.1/T3.3 blocked (Univer permission), T3.2 assignment deferred |
 | 4 — Feature Depth | Milestone 4 | #112 | planned |
 | 5 — Automation | Milestone 5 | #113 | planned |
 | 6 — Mobile | Milestone 6 | #114 | planned |
