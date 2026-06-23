@@ -17,8 +17,20 @@ export const INITIAL_ROWS = 1024;
 // count, so a 128-wide start cost ~5× the boot allocation for columns the
 // user almost never reaches before `useWorkbookGrowth` extends them.
 export const INITIAL_COLUMNS = 26;
-export const MAX_ROWS = 8192;
-export const MAX_COLUMNS = 1024;
+// Interactive ceiling — Excel parity (1,048,576 × 16,384). Safe because cost
+// tracks usage, not these constants:
+//   - `useWorkbookGrowth` extends rowCount/columnCount in small on-demand chunks;
+//     small sheets stay small.
+//   - The render skeleton's accumulation arrays (vendor/univer-revamp/.../
+//     sheet-skeleton.ts) are only as large as the grown/imported extent, and a
+//     pure cell edit does NOT rebuild them.
+// Measured (chromium, M-series): declaring a full 1,048,576-row grid + editing
+// the far edge is a one-time ~170 ms; a pure cell edit at 1M rows is ~1 ms. The
+// only costly op is insert/delete-row at extreme row counts (~517 ms @1M), which
+// is optimized separately by sparse insert/delete (docs/COMPETITIVE_ROADMAP.md
+// Phase 2, T2.1 / UNIVER_FORK_PERF.md item 6) — not a regression of normal use.
+export const MAX_ROWS = 1048576;
+export const MAX_COLUMNS = 16384;
 
 export function emptyWorkbook(): IWorkbookData {
   const nowIso = new Date().toISOString();
