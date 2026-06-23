@@ -35,6 +35,12 @@ import {
   markNamePrompted,
   type Identity,
 } from './presence';
+import {
+  recordCommentAuthor,
+  mergeCommentAuthors,
+  snapshotCommentAuthors,
+  type CommentAuthor,
+} from './comment-authors';
 import { usePresenceWire } from './usePresenceWire';
 import { NamePrompt } from './NamePrompt';
 import { PresenceLayer } from './PresenceLayer';
@@ -77,6 +83,8 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   const docRef = useRef<Y.Doc | null>(null);
   // Cleanup for the charts ↔ Yjs bridge wired up when a doc connects.
   const chartsSyncDisposeRef = useRef<(() => void) | null>(null);
+  // Cleanup for the comment-authors ↔ Yjs map wired up alongside it.
+  const commentAuthorsSyncDisposeRef = useRef<(() => void) | null>(null);
   // Cleanup for the view-only permission gate. Applied after join for
   // `role=view` joiners; re-applied on every workbook swap (snapshot
   // replace, late-join seed apply) since the permission is per-unit-id
@@ -141,6 +149,53 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   // Local identity. `null` until we've decided we're joining a room.
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [needsNamePrompt, setNeedsNamePrompt] = useState(false);
+
+  // Live mirror of identity + doc for the comment-authorship stamping hook
+  // below (a long-lived event listener that must read the *current* values
+  // without re-subscribing on every identity change).
+  const identityRef = useRef<Identity | null>(null);
+  const roleRef = useRef<CollabRole>('write');
+  useEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
+
+  // Comment authorship — stamp who wrote each comment. The add-comment
+  // *command* runs only on the originating client (peers receive the
+  // replicated mutation, not the command), so this listener fires exactly
+  // once per comment, on its author's client. We record the author from our
+  // own presence identity and — in a room — mirror it into the shared map so
+  // peers can resolve the name. See `comment-authors.ts` for why we can't use
+  // Univer's `personId` (the #122 setCurrentUser ↔ permission coupling).
+  useEffect(() => {
+    if (!api) return;
+    const disp = api.addEvent(api.Event.CommandExecuted, (e) => {
+      const ev = e as {
+        id?: string;
+        params?: { comment?: { id?: string } };
+        options?: { fromCollab?: boolean };
+      };
+      if (ev.id !== 'thread-comment.command.add-comment') return;
+      if (ev.options?.fromCollab) return; // defensive — commands don't replicate
+      const commentId = ev.params?.comment?.id;
+      if (!commentId) return;
+      const id = identityRef.current;
+      const name = id?.name ?? getDisplayName() ?? 'You';
+      const color = id?.color ?? colorForName(name);
+      const author = { name, color };
+      const changed = recordCommentAuthor(commentId, author);
+      // Mirror into the room's shared map so peers resolve the name. Gated to
+      // roles that can actually create comments (write/comment); view can't.
+      const d = docRef.current;
+      if (changed && d && roleRef.current !== 'view') {
+        const map = d.getMap<CommentAuthor>('casual-comment-authors');
+        d.transact(() => map.set(commentId, author));
+      }
+    });
+    return () => disp.dispose();
+  }, [api]);
 
   // Effect 1: discover the room (URL) and decide whether to prompt or join.
   useEffect(() => {
@@ -494,6 +549,11 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       // converge in one round-trip just like cell edits.
       chartsSyncDisposeRef.current = wireChartsSync(doc, charts, joinRole);
 
+      // Comment authorship rides its own Y.Map, same rationale as charts:
+      // the op-log only carries cell mutations, so who-wrote-what syncs
+      // out-of-band. Hydrate from the room, observe peers, seed our own.
+      commentAuthorsSyncDisposeRef.current = wireCommentAuthorsSync(doc, joinRole);
+
       // View-only joiners get Univer's WorkbookEditablePermission flipped
       // to false. The editor refuses to open and edit menu items go
       // disabled — the bridge's role-gate (which drops outbound
@@ -506,9 +566,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
           if (!wb) return;
           viewModeDisposeRef.current?.();
           viewModeDisposeRef.current =
-            joinRole === 'comment'
-              ? applyCommentOnly(api)
-              : applyViewOnlyMode(api, wb.getId());
+            joinRole === 'comment' ? applyCommentOnly(api) : applyViewOnlyMode(api, wb.getId());
         });
       }
 
@@ -520,6 +578,8 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
   const teardown = (): void => {
     chartsSyncDisposeRef.current?.();
     chartsSyncDisposeRef.current = null;
+    commentAuthorsSyncDisposeRef.current?.();
+    commentAuthorsSyncDisposeRef.current = null;
     viewModeDisposeRef.current?.();
     viewModeDisposeRef.current = null;
     // One call tears down the bridge + provider + doc (idempotent).
@@ -1224,6 +1284,44 @@ function wireChartsSync(
 
   return () => {
     unsubLocal();
+    map.unobserve(onRemote);
+  };
+}
+
+/**
+ * Sync the comment-authorship map (`commentId → {name,color}`) over Yjs.
+ * Mirrors {@link wireChartsSync}: hydrate from the room, observe peers, and
+ * seed our own locally-recorded authors. The *write* side (recording who
+ * wrote a new comment) lives in the always-on stamping effect above — this
+ * wire only carries the data between peers. See `comment-authors.ts`.
+ */
+function wireCommentAuthorsSync(doc: Y.Doc, role: CollabRole): () => void {
+  const map = doc.getMap<CommentAuthor>('casual-comment-authors');
+
+  // Hydrate whatever the room already knows.
+  if (map.size > 0) {
+    mergeCommentAuthors(map.entries());
+  }
+  // Seed authors we recorded before joining (e.g. comments added single-player
+  // on a workbook we're now sharing). view can't author comments, so skip.
+  if (role !== 'view') {
+    const local = snapshotCommentAuthors();
+    if (local.length > 0) {
+      doc.transact(() => {
+        for (const [id, a] of local) {
+          if (!map.has(id)) map.set(id, a);
+        }
+      });
+    }
+  }
+
+  const onRemote = (_event: Y.YMapEvent<CommentAuthor>, tx: Y.Transaction) => {
+    if (tx.local) return; // our own stamps are already in the store
+    mergeCommentAuthors(map.entries());
+  };
+  map.observe(onRemote);
+
+  return () => {
     map.unobserve(onRemote);
   };
 }
