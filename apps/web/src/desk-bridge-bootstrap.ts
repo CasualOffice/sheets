@@ -395,6 +395,91 @@ if (typeof window !== 'undefined' && isDesktop()) {
       console.debug('[deskApp] theme plumbing failed', err);
     }
 
+    // --- Cold-start boot overlay (top-level desktop only) ----------------
+    // Univer's canvas can take 1–2s to initialise; without this the window
+    // shows a blank/white flash (and white even in dark mode) until the
+    // grid paints. We inject a full-window overlay synchronously here —
+    // before React/Univer mount — themed from the resolved theme above so
+    // it never flashes white in dark mode. App.tsx calls
+    // `window.__deskApp__.dismissBoot()` once the workbook is ready; an
+    // ~8s safety timer guarantees it can never stick. The overlay sits
+    // above Univer's canvas and is fully removed on dismiss so it never
+    // intercepts grid input.
+    if (isTopLevel) {
+      try {
+        const themed = bridge as unknown as { theme?: 'light' | 'dark'; dismissBoot?: () => void };
+        const dark = themed.theme === 'dark';
+        const bg = dark ? '#1a1a1a' : '#ffffff';
+        const fg = dark ? '#e6e6e6' : '#3c3c3c';
+        const ring = dark ? '#3a3a3a' : '#e2e2e2';
+        const accent = dark ? '#6aa3ff' : '#2563eb';
+        const hasFile = !!filePath;
+        const label = hasFile ? 'Opening…' : 'New spreadsheet…';
+
+        if (!document.getElementById('__deskapp_boot_style__')) {
+          const st = document.createElement('style');
+          st.id = '__deskapp_boot_style__';
+          st.textContent =
+            // Below the 99999 error banner (so a boot-time error stays
+            // visible) but above Univer's canvas chrome.
+            '#__deskapp_boot__{position:fixed;inset:0;z-index:99998;display:flex;' +
+            'flex-direction:column;align-items:center;justify-content:center;gap:16px;' +
+            'opacity:1;transition:opacity .25s ease;font:14px/1.4 Inter,system-ui,' +
+            'sans-serif;}' +
+            '#__deskapp_boot__ .deskapp-boot__spinner{width:34px;height:34px;' +
+            'border-radius:50%;border:3px solid var(--deskapp-boot-ring);' +
+            'border-top-color:var(--deskapp-boot-accent);' +
+            'animation:deskapp-boot-spin .8s linear infinite;}' +
+            '@keyframes deskapp-boot-spin{to{transform:rotate(360deg);}}';
+          (document.head || document.documentElement).appendChild(st);
+        }
+
+        const overlay = document.createElement('div');
+        overlay.id = '__deskapp_boot__';
+        overlay.style.background = bg;
+        overlay.style.color = fg;
+        overlay.style.setProperty('--deskapp-boot-ring', ring);
+        overlay.style.setProperty('--deskapp-boot-accent', accent);
+        // Brand mark — a simple grid glyph so we add no asset dependency
+        // and stay safe before the editor's bundle/fonts have loaded.
+        overlay.innerHTML =
+          '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+          '<rect x="3" y="3" width="18" height="18" rx="3" stroke="' +
+          accent +
+          '" stroke-width="2"/>' +
+          '<path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="' +
+          accent +
+          '" stroke-width="1.4" opacity="0.6"/></svg>' +
+          '<div class="deskapp-boot__spinner"></div>' +
+          '<div class="deskapp-boot__label">' +
+          label +
+          '</div>';
+        (document.body || document.documentElement).appendChild(overlay);
+
+        let dismissed = false;
+        const dismissBoot = () => {
+          if (dismissed) return;
+          dismissed = true;
+          try {
+            const el = document.getElementById('__deskapp_boot__');
+            if (!el) return;
+            el.style.opacity = '0';
+            el.style.pointerEvents = 'none';
+            // Remove after the fade so it never intercepts grid input.
+            window.setTimeout(() => el.remove(), 300);
+          } catch {
+            /* best-effort */
+          }
+        };
+        themed.dismissBoot = dismissBoot;
+        // Safety net: never let the overlay stick even if the ready signal
+        // never fires (parse error swallowed, Univer stalls, etc.).
+        window.setTimeout(dismissBoot, 8000);
+      } catch (err) {
+        console.debug('[deskApp] boot overlay failed', err);
+      }
+    }
+
     // Ctrl/Cmd-H — focus the launcher window. Only fires in top-level
     // mode where __TAURI__.core.invoke is directly available.
     if (isTopLevel && tauriCore?.invoke) {
@@ -422,6 +507,9 @@ declare global {
       themeMode?: 'system' | 'light' | 'dark';
       /** Resolved theme ('system' collapsed to 'light'/'dark'). */
       theme?: 'light' | 'dark';
+      /** Idempotent: fade out + remove the cold-start boot overlay.
+       *  Defined only in top-level desktop mode; safe to optional-chain. */
+      dismissBoot?: () => void;
     };
   }
 }

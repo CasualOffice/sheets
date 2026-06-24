@@ -253,6 +253,29 @@ export function TitleBar() {
             </div>
           </>
         )}
+        {/* Desktop build: a "Home" affordance that brings the Casual Office
+            launcher window forward (the launcher IS the home screen). Desktop
+            only — web has its own /home brand link above. */}
+        {isDesktop() && (
+          <IconButton
+            size="md"
+            icon="home"
+            label="Back to Casual Office"
+            data-testid="titlebar-back-to-launcher"
+            onClick={() => {
+              try {
+                // Top-level desktop mode: __TAURI__.core.invoke is direct.
+                (
+                  window as unknown as {
+                    __TAURI__?: { core?: { invoke?: (cmd: string) => Promise<unknown> } };
+                  }
+                ).__TAURI__?.core?.invoke?.('focus_launcher_window')?.catch?.(() => undefined);
+              } catch {
+                /* best-effort — never break the title bar */
+              }
+            }}
+          />
+        )}
         {/* Desktop build: a local-user chip stands in for the collab cluster —
             single-user, so it just shows who you're signed in as (from the
             shell's profile.json via the bridge). */}
