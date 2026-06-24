@@ -87,6 +87,7 @@ import {
   unprotectActiveSheet,
   isActiveSheetProtected,
 } from '../sheets/protection';
+import { isDesktop } from '../desk-bridge-bootstrap';
 import {
   applyAutoFunction,
   autoFitColumns,
@@ -1406,34 +1407,40 @@ export function MenuBar() {
             });
           },
         },
-        { kind: 'separator', id: 'sep-coedit' },
-        ...(collab.roomId
-          ? ([
-              {
-                kind: 'item',
-                id: 'download-room',
-                label: 'Download a copy (.xlsx)',
-                icon: 'download',
-                onClick: handleExportXlsx,
-              },
-              {
-                kind: 'item',
-                id: 'leave-room',
-                label: 'Leave room',
-                icon: 'logout',
-                onClick: () => {
-                  window.location.href = window.location.origin + '/';
-                },
-              },
-            ] as MenuItem[])
+        // Co-editing affordances — omitted entirely in the desktop build
+        // (single-user, local-file app with no collab server).
+        ...(isDesktop()
+          ? ([] as MenuItem[])
           : ([
-              {
-                kind: 'item',
-                id: 'start-room',
-                label: 'Share for co-editing…',
-                icon: 'group_add',
-                onClick: () => ui.openShareRoom(),
-              },
+              { kind: 'separator', id: 'sep-coedit' },
+              ...(collab.roomId
+                ? [
+                    {
+                      kind: 'item',
+                      id: 'download-room',
+                      label: 'Download a copy (.xlsx)',
+                      icon: 'download',
+                      onClick: handleExportXlsx,
+                    },
+                    {
+                      kind: 'item',
+                      id: 'leave-room',
+                      label: 'Leave room',
+                      icon: 'logout',
+                      onClick: () => {
+                        window.location.href = window.location.origin + '/';
+                      },
+                    },
+                  ]
+                : [
+                    {
+                      kind: 'item',
+                      id: 'start-room',
+                      label: 'Share for co-editing…',
+                      icon: 'group_add',
+                      onClick: () => ui.openShareRoom(),
+                    },
+                  ]),
             ] as MenuItem[])),
         { kind: 'separator', id: 'sep-version' },
         {
