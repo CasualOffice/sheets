@@ -145,8 +145,9 @@ test('SaveResult discriminator covers exactly three variants', () => {
     { kind: 'download' },
     { kind: 'server', path: '/files/abc.xlsx', serverFileId: 'abc', serverEtag: 'v1' },
     { kind: 'conflict', expectedEtag: 'v1' },
+    { kind: 'cancelled' },
   ];
-  assert.equal(variants.length, 4);
+  assert.equal(variants.length, 5);
   // Exhaustiveness check — if a new variant is added, the switch loses
   // exhaustiveness and tsc will fail. Runtime: assert no `kind` slips
   // through unhandled.
@@ -156,6 +157,7 @@ test('SaveResult discriminator covers exactly three variants', () => {
       case 'download':
       case 'server':
       case 'conflict':
+      case 'cancelled':
         break;
       default: {
         const _exhaustive: never = v;

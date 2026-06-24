@@ -406,6 +406,10 @@ function handleSaveResult(
     }
     return;
   }
+  if (result.kind === 'cancelled') {
+    // User dismissed the native Save-As dialog — nothing written, no toast.
+    return;
+  }
   if (result.kind === 'server') {
     options.onServerEtag?.(result.serverEtag);
     // Bind the file id on FIRST create-save so subsequent saves take
@@ -422,6 +426,7 @@ function formatSaveMessage(result: SaveResult, filename: string): string {
   if (result.kind === 'folder') return `Saved as ${filename} in ${result.folderName}`;
   if (result.kind === 'server') return `Saved to ${result.path}`;
   if (result.kind === 'conflict') return `Couldn’t save ${filename} — file changed elsewhere`;
+  if (result.kind === 'cancelled') return 'Save cancelled';
   return `Saved as ${filename}`;
 }
 
@@ -449,12 +454,52 @@ async function deliverBlob(
   serverFileId: string | null = null,
   serverEtag: string | null = null,
 ): Promise<SaveResult> {
+  // Desktop (Tauri) build: route through the native bridge so a save
+  // overwrites the file on disk (or prompts) — never a phantom browser
+  // download. The hard rule from the desktop shell's CLAUDE.md. `save()`
+  // overwrites the bound path for the native xlsx, or prompts when untitled;
+  // other formats (ods/csv/tsv export) always prompt so they don't clobber
+  // the bound workbook.
+  const desktopResult = await deliverViaDesktopBridge(blob, filename, sourceFormat);
+  if (desktopResult) return desktopResult;
+
   return selectFileSource().save(blob, {
     filename,
     sourceFormat,
     existingId: serverFileId,
     existingEtag: serverEtag,
   });
+}
+
+type DeskBridge = {
+  isDesktop?: boolean;
+  filePath?: string | null;
+  save(bytes: ArrayBuffer): Promise<string | null>;
+  saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null>;
+};
+
+/**
+ * Save through the desktop bridge when it's present. Returns the SaveResult, or
+ * `null` when not in the desktop build (caller falls through to the FileSource).
+ */
+async function deliverViaDesktopBridge(
+  blob: Blob,
+  filename: string,
+  sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv',
+): Promise<SaveResult | null> {
+  const bridge =
+    typeof window !== 'undefined'
+      ? ((window as unknown as { __deskApp__?: DeskBridge }).__deskApp__ ?? undefined)
+      : undefined;
+  if (!bridge?.isDesktop) return null;
+  const bytes = await blob.arrayBuffer();
+  // xlsx is the native bound format → overwrite (or prompt if untitled);
+  // exports of other formats always prompt for a fresh path.
+  const savedPath =
+    sourceFormat === 'xlsx' ? await bridge.save(bytes) : await bridge.saveAs(filename, bytes);
+  if (savedPath == null) return { kind: 'cancelled' };
+  const folderName = savedPath.replace(/[\\/][^\\/]*$/, '') || savedPath;
+  return { kind: 'folder', folderName };
 }
 
 export function pickXlsxFile(): Promise<File | null> {

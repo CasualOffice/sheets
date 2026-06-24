@@ -70,7 +70,10 @@ export type SaveResult =
    *  WOPI, 412 from /files). The caller (file-actions) opens the
    *  conflict modal — Discard & reload vs Save as copy — and decides
    *  the next move. */
-  | { kind: 'conflict'; expectedEtag: string };
+  | { kind: 'conflict'; expectedEtag: string }
+  /** User dismissed a native Save-As dialog (desktop bridge). Nothing
+   *  was written; the caller shows no "saved" toast. */
+  | { kind: 'cancelled' };
 
 export type SaveOptions = {
   filename: string;
