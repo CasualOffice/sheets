@@ -88,7 +88,11 @@ export function App() {
     serverEtag: null,
   }));
 
-  const [homeDismissed, setHomeDismissed] = useState(false);
+  // In the desktop shell the launcher window IS the home screen, so the
+  // editor must boot straight into the workbook — never flash the HomeScreen
+  // template-gallery overlay. Start dismissed when running under the desk
+  // bridge (web keeps the original false → overlay-until-probe behaviour).
+  const [homeDismissed, setHomeDismissed] = useState(() => isDesktop());
 
   // Mirror the open file's name into the browser tab/window title,
   // Office-style ("Book1 — Casual Sheets"). On `/home` or `/templates`

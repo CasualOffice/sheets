@@ -108,7 +108,10 @@ if (typeof window !== 'undefined' && isDesktop()) {
     };
     /** Chunked write — same motivation as loadDocument's chunked read.
      *  Avoids the JSON-number-array IPC truncation threshold for big
-     *  files. */
+     *  files. The Rust side writes chunks to a temp file and only swaps
+     *  it into place on `commit_save_document` (atomic rename), so a
+     *  half-written file never clobbers the original. Any chunk OR the
+     *  commit throwing propagates so the editor reports a failed save. */
     async function chunkedWrite(path: string, buf: ArrayBuffer) {
       await inv('begin_save_document', { path });
       const view = new Uint8Array(buf);
@@ -117,6 +120,8 @@ if (typeof window !== 'undefined' && isDesktop()) {
         const slice = view.subarray(offset, Math.min(offset + CHUNK, view.byteLength));
         await inv('write_save_chunk', { path, offset, bytes: Array.from(slice) });
       }
+      // Atomic commit: swaps the temp file into the target path.
+      await inv('commit_save_document', { path });
     }
 
     async function updateWindowTitleFromPath(newPath: string) {
@@ -130,6 +135,41 @@ if (typeof window !== 'undefined' && isDesktop()) {
         /* best-effort */
       }
     }
+
+    // Best-effort dirty tracking for the Rust close-guard. We keep the
+    // current dirty state in a module-local boolean so we only fire the
+    // transition (clean→dirty / dirty→clean) once and never spam IPC.
+    // The Rust `set_window_dirty` command infers the window from the
+    // caller. All calls are best-effort and must never throw.
+    let isDirty = false;
+    function setWindowDirty(dirty: boolean) {
+      if (dirty === isDirty) return;
+      isDirty = dirty;
+      try {
+        void inv('set_window_dirty', { dirty }).catch(() => undefined);
+      } catch {
+        /* best-effort */
+      }
+    }
+    // Mark dirty on any user edit. Capture phase so we see the event even
+    // if the editor stops propagation. Heuristic: any input = dirty.
+    const markDirty = () => setWindowDirty(true);
+    document.addEventListener('input', markDirty, true);
+    document.addEventListener('beforeinput', markDirty, true);
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        // Univer's grid takes typing through keydown (its canvas has no
+        // <input> for cell entry), so flag dirty on printable / editing
+        // keys; ignore navigation and modifier chords (Ctrl+S, arrows).
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete') {
+          markDirty();
+        }
+      },
+      true,
+    );
+
     bridge = {
       isDesktop: true,
       get filePath() {
@@ -190,7 +230,13 @@ if (typeof window !== 'undefined' && isDesktop()) {
       },
       async save(bytes: ArrayBuffer): Promise<string | null> {
         if (filePath) {
-          await chunkedWrite(filePath, bytes);
+          try {
+            await chunkedWrite(filePath, bytes);
+          } catch (err) {
+            console.error('[deskApp] save failed for', filePath, err);
+            throw err;
+          }
+          setWindowDirty(false);
           return filePath;
         }
         return bridge!.saveAs('Untitled.xlsx', bytes);
@@ -198,13 +244,19 @@ if (typeof window !== 'undefined' && isDesktop()) {
       async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
         const newPath = (await inv('pick_save_path', { suggestedName })) as string | null;
         if (!newPath) return null;
-        await chunkedWrite(newPath, bytes);
+        try {
+          await chunkedWrite(newPath, bytes);
+        } catch (err) {
+          console.error('[deskApp] saveAs failed for', newPath, err);
+          throw err;
+        }
         try {
           await inv('add_recent_file', { path: newPath });
         } catch {
           /* best-effort */
         }
         filePath = newPath;
+        setWindowDirty(false);
         await updateWindowTitleFromPath(newPath);
         return newPath;
       },
@@ -273,6 +325,76 @@ if (typeof window !== 'undefined' && isDesktop()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__deskApp__ = bridge;
 
+    // --- Theme plumbing --------------------------------------------------
+    // The launcher passes its theme as `?theme=<system|light|dark>` and
+    // emits a Tauri event `deskapp://theme` (payload `{ theme }`) when the
+    // user flips it live. We resolve `system` against the OS colour scheme,
+    // expose `themeMode` (raw) + `theme` (resolved 'light'/'dark') on the
+    // bridge global, and re-broadcast as a DOM CustomEvent `deskapp:theme`
+    // (detail `{ mode, resolved }`) which the `../theme` provider listens
+    // for. Wrapped so a missing matchMedia / Tauri event API never throws
+    // and the editor still boots. In iframe mode there's no Tauri event
+    // bus, but matchMedia + the URL param still drive the resolved value.
+    try {
+      const themeBridge = bridge as unknown as {
+        themeMode: 'system' | 'light' | 'dark';
+        theme: 'light' | 'dark';
+      };
+      const parseMode = (): 'system' | 'light' | 'dark' => {
+        const raw = url.searchParams.get('theme');
+        return raw === 'light' || raw === 'dark' ? raw : 'system';
+      };
+      let themeMode = parseMode();
+      const mq =
+        typeof window.matchMedia === 'function'
+          ? window.matchMedia('(prefers-color-scheme: dark)')
+          : null;
+      const resolve = (mode: 'system' | 'light' | 'dark'): 'light' | 'dark' =>
+        mode === 'system' ? (mq?.matches ? 'dark' : 'light') : mode;
+
+      const reapply = () => {
+        const resolved = resolve(themeMode);
+        themeBridge.themeMode = themeMode;
+        themeBridge.theme = resolved;
+        try {
+          window.dispatchEvent(
+            new CustomEvent('deskapp:theme', { detail: { mode: themeMode, resolved } }),
+          );
+        } catch {
+          /* CustomEvent unsupported — best-effort */
+        }
+      };
+      // Initial publish so the provider can read `window.__deskApp__.theme`
+      // synchronously at module init and the event fires for late listeners.
+      reapply();
+
+      // OS scheme changes only matter while we're tracking `system`.
+      if (mq) {
+        const onMq = () => {
+          if (themeMode === 'system') reapply();
+        };
+        if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onMq);
+        else if (typeof mq.addListener === 'function') mq.addListener(onMq);
+      }
+
+      // Live launcher theme changes arrive over the Tauri event bus.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tauriEvent = (window as any).__TAURI__?.event;
+      if (tauriEvent?.listen) {
+        void tauriEvent
+          .listen('deskapp://theme', (e: { payload?: { theme?: string } }) => {
+            const next = e?.payload?.theme;
+            if (next === 'system' || next === 'light' || next === 'dark') {
+              themeMode = next;
+              reapply();
+            }
+          })
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      console.debug('[deskApp] theme plumbing failed', err);
+    }
+
     // Ctrl/Cmd-H — focus the launcher window. Only fires in top-level
     // mode where __TAURI__.core.invoke is directly available.
     if (isTopLevel && tauriCore?.invoke) {
@@ -296,6 +418,10 @@ declare global {
       loadDocument(p?: string): Promise<ArrayBuffer>;
       save(bytes: ArrayBuffer): Promise<string | null>;
       saveAs(name: string, bytes: ArrayBuffer): Promise<string | null>;
+      /** Raw launcher theme preference: 'system' | 'light' | 'dark'. */
+      themeMode?: 'system' | 'light' | 'dark';
+      /** Resolved theme ('system' collapsed to 'light'/'dark'). */
+      theme?: 'light' | 'dark';
     };
   }
 }

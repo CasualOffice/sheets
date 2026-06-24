@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { isDesktop } from './desk-bridge-bootstrap';
 
 /**
  * Light/dark theme — single source of truth across every `useTheme()`
@@ -33,7 +34,28 @@ function readStoredTheme(): Theme {
   return 'light';
 }
 
-let currentTheme: Theme = readStoredTheme();
+/**
+ * Initial theme. Under the Casual Office desktop shell the launcher owns
+ * the theme: the bridge bootstrap resolves `?theme=…` (incl. `system`)
+ * and publishes the resolved value on `window.__deskApp__.theme` before
+ * React mounts, so we seed from it and never read localStorage. The live
+ * effect in `useTheme` keeps it in sync after mount. In a plain browser
+ * `isDesktop()` is false and we keep the original localStorage behaviour.
+ */
+function readInitialTheme(): Theme {
+  if (isDesktop()) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const t = (window as any).__deskApp__?.theme;
+      if (t === 'dark' || t === 'light') return t;
+    } catch {
+      /* fall through to web behaviour */
+    }
+  }
+  return readStoredTheme();
+}
+
+let currentTheme: Theme = readInitialTheme();
 const subscribers = new Set<() => void>();
 
 function applyToHtml(theme: Theme): void {
@@ -63,6 +85,25 @@ function setTheme(next: Theme): void {
   }
 }
 
+/**
+ * Apply a theme pushed by the desktop launcher. Same store update +
+ * `<html>` attribute + subscriber fan-out as `setTheme`, but it does NOT
+ * persist to localStorage — the launcher is the source of truth in
+ * desktop mode, so we must not overwrite the user's separate web choice.
+ */
+function applyExternalTheme(next: Theme): void {
+  if (next === currentTheme) return;
+  currentTheme = next;
+  applyToHtml(next);
+  for (const fn of subscribers) {
+    try {
+      fn();
+    } catch (err) {
+      console.warn('[theme] subscriber threw', err);
+    }
+  }
+}
+
 function subscribe(fn: () => void): () => void {
   subscribers.add(fn);
   return () => {
@@ -80,5 +121,30 @@ function getSnapshot(): Theme {
 export function useTheme(): { theme: Theme; toggle: () => void } {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const toggle = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+
+  // Desktop only: follow the launcher theme live. The bridge bootstrap
+  // re-dispatches a `deskapp:theme` window CustomEvent (detail.resolved is
+  // 'light'/'dark') on init, on Tauri `deskapp://theme` events, and on OS
+  // scheme changes while tracking `system`. We mirror that into the store
+  // without persisting, so `ThemeBridge` flips Univer in lockstep. Gated
+  // behind `isDesktop()` so the web toggle/localStorage path is untouched.
+  useEffect(() => {
+    if (!isDesktop()) return;
+    const onDeskTheme = (e: Event) => {
+      const resolved = (e as CustomEvent<{ resolved?: Theme }>).detail?.resolved;
+      if (resolved === 'dark' || resolved === 'light') applyExternalTheme(resolved);
+    };
+    window.addEventListener('deskapp:theme', onDeskTheme as EventListener);
+    // Reconcile in case the bootstrap published before this effect ran.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const t = (window as any).__deskApp__?.theme;
+      if (t === 'dark' || t === 'light') applyExternalTheme(t);
+    } catch {
+      /* best-effort */
+    }
+    return () => window.removeEventListener('deskapp:theme', onDeskTheme as EventListener);
+  }, []);
+
   return { theme, toggle };
 }
