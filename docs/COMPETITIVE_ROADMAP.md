@@ -217,7 +217,10 @@ Goal: an automation story (non-AI). Leverages the command bus we already broadca
   and saves it to localStorage (`macros.ts`).
 - **T5.2** Macro runner — replay a saved macro (Data → Macros → Run "…"). ✅ **shipped** —
   re-executes the recorded mutations through the facade; e2e `macros.spec.ts` records → clears →
-  replays. **Follow-up:** bind a macro to a button / shortcut + a manage/delete dialog.
+  replays. **Follow-ups shipped:** a Manage Macros dialog (#145, Excel's Alt+F8 — run/delete each)
+  and **Ctrl+Shift+&lt;letter&gt; binding** assigned from that dialog (`setMacroShortcut`,
+  app-reserved letters L/D/P excluded, unique per macro), fired from the global keydown handler.
+  Remaining: bind to an on-sheet form-control button (needs drawing objects).
 - **T5.3** (stretch) documented scripting API surface for hosts.
 
 ### Phase 6 — Mobile

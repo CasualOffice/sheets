@@ -14,7 +14,62 @@
 import type { FUniver } from '@univerjs/core/facade';
 
 export type MacroStep = { id: string; params: unknown };
-export type Macro = { name: string; steps: MacroStep[]; createdAt: number };
+export type Macro = {
+  name: string;
+  steps: MacroStep[];
+  createdAt: number;
+  /** Optional Ctrl+Shift+<letter> binding (single uppercase A–Z). */
+  shortcut?: string;
+};
+
+/**
+ * Ctrl+Shift+<letter> combos the app already owns (insert-table-as, clear
+ * formatting, command palette). Macros can't claim these, else the binding
+ * would fight a built-in shortcut. Keep in sync with MenuBar's keydown.
+ */
+export const RESERVED_MACRO_LETTERS: ReadonlySet<string> = new Set(['L', 'D', 'P']);
+
+/** Letters a macro may bind to: A–Z minus reserved minus those another macro holds. */
+export function availableMacroLetters(name: string, macros: Macro[] = listMacros()): string[] {
+  const taken = new Set(
+    macros.filter((m) => m.name !== name && m.shortcut).map((m) => m.shortcut as string),
+  );
+  const letters: string[] = [];
+  for (let c = 65; c <= 90; c += 1) {
+    const ch = String.fromCharCode(c);
+    if (!RESERVED_MACRO_LETTERS.has(ch) && !taken.has(ch)) letters.push(ch);
+  }
+  return letters;
+}
+
+/**
+ * Assign (or clear, with `null`) a macro's Ctrl+Shift+<letter> binding. A
+ * shortcut is unique: any other macro holding the same letter loses it.
+ * Reserved letters are rejected (binding left unchanged). Returns the list.
+ */
+export function setMacroShortcut(name: string, letter: string | null): Macro[] {
+  const up = letter ? letter.toUpperCase() : null;
+  if (up && (up.length !== 1 || up < 'A' || up > 'Z' || RESERVED_MACRO_LETTERS.has(up))) {
+    return listMacros();
+  }
+  const next = listMacros().map((m) => {
+    if (m.name === name) return { ...m, shortcut: up ?? undefined };
+    if (up && m.shortcut === up) return { ...m, shortcut: undefined };
+    return m;
+  });
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    /* private mode — change stays in memory only for this session */
+  }
+  return next;
+}
+
+/** The macro bound to Ctrl+Shift+<letter>, if any. */
+export function findMacroByShortcut(letter: string): Macro | undefined {
+  const up = letter.toUpperCase();
+  return listMacros().find((m) => m.shortcut === up);
+}
 
 /** True for the deterministic state-change mutations worth recording. */
 export function isMacroMutation(id: string): boolean {

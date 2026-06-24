@@ -63,3 +63,44 @@ test('saveMacro / listMacros / deleteMacro round-trip', async () => {
   deleteMacro('Macro 1');
   assert.deepEqual(listMacros(), []);
 });
+
+test('setMacroShortcut assigns, is unique, and rejects reserved letters', async () => {
+  const { saveMacro, setMacroShortcut, findMacroByShortcut, listMacros } =
+    await import('./macros.js');
+  saveMacro({ name: 'A', steps: [], createdAt: 0 });
+  saveMacro({ name: 'B', steps: [], createdAt: 0 });
+
+  // Assign + lookup (case-insensitive input, stored uppercase).
+  setMacroShortcut('A', 'm');
+  assert.equal(findMacroByShortcut('M')?.name, 'A');
+  assert.equal(listMacros().find((m) => m.name === 'A')?.shortcut, 'M');
+
+  // Uniqueness: assigning M to B steals it from A.
+  setMacroShortcut('B', 'M');
+  assert.equal(findMacroByShortcut('M')?.name, 'B');
+  assert.equal(listMacros().find((m) => m.name === 'A')?.shortcut, undefined);
+
+  // Reserved letters (L/D/P) are rejected — binding unchanged.
+  setMacroShortcut('A', 'L');
+  assert.equal(findMacroByShortcut('L'), undefined);
+  assert.equal(listMacros().find((m) => m.name === 'A')?.shortcut, undefined);
+
+  // Clear with null.
+  setMacroShortcut('B', null);
+  assert.equal(findMacroByShortcut('M'), undefined);
+});
+
+test('availableMacroLetters excludes reserved + other-macro letters, keeps own', async () => {
+  const { saveMacro, setMacroShortcut, availableMacroLetters } = await import('./macros.js');
+  saveMacro({ name: 'A', steps: [], createdAt: 0 });
+  saveMacro({ name: 'B', steps: [], createdAt: 0 });
+  setMacroShortcut('A', 'M');
+
+  const forB = availableMacroLetters('B');
+  assert.ok(!forB.includes('L') && !forB.includes('D') && !forB.includes('P')); // reserved
+  assert.ok(!forB.includes('M')); // held by A
+  assert.ok(forB.includes('Z'));
+
+  // A's own list still includes M (so its current binding shows as selected).
+  assert.ok(availableMacroLetters('A').includes('M'));
+});

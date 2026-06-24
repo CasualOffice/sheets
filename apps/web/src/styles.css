@@ -4042,6 +4042,28 @@ button {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+.macros-dialog__shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.macros-dialog__shortcut-select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--color-text);
+  padding: 3px 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.macros-dialog__shortcut-select:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
 .macros-dialog__actions {
   display: flex;
   gap: 6px;

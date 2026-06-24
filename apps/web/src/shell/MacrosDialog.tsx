@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { Dialog } from './Dialog';
-import { deleteMacro, listMacros, runMacro, type Macro } from '../sheets/macros';
+import {
+  availableMacroLetters,
+  deleteMacro,
+  listMacros,
+  runMacro,
+  setMacroShortcut,
+  type Macro,
+} from '../sheets/macros';
 
 /**
  * Manage Macros — Excel's Alt+F8 dialog: list saved macros, run or delete each.
@@ -34,6 +41,10 @@ export function MacrosDialog({ api, onClose, onRan }: Props) {
     setMacros(deleteMacro(name));
   };
 
+  const assignShortcut = (name: string, letter: string) => {
+    setMacros(setMacroShortcut(name, letter || null));
+  };
+
   return (
     <Dialog title="Macros" onClose={onClose} data-testid="macros-dialog">
       {macros.length === 0 ? (
@@ -54,6 +65,23 @@ export function MacrosDialog({ api, onClose, onRan }: Props) {
                   {m.steps.length} step{m.steps.length === 1 ? '' : 's'}
                 </span>
               </span>
+              <label className="macros-dialog__shortcut">
+                <span className="macros-dialog__shortcut-prefix">Ctrl+Shift+</span>
+                <select
+                  className="macros-dialog__shortcut-select"
+                  data-testid={`macros-dialog-shortcut-${m.name.replace(/\s+/g, '-')}`}
+                  value={m.shortcut ?? ''}
+                  disabled={busy}
+                  onChange={(e) => assignShortcut(m.name, e.target.value)}
+                >
+                  <option value="">—</option>
+                  {availableMacroLetters(m.name, macros).map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <span className="macros-dialog__actions">
                 <button
                   type="button"

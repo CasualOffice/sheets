@@ -86,3 +86,28 @@ test('manage macros dialog runs and deletes a saved macro', async ({ page }) => 
   await page.getByTestId('menu-item-macros').hover();
   await expect(page.getByTestId('menu-item-macro-manage')).toHaveCount(0);
 });
+
+test('bind a macro to Ctrl+Shift+<letter> and trigger it from the keyboard', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => localStorage.removeItem('casual.macros'));
+  await page.goto('/');
+  await waitForUniver(page);
+
+  // Record → edit A1 → stop (saves "Macro 1").
+  await macroItem(page, 'menu-item-macro-record');
+  await setCell(page, 'A1', 9);
+  await page.waitForTimeout(200);
+  await macroItem(page, 'menu-item-macro-record'); // now "Stop recording"
+
+  // Bind it to Ctrl+Shift+M via the Manage Macros dialog.
+  await macroItem(page, 'menu-item-macro-manage');
+  await page.getByTestId('macros-dialog-shortcut-Macro-1').selectOption('M');
+  await page.keyboard.press('Escape');
+
+  // Clear A1, then fire the shortcut → the recorded value returns.
+  await setCell(page, 'A1', '');
+  await expect.poll(() => cell(page, 'A1')).toBeFalsy();
+  await page.locator('body').click();
+  await page.keyboard.press('Control+Shift+M');
+  await expect.poll(() => cell(page, 'A1')).toBe(9);
+});

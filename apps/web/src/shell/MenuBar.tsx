@@ -94,6 +94,7 @@ import {
   saveMacro,
   listMacros,
   nextMacroName,
+  findMacroByShortcut,
   type MacroStep,
 } from '../sheets/macros';
 import { isDesktop } from '../desk-bridge-bootstrap';
@@ -843,6 +844,20 @@ export function MenuBar() {
       if (mod && !e.altKey && e.shiftKey && k === 'p') {
         e.preventDefault();
         setShowCommandSearch(true);
+      }
+      // ── Run a macro bound to Ctrl+Shift+<letter> ─────────────────
+      // Excel's macro shortcut. Letters L/D/P are app-reserved and can't
+      // be assigned (see RESERVED_MACRO_LETTERS), so this branch sitting
+      // after them never double-fires — it only acts when a macro holds
+      // the pressed letter. e.code (KeyA…KeyZ) dodges layout shifts.
+      if (mod && e.shiftKey && !e.altKey && /^Key[A-Z]$/.test(e.code)) {
+        if (!inTextInput) {
+          const macro = findMacroByShortcut(e.code.slice(-1));
+          if (macro) {
+            e.preventDefault();
+            void handleRunMacro(macro.name);
+          }
+        }
       }
       // ── Keyboard shortcuts cheat sheet: Ctrl+/ ─────────────────
       // Mirrors Excel for the Web. `?` (Shift+/) is the Google Docs
@@ -2218,6 +2233,7 @@ export function MenuBar() {
                     id: `macro-run-${m.name.replace(/\s+/g, '-')}`,
                     label: `Run "${m.name}"`,
                     icon: 'play_arrow',
+                    shortcut: m.shortcut ? `Ctrl+Shift+${m.shortcut}` : undefined,
                     onClick: () => handleRunMacro(m.name),
                   })),
                   { kind: 'separator', id: 'sep-macros-manage' },
