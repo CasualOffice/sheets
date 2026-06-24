@@ -1,12 +1,14 @@
 /**
- * Range protection (T4.4) — lock a selected range while the rest of the sheet
- * stays editable. Thin wrappers over Univer's worksheet-permission facade
- * (`FWorksheet.getWorksheetPermission()`), which owns the model, the edit veto,
- * and the locked-range rendering. We only drive it from the Review menu.
+ * Sheet + range protection (T4.4). Thin wrappers over Univer's
+ * worksheet-permission facade (`FWorksheet.getWorksheetPermission()`), which
+ * owns the model, the edit veto, the locked rendering, and xlsx persistence:
+ *   - range:  protect a selection (rest of the sheet stays editable),
+ *   - sheet:  protect the whole active sheet (sibling sheets stay editable).
  *
- * This is finer-grained than the existing workbook "Protect (read-only)" toggle
- * (which flips the whole workbook via `applyReadOnly`): here only the chosen
- * cells refuse edits.
+ * Collab model (chosen over Excel's block-everyone): the protector keeps
+ * editing; OTHER editors are blocked. So `isProtected()` is the truth signal,
+ * not the local user's `canEditCell`. Distinct from the workbook "Make
+ * read-only" toggle, which flips the whole workbook via `applyReadOnly`.
  */
 import type { FUniver } from '@univerjs/core/facade';
 
@@ -79,5 +81,43 @@ export async function clearRangeProtections(api: FUniver): Promise<number> {
     return ids.length;
   } catch {
     return 0;
+  }
+}
+
+/** Whether the active sheet currently has worksheet protection on. */
+export function isActiveSheetProtected(api: FUniver): boolean {
+  const perm = worksheetPermission(api);
+  try {
+    return perm?.isProtected?.() === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Protect the whole active sheet (collab model: other editors can't change it;
+ * the protector still can). Per-sheet — sibling sheets stay editable. Returns
+ * true on success.
+ */
+export async function protectActiveSheet(api: FUniver): Promise<boolean> {
+  const perm = worksheetPermission(api);
+  if (!perm?.protect) return false;
+  try {
+    await perm.protect();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Lift worksheet protection from the active sheet. Returns true on success. */
+export async function unprotectActiveSheet(api: FUniver): Promise<boolean> {
+  const perm = worksheetPermission(api);
+  if (!perm?.unprotect) return false;
+  try {
+    await perm.unprotect();
+    return true;
+  } catch {
+    return false;
   }
 }

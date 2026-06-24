@@ -80,7 +80,13 @@ import {
   type PasteSpecialMode,
 } from './home-tab-actions';
 import { applyReadOnly } from '@casualoffice/sheets/sheets';
-import { protectActiveRange, clearRangeProtections } from '../sheets/protection';
+import {
+  protectActiveRange,
+  clearRangeProtections,
+  protectActiveSheet,
+  unprotectActiveSheet,
+  isActiveSheetProtected,
+} from '../sheets/protection';
 import {
   applyAutoFunction,
   autoFitColumns,
@@ -1226,7 +1232,10 @@ export function MenuBar() {
   const handleProtectRange = async () => {
     if (!api) return;
     const r = await protectActiveRange(api);
-    if (r.ok) toast.success(`Protected ${r.a1} — those cells are now locked`);
+    // Collab-protection model: the protector keeps editing; other editors are
+    // blocked. Wording makes that intent explicit (vs "locked", which reads as
+    // locked-for-everyone).
+    if (r.ok) toast.success(`Protected ${r.a1} — other editors can’t change it`);
     else if (r.reason === 'no-selection') toast.info('Select the cells to protect first');
     else if (r.reason === 'overlap')
       toast.info('That selection overlaps an existing protected range');
@@ -1236,8 +1245,28 @@ export function MenuBar() {
   const handleRemoveRangeProtections = async () => {
     if (!api) return;
     const n = await clearRangeProtections(api);
-    if (n > 0) toast.success(`Removed ${n} protected range${n === 1 ? '' : 's'}`);
+    if (n > 0) toast.success(`Removed protection from ${n} range${n === 1 ? '' : 's'}`);
     else toast.info('No protected ranges on this sheet');
+  };
+
+  // Per-sheet protection (collab model): other editors can't change this sheet;
+  // sibling sheets stay editable. Distinct from the workbook read-only toggle.
+  const [sheetProtectedOn, setSheetProtectedOn] = useState(false);
+  const toggleSheetProtect = async () => {
+    if (!api) return;
+    if (isActiveSheetProtected(api)) {
+      const ok = await unprotectActiveSheet(api);
+      if (ok) {
+        setSheetProtectedOn(false);
+        toast.info('Sheet protection removed');
+      }
+    } else {
+      const ok = await protectActiveSheet(api);
+      if (ok) {
+        setSheetProtectedOn(true);
+        toast.success('Sheet protected — other editors can’t change it');
+      } else toast.info('Sheet protection unavailable');
+    }
   };
 
   // Menu structure designed against Office 2024's ribbon + File menu.
@@ -2077,9 +2106,16 @@ export function MenuBar() {
         {
           kind: 'item',
           id: 'protect-sheet',
-          label: protectedOn ? '✓ Protect (read-only)' : 'Protect (read-only)',
+          label: protectedOn ? '✓ Make workbook read-only' : 'Make workbook read-only',
           icon: 'lock',
           onClick: toggleProtect,
+        },
+        {
+          kind: 'item',
+          id: 'protect-worksheet',
+          label: sheetProtectedOn ? '✓ Protect sheet' : 'Protect sheet',
+          icon: 'shield',
+          onClick: toggleSheetProtect,
         },
         {
           kind: 'item',

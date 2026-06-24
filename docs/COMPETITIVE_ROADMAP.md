@@ -189,10 +189,12 @@ Goal: Excel/Sheets parity on the features users notice missing.
 - **T4.2** In-cell rich text (mixed bold/italic/color within one cell).
 - **T4.3** Named cell styles (managed Normal/Good/Bad/Heading… that round-trip through xlsx).
 - **T4.4** Sheet & cell-range protection (locked cells, protected ranges) beyond collab
-  view-only. ⏳ **in progress** — range protection shipped (#133: Data → Protect range /
-  Remove range protection, app-side over the worksheet-permission facade). Follow-ups: a
-  Protect-Sheet dialog with granular permission points + password, and xlsx round-trip of
-  protection metadata.
+  view-only. ⏳ **in progress** — range protection (#133: Data → Protect range / Remove
+  range protection) **and** per-sheet protection (Data → Protect sheet) shipped, app-side over
+  the worksheet-permission facade. Model: **collab protection** (the protector keeps editing,
+  other editors are blocked) — chosen over Excel's block-everyone; the workbook "Make read-only"
+  toggle remains the block-everyone option. Follow-ups: a Protect-Sheet dialog with granular
+  permission points + password, and xlsx round-trip of protection metadata.
 
 ### Phase 5 — Automation / Scripting
 
