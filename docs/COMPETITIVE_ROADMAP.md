@@ -212,7 +212,12 @@ Goal: Excel/Sheets parity on the features users notice missing.
 Goal: an automation story (non-AI). Leverages the command bus we already broadcast on.
 
 - **T5.1** Macro recorder — capture command-bus mutations into a named macro.
-- **T5.2** Macro runner — replay; bind to button / shortcut.
+  ✅ **shipped** — Data → Macros → Record macro captures `sheet.mutation.*` (the
+  deterministic state changes; formula-calc / rich-text / selection noise is filtered)
+  and saves it to localStorage (`macros.ts`).
+- **T5.2** Macro runner — replay a saved macro (Data → Macros → Run "…"). ✅ **shipped** —
+  re-executes the recorded mutations through the facade; e2e `macros.spec.ts` records → clears →
+  replays. **Follow-up:** bind a macro to a button / shortcut + a manage/delete dialog.
 - **T5.3** (stretch) documented scripting API surface for hosts.
 
 ### Phase 6 — Mobile
