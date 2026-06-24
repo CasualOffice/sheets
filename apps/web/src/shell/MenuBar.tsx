@@ -80,6 +80,7 @@ import {
   type PasteSpecialMode,
 } from './home-tab-actions';
 import { applyReadOnly } from '@casualoffice/sheets/sheets';
+import { protectActiveRange, clearRangeProtections } from '../sheets/protection';
 import {
   applyAutoFunction,
   autoFitColumns,
@@ -1220,6 +1221,25 @@ export function MenuBar() {
     }
   };
 
+  // Range protection (T4.4): lock the current selection while the rest of the
+  // sheet stays editable — finer than the workbook read-only toggle above.
+  const handleProtectRange = async () => {
+    if (!api) return;
+    const r = await protectActiveRange(api);
+    if (r.ok) toast.success(`Protected ${r.a1} — those cells are now locked`);
+    else if (r.reason === 'no-selection') toast.info('Select the cells to protect first');
+    else if (r.reason === 'overlap')
+      toast.info('That selection overlaps an existing protected range');
+    else toast.info('Range protection unavailable');
+  };
+
+  const handleRemoveRangeProtections = async () => {
+    if (!api) return;
+    const n = await clearRangeProtections(api);
+    if (n > 0) toast.success(`Removed ${n} protected range${n === 1 ? '' : 's'}`);
+    else toast.info('No protected ranges on this sheet');
+  };
+
   // Menu structure designed against Office 2024's ribbon + File menu.
   // Every item with a global keyboard binding shows its shortcut on the
   // right of the row; items without one are left bare. Sub-menus are
@@ -2060,6 +2080,20 @@ export function MenuBar() {
           label: protectedOn ? '✓ Protect (read-only)' : 'Protect (read-only)',
           icon: 'lock',
           onClick: toggleProtect,
+        },
+        {
+          kind: 'item',
+          id: 'protect-range',
+          label: 'Protect range',
+          icon: 'lock_person',
+          onClick: handleProtectRange,
+        },
+        {
+          kind: 'item',
+          id: 'remove-range-protection',
+          label: 'Remove range protection',
+          icon: 'lock_open',
+          onClick: handleRemoveRangeProtections,
         },
         {
           kind: 'item',
