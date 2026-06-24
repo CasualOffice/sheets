@@ -180,11 +180,19 @@ Goal: close the Google collaboration-polish gap. Builds on existing collab + pre
 
 Goal: Excel/Sheets parity on the features users notice missing.
 
-- **T4.1** Dynamic / array formulas with spill ranges.
+- **T4.1** Dynamic / array formulas with spill ranges. ✅ **shipped (verified)** — the 0.25
+  fork's formula engine already evaluates dynamic-array functions (SEQUENCE, UNIQUE, FILTER,
+  SORT, TRANSPOSE, XLOOKUP…) and spills automatically: the anchor holds the formula, spilled
+  cells hold values, and a blocked spill yields `#SPILL!`. Was untested; e2e coverage added
+  (`dynamic-arrays.spec.ts`). Remaining polish: the Excel spill-range outline when the anchor
+  is selected.
 - **T4.2** In-cell rich text (mixed bold/italic/color within one cell).
 - **T4.3** Named cell styles (managed Normal/Good/Bad/Heading… that round-trip through xlsx).
 - **T4.4** Sheet & cell-range protection (locked cells, protected ranges) beyond collab
-  view-only.
+  view-only. ⏳ **in progress** — range protection shipped (#133: Data → Protect range /
+  Remove range protection, app-side over the worksheet-permission facade). Follow-ups: a
+  Protect-Sheet dialog with granular permission points + password, and xlsx round-trip of
+  protection metadata.
 
 ### Phase 5 — Automation / Scripting
 
