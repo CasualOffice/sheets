@@ -48,6 +48,25 @@ if (typeof window !== 'undefined' && isDesktop()) {
   });
 }
 
+// Offline fonts (desktop only). The web build loads Inter + Material Symbols
+// from the Google Fonts CDN (index.html); the Tauri app has no network, so we
+// declare the same font families from locally-bundled woff2 instead. Files are
+// served by the desktop shell at `./fonts/` (relative to the editor's `--base`
+// mount), NOT shipped in the web bundle — so this adds zero bytes to web. The
+// `local(...)` fallbacks use an installed copy when present.
+if (typeof window !== 'undefined' && isDesktop() && !document.getElementById('__deskapp_fonts__')) {
+  const css = `
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:local('Inter Regular'),local('Inter-Regular'),url('./fonts/inter-400.woff2') format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:local('Inter Medium'),local('Inter-Medium'),url('./fonts/inter-500.woff2') format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:local('Inter SemiBold'),local('Inter-SemiBold'),url('./fonts/inter-600.woff2') format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:700;font-display:swap;src:local('Inter Bold'),local('Inter-Bold'),url('./fonts/inter-700.woff2') format('woff2');}
+@font-face{font-family:'Material Symbols Outlined';font-style:normal;font-weight:100 700;font-display:block;src:local('Material Symbols Outlined'),url('./fonts/material-symbols-outlined.woff2') format('woff2');}`;
+  const style = document.createElement('style');
+  style.id = '__deskapp_fonts__';
+  style.textContent = css;
+  (document.head || document.documentElement).appendChild(style);
+}
+
 if (typeof window !== 'undefined' && isDesktop()) {
   const url = new URL(window.location.href);
   console.log('[deskApp] bootstrap', { isDesktop: true, search: window.location.search });
