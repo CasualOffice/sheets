@@ -785,6 +785,37 @@ button {
   gap: 8px;
 }
 
+/* Local-user chip — shown in the desktop build in place of the collab cluster
+   (single-user, no co-editing). Just identifies who you're signed in as. */
+.titlebar__profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  user-select: none;
+}
+.titlebar__profile-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+}
+.titlebar__profile-name {
+  white-space: nowrap;
+}
+
 /* Thin vertical divider separating the three logical action groups
    (status pills · collaboration · account). Collapses on mobile. */
 .titlebar__sep {
