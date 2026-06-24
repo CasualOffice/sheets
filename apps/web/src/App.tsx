@@ -705,6 +705,11 @@ function EditTracker({ markUserEdited }: { markUserEdited: () => void }): ReactN
       // pill doesn't keep lying while the user is mid-edit. No-op
       // unless the pill was actually in saved/error state.
       markDirty();
+      // Desktop: feed the same edit signal to the native close-guard.
+      // This is the sanctioned change hook (CLAUDE.md), so it catches the
+      // toolbar / paste / fill / undo edits a DOM-keystroke heuristic
+      // missed. Optional-chained + best-effort in the bridge — no-op on web.
+      window.__deskApp__?.setDirty?.(true);
     });
     return () => sub.dispose();
   }, [api, markUserEdited, markDirty]);

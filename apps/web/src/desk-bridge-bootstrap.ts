@@ -85,6 +85,7 @@ if (typeof window !== 'undefined' && isDesktop()) {
         loadDocument(p?: string): Promise<ArrayBuffer>;
         save(bytes: ArrayBuffer): Promise<string | null>;
         saveAs(name: string, bytes: ArrayBuffer): Promise<string | null>;
+        setDirty?(dirty: boolean): void;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         getProfile?: () => Promise<any>;
       }
@@ -141,6 +142,14 @@ if (typeof window !== 'undefined' && isDesktop()) {
     // transition (clean→dirty / dirty→clean) once and never spam IPC.
     // The Rust `set_window_dirty` command infers the window from the
     // caller. All calls are best-effort and must never throw.
+    //
+    // The `true` transition is driven by the editor itself via
+    // `bridge.setDirty(true)` — App.tsx subscribes to the command bus
+    // (`ICommandService.onMutationExecutedForCollab`, the project's only
+    // sanctioned change hook) and calls it for every real mutation. That
+    // catches toolbar edits, paste, fill and undo/redo that a raw DOM
+    // keystroke heuristic misses (Univer's grid is a canvas with no
+    // <input>). The `false` transition fires here on a successful save.
     let isDirty = false;
     function setWindowDirty(dirty: boolean) {
       if (dirty === isDirty) return;
@@ -151,24 +160,6 @@ if (typeof window !== 'undefined' && isDesktop()) {
         /* best-effort */
       }
     }
-    // Mark dirty on any user edit. Capture phase so we see the event even
-    // if the editor stops propagation. Heuristic: any input = dirty.
-    const markDirty = () => setWindowDirty(true);
-    document.addEventListener('input', markDirty, true);
-    document.addEventListener('beforeinput', markDirty, true);
-    document.addEventListener(
-      'keydown',
-      (e) => {
-        // Univer's grid takes typing through keydown (its canvas has no
-        // <input> for cell entry), so flag dirty on printable / editing
-        // keys; ignore navigation and modifier chords (Ctrl+S, arrows).
-        if (e.ctrlKey || e.metaKey || e.altKey) return;
-        if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete') {
-          markDirty();
-        }
-      },
-      true,
-    );
 
     bridge = {
       isDesktop: true,
@@ -177,6 +168,11 @@ if (typeof window !== 'undefined' && isDesktop()) {
       },
       set filePath(v: string | null) {
         filePath = v;
+      },
+      // Editor → bridge dirty signal. App.tsx calls this from the command-bus
+      // mutation hook; save() clears it. Best-effort, never throws.
+      setDirty(dirty: boolean) {
+        setWindowDirty(dirty);
       },
       async loadDocument(p?: string): Promise<ArrayBuffer> {
         const path = p ?? filePath;
@@ -503,6 +499,9 @@ declare global {
       loadDocument(p?: string): Promise<ArrayBuffer>;
       save(bytes: ArrayBuffer): Promise<string | null>;
       saveAs(name: string, bytes: ArrayBuffer): Promise<string | null>;
+      /** Editor → bridge dirty signal for the Rust close-guard. Driven by
+       *  App.tsx's command-bus mutation hook; cleared on save. */
+      setDirty?(dirty: boolean): void;
       /** Raw launcher theme preference: 'system' | 'light' | 'dark'. */
       themeMode?: 'system' | 'light' | 'dark';
       /** Resolved theme ('system' collapsed to 'light'/'dark'). */
