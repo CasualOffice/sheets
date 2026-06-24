@@ -203,8 +203,16 @@ interface CasualSheetsAPI {
   exportXlsx(): Promise<Blob>; // serialize the active workbook
   getSelection(): RangeRef | null; // { unitId, sheetId, range }
   executeCommand(id: string, params?: object): Promise<boolean>;
+  executeCommands(steps: CommandRecord[]): Promise<number>; // batch replay
+  onMutation(handler: (record: CommandRecord) => void): () => void; // observe/record
   setTheme(appearance: 'light' | 'dark'): void; // imperative light/dark
   univer: FUniver; // escape hatch — NOT semver-covered
+}
+
+// A scriptable step — a command/mutation id + its params.
+interface CommandRecord {
+  id: string; // e.g. 'sheet.mutation.set-range-values'
+  params?: object;
 }
 ```
 
@@ -270,6 +278,41 @@ const sel = api.getSelection();
 
 `executeCommand` dispatches any Univer command id (e.g. bold, undo). For the
 full command set, use `api.univer` and the Univer facade.
+
+```ts
+await api.executeCommand('sheet.command.set-bold', { value: true });
+```
+
+### Scripting — record & replay automations
+
+Two primitives generalize the built-in macro recorder so **hosts can script the
+editor** (automations, audit logs, "apply this template"):
+
+- **`onMutation(handler)`** subscribes to the replayable mutation stream. It
+  wraps Univer's canonical collab hook (`onMutationExecutedForCollab`), so it
+  fires for `CommandType.MUTATION` only — the deterministic state changes, never
+  transient command/calc/selection noise. Returns a disposer.
+- **`executeCommands(steps)`** replays a list of `{ id, params }` steps in order.
+  Best-effort: a step that throws is skipped (state may have moved on); it
+  resolves to the count that ran.
+
+Together they are record → replay:
+
+```ts
+// Record: capture the mutations the user's edits produce.
+const recorded: CommandRecord[] = [];
+const stop = api.onMutation((step) => recorded.push(step));
+// … user edits, or you run scripted commands …
+stop(); // detach; persist `recorded` wherever you like (it's plain JSON)
+
+// Replay: re-run the captured steps onto any workbook.
+const applied = await api.executeCommands(recorded);
+```
+
+Mutation ids and params are Univer's own (e.g. `sheet.mutation.set-range-values`)
+— treat a recorded array as an opaque, version-matched payload: replay it against
+the same Univer major you recorded on. This is the same contract the app's
+**Data → Macros** feature uses internally.
 
 ---
 

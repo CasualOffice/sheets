@@ -7,8 +7,8 @@
  * is explicitly NOT covered by semver — everything else here is.
  *
  * Surface:
- *   getSnapshot / loadSnapshot / getSelection / executeCommand / setTheme /
- *   importXlsx / exportXlsx / univer
+ *   getSnapshot / loadSnapshot / getSelection / executeCommand /
+ *   executeCommands / onMutation / setTheme / importXlsx / exportXlsx / univer
  *
  * `importXlsx` / `exportXlsx` lazy-load the converters via
  * `import('@casualoffice/sheets/xlsx')` — a BARE subpath, not a relative
@@ -29,9 +29,18 @@
 // type augmentation this file relies on. Without it, FUniver is the bare core
 // facade and these methods exist neither at type-check nor at runtime.
 import '@univerjs/sheets/facade';
-import { ThemeService } from '@univerjs/core';
+import { ICommandService, ThemeService } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import type { IRange, IWorkbookData } from '@univerjs/core';
+import {
+  attachMutationObserver,
+  runSteps,
+  type CommandRecord,
+  type MutationEmitter,
+} from './scripting';
+
+// Re-export so hosts can type a recorded/scripted step off the main entry.
+export type { CommandRecord } from './scripting';
 
 /** The active selection, as a sheet-scoped range. */
 export interface RangeRef {
@@ -70,6 +79,18 @@ export interface CasualSheetsAPI {
   /** Dispatch a Univer command by id. Resolves to the command's boolean
    *  result. */
   executeCommand(id: string, params?: object): Promise<boolean>;
+  /** Replay a sequence of command/mutation steps in order — e.g. a recorded
+   *  macro, or a host-authored script. Best-effort: a step that throws is
+   *  skipped (the underlying state may have moved on). Resolves to the number
+   *  of steps that ran without throwing. */
+  executeCommands(steps: CommandRecord[]): Promise<number>;
+  /** Observe the replayable mutation stream so a host can record automations
+   *  or build an audit log. Wraps Univer's canonical collab hook
+   *  (`onMutationExecutedForCollab`): fires for `CommandType.MUTATION` only —
+   *  the deterministic, replayable state changes, not transient command/calc
+   *  noise. Pair with `executeCommands` for record→replay. Returns a disposer;
+   *  call it to stop observing. */
+  onMutation(handler: (record: CommandRecord) => void): () => void;
   /** Imperative light/dark switch — the API equivalent of the reactive
    *  `appearance` prop. Flips Univer's `ThemeService.setDarkMode` (canvas
    *  colours + the `univer-dark` class Univer applies to the document root). */
@@ -152,6 +173,17 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
 
     executeCommand(id, params) {
       return univerAPI.executeCommand(id, params) as Promise<boolean>;
+    },
+
+    executeCommands(steps) {
+      return runSteps((id, params) => univerAPI.executeCommand(id, params), steps);
+    },
+
+    onMutation(handler) {
+      const injector = (univerAPI as unknown as { _injector?: { get(t: unknown): unknown } })
+        ._injector;
+      const cmdSvc = injector?.get(ICommandService) as MutationEmitter | undefined;
+      return attachMutationObserver(cmdSvc, handler);
     },
 
     setTheme(appearance) {

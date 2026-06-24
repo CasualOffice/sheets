@@ -78,11 +78,13 @@ threaded comments, hyperlinks, images, freeze panes, named ranges, lossless xlsx
 (54/54 audit), ODS/CSV/PDF, collab, version history, autosave, Flash Fill, Goal Seek,
 outline/grouping, paste-special.
 
-Lacking vs the field: scripting/macros that *execute* (we passthrough VBA bytes, run nothing);
-pivot field-list drag UI; in-cell rich-text *authoring* (round-trip ships, T4.2); external/connected
-data; add-on marketplace; AI/Explore (deliberately deferred per `CLAUDE.md`). _Closed in Phase 4:_
-dynamic/array formulas + spill (T4.1), named cell-style gallery (T4.3), sheet/range protection
-(T4.4).
+Lacking vs the field: pivot field-list drag UI; in-cell rich-text *authoring* (round-trip ships,
+T4.2); external/connected data; add-on marketplace; AI/Explore (deliberately deferred per
+`CLAUDE.md`). _Closed in Phase 4:_ dynamic/array formulas + spill (T4.1), named cell-style gallery
+(T4.3), sheet/range protection (T4.4). _Closed in Phase 5:_ command-bus macros that *execute*
+(record/replay + Ctrl+Shift+letter binding, T5.1/T5.2) and a host scripting API
+(`onMutation`/`executeCommands`, T5.3) — VBA is still passthrough-only (we run command-bus
+macros, not VBA).
 
 ## 2. Principles
 
@@ -221,7 +223,13 @@ Goal: an automation story (non-AI). Leverages the command bus we already broadca
   and **Ctrl+Shift+&lt;letter&gt; binding** assigned from that dialog (`setMacroShortcut`,
   app-reserved letters L/D/P excluded, unique per macro), fired from the global keydown handler.
   Remaining: bind to an on-sheet form-control button (needs drawing objects).
-- **T5.3** (stretch) documented scripting API surface for hosts.
+- **T5.3** Documented scripting API surface for hosts. ✅ **shipped** — `CasualSheetsAPI`
+  gains the two macro primitives at the SDK level: `onMutation(handler)` (observe the
+  replayable mutation stream — wraps the canonical `onMutationExecutedForCollab` hook) and
+  `executeCommands(steps)` (best-effort batch replay). Pure logic lives in
+  `packages/sdk/src/sheets/scripting.ts` (unit-tested; univer-free so it runs under the bare
+  test runner); `api.ts` is the thin facade wiring. Documented in `docs/INTEGRATION.md`
+  (`CasualSheetsAPI` → "Scripting — record & replay automations").
 
 ### Phase 6 — Mobile
 

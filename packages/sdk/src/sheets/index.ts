@@ -2,7 +2,12 @@
  * Sheets surface — React wrappers around Univer Sheets.
  */
 export { CasualSheets, type CasualSheetsProps } from './CasualSheets';
-export { createCasualSheetsAPI, type CasualSheetsAPI, type RangeRef } from './api';
+export {
+  createCasualSheetsAPI,
+  type CasualSheetsAPI,
+  type RangeRef,
+  type CommandRecord,
+} from './api';
 export { applyReadOnly, applyCommentOnly, getEditable } from './read-only';
 export {
   setMentionProvider,
