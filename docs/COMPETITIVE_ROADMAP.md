@@ -79,9 +79,10 @@ threaded comments, hyperlinks, images, freeze panes, named ranges, lossless xlsx
 outline/grouping, paste-special.
 
 Lacking vs the field: scripting/macros that *execute* (we passthrough VBA bytes, run nothing);
-pivot field-list drag UI; named cell styles; sheet/cell protection; full in-cell rich text;
-dynamic/array formulas (basic only); external/connected data; add-on marketplace; AI/Explore
-(deliberately deferred per `CLAUDE.md`).
+pivot field-list drag UI; in-cell rich-text *authoring* (round-trip ships, T4.2); external/connected
+data; add-on marketplace; AI/Explore (deliberately deferred per `CLAUDE.md`). _Closed in Phase 4:_
+dynamic/array formulas + spill (T4.1), named cell-style gallery (T4.3), sheet/range protection
+(T4.4).
 
 ## 2. Principles
 
@@ -186,11 +187,21 @@ Goal: Excel/Sheets parity on the features users notice missing.
   cells hold values, and a blocked spill yields `#SPILL!`. Was untested; e2e coverage added
   (`dynamic-arrays.spec.ts`). Remaining polish: the Excel spill-range outline when the anchor
   is selected.
-- **T4.2** In-cell rich text (mixed bold/italic/color within one cell).
-- **T4.3** Named cell styles (managed Normal/Good/Bad/Heading… that round-trip through xlsx).
+- **T4.2** In-cell rich text (mixed bold/italic/color within one cell). ⏳ **partial** — the
+  data model + **xlsx round-trip** are shipped (#136: a bold word in a cell survives
+  export→re-import via `rich-text.ts` ↔ ExcelJS `richText`; Univer renders it). **Remaining:**
+  in-cell _authoring_ — applying Bold/Italic/colour to a text *selection* inside the cell
+  editor (today the toolbar formats the whole cell). That's doc-editor-coupled + hard to drive
+  in headless; a dedicated effort.
+- **T4.3** Named cell styles (Excel's Good/Bad/Neutral + Title/Heading gallery). ✅ **shipped** —
+  Format → Cell styles applies preset formatting bundles to the selection
+  (`home-tab-actions.ts` `applyCellStyle` + `CELL_STYLE_PRESETS`, e2e `cell-styles.spec.ts`).
+  Applied as direct formatting, so it round-trips via the existing style mapping. **Follow-up:**
+  persisting the style _name_ as an xlsx `<cellStyles>` reference (so re-open shows the named
+  style, not just its formatting).
 - **T4.4** Sheet & cell-range protection (locked cells, protected ranges) beyond collab
-  view-only. ⏳ **in progress** — range protection (#133: Data → Protect range / Remove
-  range protection) **and** per-sheet protection (Data → Protect sheet) shipped, app-side over
+  view-only. ✅ **shipped (core)** — range protection (#133: Data → Protect range / Remove
+  range protection) **and** per-sheet protection (#137: Data → Protect sheet), app-side over
   the worksheet-permission facade. Model: **collab protection** (the protector keeps editing,
   other editors are blocked) — chosen over Excel's block-everyone; the workbook "Make read-only"
   toggle remains the block-everyone option. Follow-ups: a Protect-Sheet dialog with granular
