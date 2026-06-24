@@ -21,6 +21,61 @@ import { navigate } from '../router';
 // sheet/doc/slides/drive. Vite resolves the SVG import to a URL.
 import sheetsMark from '@schnsrw/design-system/assets/casual-sheets-mark.svg';
 
+type DesktopProfile = { name: string; avatar_hue: number; avatar_path: string | null };
+
+/**
+ * Fetch the local-user profile from the desktop shell (via the bridge's
+ * `getProfile`). Only runs in the desktop build; web stays null so nothing
+ * renders. The shell owns the profile (name + avatar hue) in profile.json.
+ */
+function useDesktopProfile(): { profile: DesktopProfile | null } {
+  const [profile, setProfile] = useState<DesktopProfile | null>(null);
+  useEffect(() => {
+    if (!isDesktop()) return;
+    const bridge = (window as unknown as { __deskApp__?: { getProfile?: () => Promise<unknown> } })
+      .__deskApp__;
+    if (typeof bridge?.getProfile !== 'function') return;
+    let cancelled = false;
+    bridge
+      .getProfile()
+      .then((p) => {
+        if (!cancelled && p) setProfile(p as DesktopProfile);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return { profile };
+}
+
+function DesktopProfileChip({ profile }: { profile: DesktopProfile }) {
+  const initials =
+    profile.name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? '')
+      .join('') || '?';
+  const first = profile.name.split(/\s+/)[0] ?? '';
+  return (
+    <div
+      className="titlebar__profile-chip"
+      data-testid="titlebar-profile-chip"
+      title={profile.name}
+    >
+      <span
+        className="titlebar__profile-avatar"
+        style={{ backgroundColor: `hsl(${profile.avatar_hue}, 55%, 50%)` }}
+        aria-hidden="true"
+      >
+        {initials}
+      </span>
+      <span className="titlebar__profile-name">{first}</span>
+    </div>
+  );
+}
+
 /**
  * Title bar — Google-Docs-style two-row chrome.
  *
@@ -48,6 +103,7 @@ export function TitleBar() {
   const ui = useUI();
   const api = useUniverAPI();
   const collab = useCollab();
+  const desktop = useDesktopProfile();
   const { theme, toggle: toggleTheme } = useTheme();
   const filename = meta.name || 'Untitled';
 
@@ -197,6 +253,10 @@ export function TitleBar() {
             </div>
           </>
         )}
+        {/* Desktop build: a local-user chip stands in for the collab cluster —
+            single-user, so it just shows who you're signed in as (from the
+            shell's profile.json via the bridge). */}
+        {isDesktop() && desktop.profile && <DesktopProfileChip profile={desktop.profile} />}
         <span className="titlebar__sep" aria-hidden="true" />
         <IconButton
           size="md"
