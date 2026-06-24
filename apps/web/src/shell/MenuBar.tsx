@@ -87,6 +87,14 @@ import {
   unprotectActiveSheet,
   isActiveSheetProtected,
 } from '../sheets/protection';
+import {
+  startRecording,
+  runMacro,
+  saveMacro,
+  listMacros,
+  nextMacroName,
+  type MacroStep,
+} from '../sheets/macros';
 import { isDesktop } from '../desk-bridge-bootstrap';
 import {
   applyAutoFunction,
@@ -1270,6 +1278,40 @@ export function MenuBar() {
     }
   };
 
+  // Macros (Phase 5): record command-bus mutations → named macro → replay.
+  const [macroRecording, setMacroRecording] = useState(false);
+  const [macroTick, setMacroTick] = useState(0); // bump to refresh the saved list
+  const macroStopRef = useRef<(() => MacroStep[]) | null>(null);
+  const handleRecordMacro = () => {
+    if (!api) return;
+    macroStopRef.current = startRecording(api).stop;
+    setMacroRecording(true);
+    toast.info('Recording macro — make your edits, then Stop');
+  };
+  const handleStopMacro = () => {
+    const stop = macroStopRef.current;
+    macroStopRef.current = null;
+    setMacroRecording(false);
+    if (!stop) return;
+    const steps = stop();
+    if (steps.length === 0) {
+      toast.info('Nothing recorded — no cell changes captured');
+      return;
+    }
+    const name = nextMacroName();
+    saveMacro({ name, steps, createdAt: 0 });
+    setMacroTick((t) => t + 1);
+    toast.success(`Saved ${name} (${steps.length} step${steps.length === 1 ? '' : 's'})`);
+  };
+  const handleRunMacro = async (name: string) => {
+    if (!api) return;
+    const macro = listMacros().find((m) => m.name === name);
+    if (!macro) return;
+    const n = await runMacro(api, macro.steps);
+    toast.success(`Ran ${name} (${n} step${n === 1 ? '' : 's'})`);
+  };
+  void macroTick; // referenced so the saved-macro submenu rebuilds after a save
+
   // Menu structure designed against Office 2024's ribbon + File menu.
   // Every item with a global keyboard binding shows its shortcut on the
   // right of the row; items without one are left bare. Sub-menus are
@@ -2152,6 +2194,33 @@ export function MenuBar() {
           label: 'Goal Seek…',
           icon: 'analytics',
           onClick: () => setShowGoalSeek(true),
+        },
+        {
+          kind: 'submenu',
+          id: 'macros',
+          label: 'Macros',
+          icon: 'smart_button',
+          items: [
+            {
+              kind: 'item',
+              id: 'macro-record',
+              label: macroRecording ? 'Stop recording' : 'Record macro',
+              icon: macroRecording ? 'stop_circle' : 'fiber_manual_record',
+              onClick: macroRecording ? handleStopMacro : handleRecordMacro,
+            },
+            ...(listMacros().length > 0
+              ? ([
+                  { kind: 'separator', id: 'sep-macros' },
+                  ...listMacros().map((m) => ({
+                    kind: 'item' as const,
+                    id: `macro-run-${m.name.replace(/\s+/g, '-')}`,
+                    label: `Run "${m.name}"`,
+                    icon: 'play_arrow',
+                    onClick: () => handleRunMacro(m.name),
+                  })),
+                ] as MenuItem[])
+              : []),
+          ],
         },
         {
           kind: 'item',
