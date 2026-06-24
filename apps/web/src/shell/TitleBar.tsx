@@ -4,6 +4,7 @@ import { useUI } from '../use-ui';
 import { useUniverAPI } from '../use-univer';
 import { useCollab } from '../collab/collab-context';
 import { AvatarStack } from '../collab/AvatarStack';
+import { isDesktop } from '../desk-bridge-bootstrap';
 import { useTheme } from '../theme';
 // Design-system primitives (Phase 4) — the title-bar action cluster now uses
 // the shared Button / IconButton / Badge instead of hand-rolled buttons, so
@@ -162,34 +163,40 @@ export function TitleBar() {
         <BusyPill />
         <SaveStatusPill />
         <ActivityPill />
-        <span className="titlebar__sep" aria-hidden="true" />
         {/* Collaboration cluster — presence + who-you-are + share, grouped
             together (Docs/Excel-online style) so the co-edit affordances read
-            as one unit, distinct from the status pills and account controls. */}
-        <div className="titlebar__collab" data-testid="titlebar-collab">
-          <AvatarStack />
-          {collab.roomId && <NamePill />}
-          {collab.roomId ? (
-            <Badge
-              tone="accent"
-              icon="group"
-              data-testid="titlebar-roompill"
-              title={`Joined room ${collab.roomId}`}
-            >
-              In room
-            </Badge>
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              icon="group_add"
-              data-testid="titlebar-share"
-              onClick={() => ui.openShareRoom()}
-            >
-              Share
-            </Button>
-          )}
-        </div>
+            as one unit, distinct from the status pills and account controls.
+            Hidden in the desktop build: it's a single-user, local-file app with
+            no co-editing, so Share / avatars / room pill don't apply. */}
+        {!isDesktop() && (
+          <>
+            <span className="titlebar__sep" aria-hidden="true" />
+            <div className="titlebar__collab" data-testid="titlebar-collab">
+              <AvatarStack />
+              {collab.roomId && <NamePill />}
+              {collab.roomId ? (
+                <Badge
+                  tone="accent"
+                  icon="group"
+                  data-testid="titlebar-roompill"
+                  title={`Joined room ${collab.roomId}`}
+                >
+                  In room
+                </Badge>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon="group_add"
+                  data-testid="titlebar-share"
+                  onClick={() => ui.openShareRoom()}
+                >
+                  Share
+                </Button>
+              )}
+            </div>
+          </>
+        )}
         <span className="titlebar__sep" aria-hidden="true" />
         <IconButton
           size="md"
