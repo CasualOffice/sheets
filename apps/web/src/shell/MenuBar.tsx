@@ -38,6 +38,7 @@ import { InsertCellsDialog } from './InsertCellsDialog';
 import { PasteSpecialDialog } from './PasteSpecialDialog';
 import { NameManagerDialog } from './NameManagerDialog';
 import { GoalSeekDialog } from './GoalSeekDialog';
+import { MacrosDialog } from './MacrosDialog';
 import { InsertSparklineDialog } from '../sparklines/InsertSparklineDialog';
 import { useSparklines } from '../sparklines/sparklines-context';
 import { flashFill } from './flash-fill';
@@ -447,6 +448,7 @@ export function MenuBar() {
   const [showPasteSpecial, setShowPasteSpecial] = useState(false);
   const [showNameManager, setShowNameManager] = useState(false);
   const [showGoalSeek, setShowGoalSeek] = useState(false);
+  const [showMacros, setShowMacros] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
   const [drillDownResult, setDrillDownResult] = useState<DrillDownResult | null>(null);
@@ -2218,6 +2220,14 @@ export function MenuBar() {
                     icon: 'play_arrow',
                     onClick: () => handleRunMacro(m.name),
                   })),
+                  { kind: 'separator', id: 'sep-macros-manage' },
+                  {
+                    kind: 'item',
+                    id: 'macro-manage',
+                    label: 'Manage macros…',
+                    icon: 'settings',
+                    onClick: () => setShowMacros(true),
+                  },
                 ] as MenuItem[])
               : []),
           ],
@@ -2551,6 +2561,16 @@ export function MenuBar() {
       )}
 
       {showGoalSeek && api && <GoalSeekDialog api={api} onClose={() => setShowGoalSeek(false)} />}
+      {showMacros && api && (
+        <MacrosDialog
+          api={api}
+          onClose={() => {
+            setShowMacros(false);
+            setMacroTick((t) => t + 1);
+          }}
+          onRan={(name, n) => toast.success(`Ran ${name} (${n} step${n === 1 ? '' : 's'})`)}
+        />
+      )}
 
       {showWatermark && api && (
         <WatermarkDialog

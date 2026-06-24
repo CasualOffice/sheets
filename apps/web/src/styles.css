@@ -4003,6 +4003,51 @@ button {
   font-size: 12px;
 }
 
+/* Manage Macros dialog — list of saved macros with Run / Delete per row. */
+.macros-dialog__empty {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  padding: 4px 0;
+}
+.macros-dialog__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.macros-dialog__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.macros-dialog__name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--color-text);
+  min-width: 0;
+}
+.macros-dialog__count {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+.macros-dialog__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 /* Watermark config dialog — on/off switch + text + opacity. */
 .watermark {
   display: flex;
