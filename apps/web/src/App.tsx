@@ -88,7 +88,11 @@ export function App() {
     serverEtag: null,
   }));
 
-  const [homeDismissed, setHomeDismissed] = useState(false);
+  // In the desktop shell the launcher window IS the home screen, so the
+  // editor must boot straight into the workbook — never flash the HomeScreen
+  // template-gallery overlay. Start dismissed when running under the desk
+  // bridge (web keeps the original false → overlay-until-probe behaviour).
+  const [homeDismissed, setHomeDismissed] = useState(() => isDesktop());
 
   // Mirror the open file's name into the browser tab/window title,
   // Office-style ("Book1 — Casual Sheets"). On `/home` or `/templates`
@@ -291,10 +295,25 @@ export function App() {
         setLoading({ fileName, phase: 'mounting', startedAt });
         replaceWorkbook(data, format);
         setLoading(null);
+        // Workbook is swapped in — drop the cold-start boot overlay so the
+        // freshly-painted grid is interactive. Idempotent; BootDismissDriver
+        // also covers the new-spreadsheet (no filePath) path.
+        try {
+          window.__deskApp__?.dismissBoot?.();
+        } catch {
+          /* best-effort */
+        }
       } catch (err) {
         console.error('deskApp load failed', err);
         if (!cancelled) {
           setLoading({ fileName, phase: 'reading', startedAt, error: String(err) });
+        }
+        // Dismiss on the error path too, so the overlay never sticks over
+        // the LoadingOverlay's error state.
+        try {
+          window.__deskApp__?.dismissBoot?.();
+        } catch {
+          /* best-effort */
         }
       }
     })();
@@ -518,6 +537,7 @@ export function App() {
                             <SparklinesProvider>
                               <OutlineProvider>
                                 <GrowthDriver />
+                                <BootDismissDriver />
                                 <FileDropDriver />
                                 <AutosaveDriver />
                                 <TouchPanDriver />
@@ -740,6 +760,26 @@ function RouteWorkbookSync({
 /** Effect-only component — auto-grows the active sheet near edges. */
 function GrowthDriver(): ReactNode {
   useWorkbookGrowth();
+  return null;
+}
+
+/** Effect-only — dismisses the desk-bridge cold-start boot overlay once
+ *  Univer has mounted (its Facade API becomes available). Desktop-only;
+ *  a no-op on web (no overlay, `dismissBoot` undefined). This is the
+ *  reliable "Univer API available + workbook set" signal that covers
+ *  BOTH the file-open path and the new-spreadsheet (no filePath) path —
+ *  the desktop load effect's own dismiss only fires when a file is bound.
+ *  The bootstrap's ~8s safety timer is the final backstop. */
+function BootDismissDriver(): ReactNode {
+  const api = useUniverAPI();
+  useEffect(() => {
+    if (!isDesktop() || !api) return;
+    try {
+      window.__deskApp__?.dismissBoot?.();
+    } catch {
+      /* best-effort — the bootstrap's safety timer still clears it */
+    }
+  }, [api]);
   return null;
 }
 

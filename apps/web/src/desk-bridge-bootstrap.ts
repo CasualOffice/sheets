@@ -108,7 +108,10 @@ if (typeof window !== 'undefined' && isDesktop()) {
     };
     /** Chunked write — same motivation as loadDocument's chunked read.
      *  Avoids the JSON-number-array IPC truncation threshold for big
-     *  files. */
+     *  files. The Rust side writes chunks to a temp file and only swaps
+     *  it into place on `commit_save_document` (atomic rename), so a
+     *  half-written file never clobbers the original. Any chunk OR the
+     *  commit throwing propagates so the editor reports a failed save. */
     async function chunkedWrite(path: string, buf: ArrayBuffer) {
       await inv('begin_save_document', { path });
       const view = new Uint8Array(buf);
@@ -117,6 +120,8 @@ if (typeof window !== 'undefined' && isDesktop()) {
         const slice = view.subarray(offset, Math.min(offset + CHUNK, view.byteLength));
         await inv('write_save_chunk', { path, offset, bytes: Array.from(slice) });
       }
+      // Atomic commit: swaps the temp file into the target path.
+      await inv('commit_save_document', { path });
     }
 
     async function updateWindowTitleFromPath(newPath: string) {
@@ -130,6 +135,41 @@ if (typeof window !== 'undefined' && isDesktop()) {
         /* best-effort */
       }
     }
+
+    // Best-effort dirty tracking for the Rust close-guard. We keep the
+    // current dirty state in a module-local boolean so we only fire the
+    // transition (clean→dirty / dirty→clean) once and never spam IPC.
+    // The Rust `set_window_dirty` command infers the window from the
+    // caller. All calls are best-effort and must never throw.
+    let isDirty = false;
+    function setWindowDirty(dirty: boolean) {
+      if (dirty === isDirty) return;
+      isDirty = dirty;
+      try {
+        void inv('set_window_dirty', { dirty }).catch(() => undefined);
+      } catch {
+        /* best-effort */
+      }
+    }
+    // Mark dirty on any user edit. Capture phase so we see the event even
+    // if the editor stops propagation. Heuristic: any input = dirty.
+    const markDirty = () => setWindowDirty(true);
+    document.addEventListener('input', markDirty, true);
+    document.addEventListener('beforeinput', markDirty, true);
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        // Univer's grid takes typing through keydown (its canvas has no
+        // <input> for cell entry), so flag dirty on printable / editing
+        // keys; ignore navigation and modifier chords (Ctrl+S, arrows).
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete') {
+          markDirty();
+        }
+      },
+      true,
+    );
+
     bridge = {
       isDesktop: true,
       get filePath() {
@@ -190,7 +230,13 @@ if (typeof window !== 'undefined' && isDesktop()) {
       },
       async save(bytes: ArrayBuffer): Promise<string | null> {
         if (filePath) {
-          await chunkedWrite(filePath, bytes);
+          try {
+            await chunkedWrite(filePath, bytes);
+          } catch (err) {
+            console.error('[deskApp] save failed for', filePath, err);
+            throw err;
+          }
+          setWindowDirty(false);
           return filePath;
         }
         return bridge!.saveAs('Untitled.xlsx', bytes);
@@ -198,13 +244,19 @@ if (typeof window !== 'undefined' && isDesktop()) {
       async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
         const newPath = (await inv('pick_save_path', { suggestedName })) as string | null;
         if (!newPath) return null;
-        await chunkedWrite(newPath, bytes);
+        try {
+          await chunkedWrite(newPath, bytes);
+        } catch (err) {
+          console.error('[deskApp] saveAs failed for', newPath, err);
+          throw err;
+        }
         try {
           await inv('add_recent_file', { path: newPath });
         } catch {
           /* best-effort */
         }
         filePath = newPath;
+        setWindowDirty(false);
         await updateWindowTitleFromPath(newPath);
         return newPath;
       },
@@ -273,6 +325,161 @@ if (typeof window !== 'undefined' && isDesktop()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__deskApp__ = bridge;
 
+    // --- Theme plumbing --------------------------------------------------
+    // The launcher passes its theme as `?theme=<system|light|dark>` and
+    // emits a Tauri event `deskapp://theme` (payload `{ theme }`) when the
+    // user flips it live. We resolve `system` against the OS colour scheme,
+    // expose `themeMode` (raw) + `theme` (resolved 'light'/'dark') on the
+    // bridge global, and re-broadcast as a DOM CustomEvent `deskapp:theme`
+    // (detail `{ mode, resolved }`) which the `../theme` provider listens
+    // for. Wrapped so a missing matchMedia / Tauri event API never throws
+    // and the editor still boots. In iframe mode there's no Tauri event
+    // bus, but matchMedia + the URL param still drive the resolved value.
+    try {
+      const themeBridge = bridge as unknown as {
+        themeMode: 'system' | 'light' | 'dark';
+        theme: 'light' | 'dark';
+      };
+      const parseMode = (): 'system' | 'light' | 'dark' => {
+        const raw = url.searchParams.get('theme');
+        return raw === 'light' || raw === 'dark' ? raw : 'system';
+      };
+      let themeMode = parseMode();
+      const mq =
+        typeof window.matchMedia === 'function'
+          ? window.matchMedia('(prefers-color-scheme: dark)')
+          : null;
+      const resolve = (mode: 'system' | 'light' | 'dark'): 'light' | 'dark' =>
+        mode === 'system' ? (mq?.matches ? 'dark' : 'light') : mode;
+
+      const reapply = () => {
+        const resolved = resolve(themeMode);
+        themeBridge.themeMode = themeMode;
+        themeBridge.theme = resolved;
+        try {
+          window.dispatchEvent(
+            new CustomEvent('deskapp:theme', { detail: { mode: themeMode, resolved } }),
+          );
+        } catch {
+          /* CustomEvent unsupported — best-effort */
+        }
+      };
+      // Initial publish so the provider can read `window.__deskApp__.theme`
+      // synchronously at module init and the event fires for late listeners.
+      reapply();
+
+      // OS scheme changes only matter while we're tracking `system`.
+      if (mq) {
+        const onMq = () => {
+          if (themeMode === 'system') reapply();
+        };
+        if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onMq);
+        else if (typeof mq.addListener === 'function') mq.addListener(onMq);
+      }
+
+      // Live launcher theme changes arrive over the Tauri event bus.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tauriEvent = (window as any).__TAURI__?.event;
+      if (tauriEvent?.listen) {
+        void tauriEvent
+          .listen('deskapp://theme', (e: { payload?: { theme?: string } }) => {
+            const next = e?.payload?.theme;
+            if (next === 'system' || next === 'light' || next === 'dark') {
+              themeMode = next;
+              reapply();
+            }
+          })
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      console.debug('[deskApp] theme plumbing failed', err);
+    }
+
+    // --- Cold-start boot overlay (top-level desktop only) ----------------
+    // Univer's canvas can take 1–2s to initialise; without this the window
+    // shows a blank/white flash (and white even in dark mode) until the
+    // grid paints. We inject a full-window overlay synchronously here —
+    // before React/Univer mount — themed from the resolved theme above so
+    // it never flashes white in dark mode. App.tsx calls
+    // `window.__deskApp__.dismissBoot()` once the workbook is ready; an
+    // ~8s safety timer guarantees it can never stick. The overlay sits
+    // above Univer's canvas and is fully removed on dismiss so it never
+    // intercepts grid input.
+    if (isTopLevel) {
+      try {
+        const themed = bridge as unknown as { theme?: 'light' | 'dark'; dismissBoot?: () => void };
+        const dark = themed.theme === 'dark';
+        const bg = dark ? '#1a1a1a' : '#ffffff';
+        const fg = dark ? '#e6e6e6' : '#3c3c3c';
+        const ring = dark ? '#3a3a3a' : '#e2e2e2';
+        const accent = dark ? '#6aa3ff' : '#2563eb';
+        const hasFile = !!filePath;
+        const label = hasFile ? 'Opening…' : 'New spreadsheet…';
+
+        if (!document.getElementById('__deskapp_boot_style__')) {
+          const st = document.createElement('style');
+          st.id = '__deskapp_boot_style__';
+          st.textContent =
+            // Below the 99999 error banner (so a boot-time error stays
+            // visible) but above Univer's canvas chrome.
+            '#__deskapp_boot__{position:fixed;inset:0;z-index:99998;display:flex;' +
+            'flex-direction:column;align-items:center;justify-content:center;gap:16px;' +
+            'opacity:1;transition:opacity .25s ease;font:14px/1.4 Inter,system-ui,' +
+            'sans-serif;}' +
+            '#__deskapp_boot__ .deskapp-boot__spinner{width:34px;height:34px;' +
+            'border-radius:50%;border:3px solid var(--deskapp-boot-ring);' +
+            'border-top-color:var(--deskapp-boot-accent);' +
+            'animation:deskapp-boot-spin .8s linear infinite;}' +
+            '@keyframes deskapp-boot-spin{to{transform:rotate(360deg);}}';
+          (document.head || document.documentElement).appendChild(st);
+        }
+
+        const overlay = document.createElement('div');
+        overlay.id = '__deskapp_boot__';
+        overlay.style.background = bg;
+        overlay.style.color = fg;
+        overlay.style.setProperty('--deskapp-boot-ring', ring);
+        overlay.style.setProperty('--deskapp-boot-accent', accent);
+        // Brand mark — a simple grid glyph so we add no asset dependency
+        // and stay safe before the editor's bundle/fonts have loaded.
+        overlay.innerHTML =
+          '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+          '<rect x="3" y="3" width="18" height="18" rx="3" stroke="' +
+          accent +
+          '" stroke-width="2"/>' +
+          '<path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="' +
+          accent +
+          '" stroke-width="1.4" opacity="0.6"/></svg>' +
+          '<div class="deskapp-boot__spinner"></div>' +
+          '<div class="deskapp-boot__label">' +
+          label +
+          '</div>';
+        (document.body || document.documentElement).appendChild(overlay);
+
+        let dismissed = false;
+        const dismissBoot = () => {
+          if (dismissed) return;
+          dismissed = true;
+          try {
+            const el = document.getElementById('__deskapp_boot__');
+            if (!el) return;
+            el.style.opacity = '0';
+            el.style.pointerEvents = 'none';
+            // Remove after the fade so it never intercepts grid input.
+            window.setTimeout(() => el.remove(), 300);
+          } catch {
+            /* best-effort */
+          }
+        };
+        themed.dismissBoot = dismissBoot;
+        // Safety net: never let the overlay stick even if the ready signal
+        // never fires (parse error swallowed, Univer stalls, etc.).
+        window.setTimeout(dismissBoot, 8000);
+      } catch (err) {
+        console.debug('[deskApp] boot overlay failed', err);
+      }
+    }
+
     // Ctrl/Cmd-H — focus the launcher window. Only fires in top-level
     // mode where __TAURI__.core.invoke is directly available.
     if (isTopLevel && tauriCore?.invoke) {
@@ -296,6 +503,13 @@ declare global {
       loadDocument(p?: string): Promise<ArrayBuffer>;
       save(bytes: ArrayBuffer): Promise<string | null>;
       saveAs(name: string, bytes: ArrayBuffer): Promise<string | null>;
+      /** Raw launcher theme preference: 'system' | 'light' | 'dark'. */
+      themeMode?: 'system' | 'light' | 'dark';
+      /** Resolved theme ('system' collapsed to 'light'/'dark'). */
+      theme?: 'light' | 'dark';
+      /** Idempotent: fade out + remove the cold-start boot overlay.
+       *  Defined only in top-level desktop mode; safe to optional-chain. */
+      dismissBoot?: () => void;
     };
   }
 }
