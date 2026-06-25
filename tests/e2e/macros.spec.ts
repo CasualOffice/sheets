@@ -87,6 +87,35 @@ test('manage macros dialog runs and deletes a saved macro', async ({ page }) => 
   await expect(page.getByTestId('menu-item-macro-manage')).toHaveCount(0);
 });
 
+test('rename a macro from the manage dialog updates the run menu entry', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => localStorage.removeItem('casual.macros'));
+  await page.goto('/');
+  await waitForUniver(page);
+
+  // Record "Macro 1".
+  await macroItem(page, 'menu-item-macro-record');
+  await setCell(page, 'A1', 4);
+  await page.waitForTimeout(200);
+  await macroItem(page, 'menu-item-macro-record'); // Stop
+
+  // Open the dialog and rename Macro 1 → "Monthly close" (Enter commits).
+  await macroItem(page, 'menu-item-macro-manage');
+  const nameInput = page.getByTestId('macros-dialog-name-Macro-1');
+  await nameInput.fill('Monthly close');
+  await nameInput.press('Enter');
+  // Row re-keys to the new name → run button reflects it; old slug is gone.
+  await expect(page.getByTestId('macros-dialog-run-Monthly-close')).toBeVisible();
+  await expect(page.getByTestId('macros-dialog-run-Macro-1')).toHaveCount(0);
+
+  // Close → the Macros menu's quick-run entry uses the new name.
+  await page.keyboard.press('Escape');
+  await page.getByTestId('menubar-data').click();
+  await page.getByTestId('menu-item-macros').hover();
+  await expect(page.getByTestId('menu-item-macro-run-Monthly-close')).toBeVisible();
+  await expect(page.getByTestId('menu-item-macro-run-Macro-1')).toHaveCount(0);
+});
+
 test('bind a macro to Ctrl+Shift+<letter> and trigger it from the keyboard', async ({ page }) => {
   test.setTimeout(60_000);
   await page.addInitScript(() => localStorage.removeItem('casual.macros'));

@@ -64,6 +64,43 @@ test('saveMacro / listMacros / deleteMacro round-trip', async () => {
   assert.deepEqual(listMacros(), []);
 });
 
+test('renameMacro: preserves order/steps/shortcut, rejects blank + duplicate', async () => {
+  const { saveMacro, listMacros, renameMacro, setMacroShortcut } = await import('./macros.js');
+  saveMacro({
+    name: 'Macro 1',
+    steps: [{ id: 'sheet.mutation.set-range-values', params: { x: 1 } }],
+    createdAt: 10,
+  });
+  saveMacro({ name: 'Macro 2', steps: [], createdAt: 20 });
+  setMacroShortcut('Macro 1', 'M');
+
+  // Happy path: rename keeps position, steps, shortcut, createdAt.
+  renameMacro('Macro 1', 'Monthly close');
+  const after = listMacros();
+  assert.deepEqual(
+    after.map((m) => m.name),
+    ['Monthly close', 'Macro 2'],
+    'order preserved (rename in place, not delete+append)',
+  );
+  const renamed = after.find((m) => m.name === 'Monthly close')!;
+  assert.equal(renamed.shortcut, 'M');
+  assert.equal(renamed.createdAt, 10);
+  assert.equal(renamed.steps.length, 1);
+
+  // Trims whitespace.
+  renameMacro('Monthly close', '  Weekly  ');
+  assert.ok(listMacros().some((m) => m.name === 'Weekly'));
+
+  // Rejections — list unchanged.
+  const names = () => listMacros().map((m) => m.name);
+  renameMacro('Weekly', '   '); // blank
+  assert.deepEqual(names(), ['Weekly', 'Macro 2']);
+  renameMacro('Weekly', 'Macro 2'); // duplicate
+  assert.deepEqual(names(), ['Weekly', 'Macro 2']);
+  renameMacro('Nope', 'Whatever'); // old name not found
+  assert.deepEqual(names(), ['Weekly', 'Macro 2']);
+});
+
 test('setMacroShortcut assigns, is unique, and rejects reserved letters', async () => {
   const { saveMacro, setMacroShortcut, findMacroByShortcut, listMacros } =
     await import('./macros.js');
