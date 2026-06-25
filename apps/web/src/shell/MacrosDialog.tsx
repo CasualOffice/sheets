@@ -5,10 +5,56 @@ import {
   availableMacroLetters,
   deleteMacro,
   listMacros,
+  renameMacro,
   runMacro,
   setMacroShortcut,
   type Macro,
 } from '../sheets/macros';
+
+/**
+ * Inline-editable macro name. Commits on Enter / blur, reverts on Escape or
+ * when the rename is rejected (blank / duplicate). Local draft so typing
+ * doesn't churn the parent until commit.
+ */
+function MacroNameInput({
+  name,
+  disabled,
+  onRename,
+}: {
+  name: string;
+  disabled: boolean;
+  onRename: (oldName: string, newName: string) => boolean;
+}) {
+  const [draft, setDraft] = useState(name);
+  const commit = () => {
+    if (draft.trim() === name) {
+      setDraft(name); // normalize any whitespace-only change back
+      return;
+    }
+    if (!onRename(name, draft)) setDraft(name); // rejected → revert
+  };
+  return (
+    <input
+      className="macros-dialog__name-input"
+      data-testid={`macros-dialog-name-${name.replace(/\s+/g, '-')}`}
+      value={draft}
+      disabled={disabled}
+      aria-label={`Macro name: ${name}`}
+      spellCheck={false}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.currentTarget.blur();
+        } else if (e.key === 'Escape') {
+          setDraft(name);
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
 
 /**
  * Manage Macros — Excel's Alt+F8 dialog: list saved macros, run or delete each.
@@ -45,6 +91,12 @@ export function MacrosDialog({ api, onClose, onRan }: Props) {
     setMacros(setMacroShortcut(name, letter || null));
   };
 
+  const rename = (oldName: string, newName: string): boolean => {
+    const next = renameMacro(oldName, newName);
+    setMacros(next);
+    return next.some((m) => m.name === newName.trim());
+  };
+
   return (
     <Dialog title="Macros" onClose={onClose} data-testid="macros-dialog">
       {macros.length === 0 ? (
@@ -60,7 +112,7 @@ export function MacrosDialog({ api, onClose, onRan }: Props) {
               data-testid={`macros-dialog-row-${m.name.replace(/\s+/g, '-')}`}
             >
               <span className="macros-dialog__name">
-                {m.name}
+                <MacroNameInput name={m.name} disabled={busy} onRename={rename} />
                 <span className="macros-dialog__count">
                   {m.steps.length} step{m.steps.length === 1 ? '' : 's'}
                 </span>

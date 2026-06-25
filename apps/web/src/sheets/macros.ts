@@ -142,6 +142,27 @@ export function deleteMacro(name: string): Macro[] {
   return next;
 }
 
+/**
+ * Rename a macro in place (preserving list order, steps, shortcut, createdAt).
+ * No-op — returns the list unchanged — when the new name is blank, unchanged,
+ * collides with another macro, or the old name isn't found. The name is the
+ * storage key, so the rename is a keyed map, not a delete + re-add.
+ */
+export function renameMacro(oldName: string, newName: string): Macro[] {
+  const trimmed = newName.trim();
+  const macros = listMacros();
+  if (!trimmed || trimmed === oldName) return macros;
+  if (!macros.some((m) => m.name === oldName)) return macros;
+  if (macros.some((m) => m.name === trimmed)) return macros; // name collision
+  const next = macros.map((m) => (m.name === oldName ? { ...m, name: trimmed } : m));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    /* private mode — change stays in memory only for this session */
+  }
+  return next;
+}
+
 /** Default name for a freshly recorded macro (Macro 1, Macro 2, …). */
 export function nextMacroName(existing: Macro[] = listMacros()): string {
   const used = new Set(existing.map((m) => m.name));

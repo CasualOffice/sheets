@@ -4042,6 +4042,27 @@ button {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+/* Name reads as plain text; the editable affordance appears on hover/focus. */
+.macros-dialog__name-input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  margin: -2px -4px; /* keep text aligned with the row despite padding */
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.macros-dialog__name-input:hover {
+  border-color: var(--color-border);
+}
+.macros-dialog__name-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
 .macros-dialog__shortcut {
   display: inline-flex;
   align-items: center;
