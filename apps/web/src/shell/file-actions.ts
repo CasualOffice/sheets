@@ -179,6 +179,12 @@ export type SaveOptions = {
    *  is `toast(api, ...)` from inside file-actions; pass a UI-aware
    *  hook here to drive a richer modal. */
   onConflict?: (expectedEtag: string) => void;
+  /** Force a "choose a location" prompt even for the native xlsx format.
+   *  Plain Save overwrites the bound file silently; Save As / Export must
+   *  always prompt so the user sees and picks where it lands. In the
+   *  desktop build this routes through `bridge.saveAs()` (native picker)
+   *  instead of `bridge.save()` (overwrite). */
+  forcePrompt?: boolean;
 };
 
 export async function saveAsXlsx(
@@ -215,6 +221,7 @@ export async function saveAsXlsx(
     'xlsx',
     options.serverFileId ?? null,
     options.serverEtag ?? null,
+    options.forcePrompt ?? false,
   );
   handleSaveResult(api, finalName, result, options);
   // The on-disk file now supersedes the autosave slot — drop it so a
@@ -453,14 +460,15 @@ async function deliverBlob(
   sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv',
   serverFileId: string | null = null,
   serverEtag: string | null = null,
+  forcePrompt = false,
 ): Promise<SaveResult> {
   // Desktop (Tauri) build: route through the native bridge so a save
   // overwrites the file on disk (or prompts) — never a phantom browser
   // download. The hard rule from the desktop shell's CLAUDE.md. `save()`
   // overwrites the bound path for the native xlsx, or prompts when untitled;
   // other formats (ods/csv/tsv export) always prompt so they don't clobber
-  // the bound workbook.
-  const desktopResult = await deliverViaDesktopBridge(blob, filename, sourceFormat);
+  // the bound workbook. `forcePrompt` (Save As / Export) always prompts.
+  const desktopResult = await deliverViaDesktopBridge(blob, filename, sourceFormat, forcePrompt);
   if (desktopResult) return desktopResult;
 
   return selectFileSource().save(blob, {
@@ -486,6 +494,7 @@ async function deliverViaDesktopBridge(
   blob: Blob,
   filename: string,
   sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv',
+  forcePrompt = false,
 ): Promise<SaveResult | null> {
   const bridge =
     typeof window !== 'undefined'
@@ -493,10 +502,13 @@ async function deliverViaDesktopBridge(
       : undefined;
   if (!bridge?.isDesktop) return null;
   const bytes = await blob.arrayBuffer();
-  // xlsx is the native bound format → overwrite (or prompt if untitled);
-  // exports of other formats always prompt for a fresh path.
+  // Plain Save of the native xlsx → overwrite the bound path (or prompt if
+  // untitled). Save As / Export (`forcePrompt`) and every non-xlsx format →
+  // always open the native picker so the user sees and chooses the location.
   const savedPath =
-    sourceFormat === 'xlsx' ? await bridge.save(bytes) : await bridge.saveAs(filename, bytes);
+    !forcePrompt && sourceFormat === 'xlsx'
+      ? await bridge.save(bytes)
+      : await bridge.saveAs(filename, bytes);
   if (savedPath == null) return { kind: 'cancelled' };
   const folderName = savedPath.replace(/[\\/][^\\/]*$/, '') || savedPath;
   return { kind: 'folder', folderName };

@@ -11,7 +11,18 @@ import autoTable from 'jspdf-autotable';
 import type { FUniver } from '@univerjs/core/facade';
 import { saveWorkbook } from '../univer-facade';
 
-export type PdfResult = { ok: true } | { ok: false; reason: 'empty' };
+export type PdfResult = { ok: true } | { ok: false; reason: 'empty' | 'cancelled' };
+
+type DeskBridge = {
+  isDesktop?: boolean;
+  saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null>;
+};
+
+function deskBridge(): DeskBridge | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const b = (window as unknown as { __deskApp__?: DeskBridge }).__deskApp__;
+  return b?.isDesktop ? b : undefined;
+}
 
 /** 0-based column index → spreadsheet letter (0→A, 25→Z, 26→AA). */
 function colLetter(n: number): string {
@@ -30,7 +41,7 @@ function cellText(v: unknown): string {
   return typeof v === 'string' ? v : String(v);
 }
 
-export function exportActiveSheetPdf(api: FUniver): PdfResult {
+export async function exportActiveSheetPdf(api: FUniver): Promise<PdfResult> {
   const wb = api.getActiveWorkbook();
   const ws = wb?.getActiveSheet();
   if (!wb || !ws) return { ok: false, reason: 'empty' };
@@ -121,6 +132,17 @@ export function exportActiveSheetPdf(api: FUniver): PdfResult {
   });
 
   const file = `${wbName}-${sName}`.replace(/[^\w.-]+/g, '_');
-  doc.save(`${file}.pdf`);
+  const filename = `${file}.pdf`;
+  // Desktop shell: Export must open the native picker (and never a phantom
+  // browser download — the shell's hard rule). Route the PDF bytes through
+  // the bridge's Save As so the user sees and chooses where it lands. The web
+  // build keeps jsPDF's own download.
+  const bridge = deskBridge();
+  if (bridge) {
+    const bytes = doc.output('arraybuffer') as ArrayBuffer;
+    const saved = await bridge.saveAs(filename, bytes);
+    return saved == null ? { ok: false, reason: 'cancelled' } : { ok: true };
+  }
+  doc.save(filename);
   return { ok: true };
 }

@@ -1208,6 +1208,9 @@ export function MenuBar() {
         charts: charts.charts,
         pivots: pivots.pivots,
         sparklines: sparklinesCtx.sparklines,
+        // Save As / Export → always open the native picker so the user
+        // chooses where it lands (never silently overwrite the bound file).
+        forcePrompt: true,
       }),
     );
 
@@ -1229,11 +1232,12 @@ export function MenuBar() {
   const handleExportTsv = () =>
     exportAs('tsv', () => saveAsTsv(api!, workbook.meta.name || 'workbook'));
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     if (!api) return;
-    const r = exportActiveSheetPdf(api);
+    const r = await exportActiveSheetPdf(api);
     if (r.ok) toast.success('Exported PDF');
-    else toast.info('Nothing to export yet — add some data first.');
+    else if (r.reason === 'empty') toast.info('Nothing to export yet — add some data first.');
+    // 'cancelled' (user dismissed the native Save dialog) → no toast.
   };
 
   const toggleProtect = () => {
