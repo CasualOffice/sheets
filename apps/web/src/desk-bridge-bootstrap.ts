@@ -123,6 +123,13 @@ if (typeof window !== 'undefined' && isDesktop()) {
      *  half-written file never clobbers the original. Any chunk OR the
      *  commit throwing propagates so the editor reports a failed save. */
     async function chunkedWrite(path: string, buf: ArrayBuffer) {
+      // Never atomically replace a good file with an empty one. A degenerate
+      // or failed serialization that yielded 0 bytes would otherwise commit
+      // over the original on disk — silent data loss. Throw so the caller
+      // re-throws and the editor reports a failed save instead.
+      if (buf.byteLength === 0) {
+        throw new Error(`refusing to write an empty spreadsheet to ${path}`);
+      }
       await inv('begin_save_document', { path });
       const view = new Uint8Array(buf);
       const CHUNK = 1 << 20;
@@ -160,6 +167,12 @@ if (typeof window !== 'undefined' && isDesktop()) {
     // keystroke heuristic misses (Univer's grid is a canvas with no
     // <input>). The `false` transition fires here on a successful save.
     let isDirty = false;
+    // Monotonic edit counter — bumped on every edit signal from the editor
+    // (App.tsx calls setDirty(true) from the Univer mutation hook), not just
+    // the clean→dirty transition. A save snapshots it before writing and
+    // re-checks after the commit, so an edit that lands mid-write keeps the
+    // window dirty instead of being cleared (and silently lost on close).
+    let editSeq = 0;
     function setWindowDirty(dirty: boolean) {
       if (dirty === isDirty) return;
       isDirty = dirty;
@@ -181,6 +194,9 @@ if (typeof window !== 'undefined' && isDesktop()) {
       // Editor → bridge dirty signal. App.tsx calls this from the command-bus
       // mutation hook; save() clears it. Best-effort, never throws.
       setDirty(dirty: boolean) {
+        // Bump on every edit signal (even while already dirty) so an in-flight
+        // save can detect a change that landed during the write.
+        if (dirty) editSeq++;
         setWindowDirty(dirty);
       },
       async loadDocument(p?: string): Promise<ArrayBuffer> {
@@ -235,13 +251,16 @@ if (typeof window !== 'undefined' && isDesktop()) {
       },
       async save(bytes: ArrayBuffer): Promise<string | null> {
         if (filePath) {
+          const seqAtStart = editSeq;
           try {
             await chunkedWrite(filePath, bytes);
           } catch (err) {
             console.error('[deskApp] save failed for', filePath, err);
             throw err;
           }
-          setWindowDirty(false);
+          // Only mark clean if no edit landed while the write was in flight;
+          // otherwise the window would read "saved" with unsaved changes.
+          if (editSeq === seqAtStart) setWindowDirty(false);
           return filePath;
         }
         return bridge!.saveAs('Untitled.xlsx', bytes);
@@ -249,6 +268,7 @@ if (typeof window !== 'undefined' && isDesktop()) {
       async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
         const newPath = (await inv('pick_save_path', { suggestedName })) as string | null;
         if (!newPath) return null;
+        const seqAtStart = editSeq;
         try {
           await chunkedWrite(newPath, bytes);
         } catch (err) {
@@ -261,7 +281,8 @@ if (typeof window !== 'undefined' && isDesktop()) {
           /* best-effort */
         }
         filePath = newPath;
-        setWindowDirty(false);
+        // Only mark clean if no edit landed while the write was in flight.
+        if (editSeq === seqAtStart) setWindowDirty(false);
         await updateWindowTitleFromPath(newPath);
         return newPath;
       },
