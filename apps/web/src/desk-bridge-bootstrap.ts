@@ -92,9 +92,10 @@ if (typeof window !== 'undefined' && isDesktop()) {
         isDesktop: true;
         filePath: string | null;
         loadDocument(p?: string): Promise<ArrayBuffer>;
-        save(bytes: ArrayBuffer): Promise<string | null>;
-        saveAs(name: string, bytes: ArrayBuffer): Promise<string | null>;
+        save(bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
+        saveAs(name: string, bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
         setDirty?(dirty: boolean): void;
+        currentEditSeq?(): number;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         getProfile?: () => Promise<any>;
       }
@@ -199,6 +200,14 @@ if (typeof window !== 'undefined' && isDesktop()) {
         if (dirty) editSeq++;
         setWindowDirty(dirty);
       },
+      // Current edit counter. The save caller reads this at the instant it
+      // serializes the workbook (synchronously, before the async encode +
+      // IPC) and passes it back as `save(bytes, baselineSeq)`, so an edit that
+      // landed *between serialization and the write* — not just during the
+      // write — is detected and the window stays dirty. See save() below.
+      currentEditSeq() {
+        return editSeq;
+      },
       async loadDocument(p?: string): Promise<ArrayBuffer> {
         const path = p ?? filePath;
         if (!path) throw new Error('no file path bound to this window');
@@ -249,26 +258,34 @@ if (typeof window !== 'undefined' && isDesktop()) {
         }
         return out.buffer as ArrayBuffer;
       },
-      async save(bytes: ArrayBuffer): Promise<string | null> {
+      async save(bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null> {
         if (filePath) {
-          const seqAtStart = editSeq;
+          // Reference point for "did the doc change since these bytes were
+          // produced": the caller's edit counter at serialization time when
+          // provided, else the counter now (covers only edits during the
+          // write — the legacy behaviour).
+          const seqAtStart = baselineSeq ?? editSeq;
           try {
             await chunkedWrite(filePath, bytes);
           } catch (err) {
             console.error('[deskApp] save failed for', filePath, err);
             throw err;
           }
-          // Only mark clean if no edit landed while the write was in flight;
+          // Only mark clean if no edit landed since the bytes were serialized;
           // otherwise the window would read "saved" with unsaved changes.
           if (editSeq === seqAtStart) setWindowDirty(false);
           return filePath;
         }
-        return bridge!.saveAs('Untitled.xlsx', bytes);
+        return bridge!.saveAs('Untitled.xlsx', bytes, baselineSeq);
       },
-      async saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null> {
+      async saveAs(
+        suggestedName: string,
+        bytes: ArrayBuffer,
+        baselineSeq?: number,
+      ): Promise<string | null> {
         const newPath = (await inv('pick_save_path', { suggestedName })) as string | null;
         if (!newPath) return null;
-        const seqAtStart = editSeq;
+        const seqAtStart = baselineSeq ?? editSeq;
         try {
           await chunkedWrite(newPath, bytes);
         } catch (err) {
@@ -559,11 +576,15 @@ declare global {
       isDesktop: true;
       filePath: string | null;
       loadDocument(p?: string): Promise<ArrayBuffer>;
-      save(bytes: ArrayBuffer): Promise<string | null>;
-      saveAs(name: string, bytes: ArrayBuffer): Promise<string | null>;
+      save(bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
+      saveAs(name: string, bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
       /** Editor → bridge dirty signal for the Rust close-guard. Driven by
        *  App.tsx's command-bus mutation hook; cleared on save. */
       setDirty?(dirty: boolean): void;
+      /** Edit counter read at serialization time and passed back to
+       *  `save(bytes, baselineSeq)` so an edit between serialize and write
+       *  keeps the window dirty. Top-level desktop bridge only. */
+      currentEditSeq?(): number;
       /** Raw launcher theme preference: 'system' | 'light' | 'dark'. */
       themeMode?: 'system' | 'light' | 'dark';
       /** Resolved theme ('system' collapsed to 'light'/'dark'). */

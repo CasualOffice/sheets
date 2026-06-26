@@ -110,3 +110,64 @@ test('an edit drives bridge.setDirty(true) via the mutation hook', async ({ page
   );
   expect(last).toBe(true);
 });
+
+/**
+ * Mid-save staleness guard. The bridge marks the window clean after a save ONLY
+ * if the document hasn't changed since the bytes were serialized — the caller
+ * pins the edit counter at serialization (`save(bytes, baselineSeq)`). An edit
+ * that lands between serialize and the disk write must keep the window dirty so
+ * it isn't silently lost on close. Drives the REAL bridge (mocking only the
+ * Tauri invoke layer), not a fake bridge, so it exercises that decision.
+ */
+test('desktop bridge stays dirty when an edit lands between serialize and write', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  await page.addInitScript(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = { setDirty: [] as boolean[] };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__deskTest = rec;
+    // Minimal Tauri invoke mock: record set_window_dirty transitions; resolve
+    // the chunked-write commands so chunkedWrite completes without a real FS.
+    const invoke = (cmd: string, args?: { dirty?: boolean }) => {
+      if (cmd === 'set_window_dirty') rec.setDirty.push(args!.dirty);
+      if (cmd === 'document_size') return Promise.resolve(0);
+      return Promise.resolve(null);
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__TAURI__ = { core: { invoke } };
+  });
+
+  // ?desk=1 (top-level) activates the real bridge bootstrap; no file= so the
+  // app doesn't try to auto-load a path — we bind filePath directly below.
+  await page.goto('/?desk=1');
+  await page.waitForFunction(() => !!(window as { __deskApp__?: unknown }).__deskApp__, null, {
+    timeout: 30_000,
+  });
+
+  const out = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b: any = (window as any).__deskApp__;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = (window as any).__deskTest;
+    b.filePath = '/tmp/book.xlsx';
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer; // non-empty (PK header)
+
+    // Stale save: capture the baseline, THEN an edit lands, THEN write.
+    const staleBaseline = b.currentEditSeq();
+    b.setDirty(true); // editSeq bumps → now ahead of staleBaseline
+    await b.save(bytes, staleBaseline);
+    const afterStale = [...rec.setDirty];
+
+    // Clean save: baseline reflects the current edit state.
+    await b.save(bytes, b.currentEditSeq());
+    return { afterStale, afterClean: [...rec.setDirty] };
+  });
+
+  // The dirty edit fired set_window_dirty(true); the stale save must NOT clear it.
+  expect(out.afterStale).toEqual([true]);
+  // The clean save (baseline === current) clears it → a false transition appended.
+  expect(out.afterClean).toEqual([true, false]);
+});

@@ -198,6 +198,10 @@ export async function saveAsXlsx(
   // sheets. Capture it once and pass it down to anything that needs the
   // snapshot (xlsx writer + hyperlink extractor).
   const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
+  // Pin the desktop edit counter to this exact serialized state (read in the
+  // same synchronous tick as wb.save(), before any await). The bridge uses it
+  // to keep the window dirty if an edit lands between here and the disk write.
+  const deskBaselineSeq = readDeskEditSeq();
   const chartImages = await renderChartImagesForExport(api, options.charts);
   const extras: ExportExtras = {
     ...collectExportExtras(snapshot),
@@ -222,6 +226,7 @@ export async function saveAsXlsx(
     options.serverFileId ?? null,
     options.serverEtag ?? null,
     options.forcePrompt ?? false,
+    deskBaselineSeq,
   );
   handleSaveResult(api, finalName, result, options);
   // The on-disk file now supersedes the autosave slot — drop it so a
@@ -461,6 +466,7 @@ async function deliverBlob(
   serverFileId: string | null = null,
   serverEtag: string | null = null,
   forcePrompt = false,
+  deskBaselineSeq?: number,
 ): Promise<SaveResult> {
   // Desktop (Tauri) build: route through the native bridge so a save
   // overwrites the file on disk (or prompts) — never a phantom browser
@@ -468,7 +474,13 @@ async function deliverBlob(
   // overwrites the bound path for the native xlsx, or prompts when untitled;
   // other formats (ods/csv/tsv export) always prompt so they don't clobber
   // the bound workbook. `forcePrompt` (Save As / Export) always prompts.
-  const desktopResult = await deliverViaDesktopBridge(blob, filename, sourceFormat, forcePrompt);
+  const desktopResult = await deliverViaDesktopBridge(
+    blob,
+    filename,
+    sourceFormat,
+    forcePrompt,
+    deskBaselineSeq,
+  );
   if (desktopResult) return desktopResult;
 
   return selectFileSource().save(blob, {
@@ -482,9 +494,20 @@ async function deliverBlob(
 type DeskBridge = {
   isDesktop?: boolean;
   filePath?: string | null;
-  save(bytes: ArrayBuffer): Promise<string | null>;
-  saveAs(suggestedName: string, bytes: ArrayBuffer): Promise<string | null>;
+  save(bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
+  saveAs(suggestedName: string, bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
+  /** Edit counter at serialization time; passed back so an edit between
+   *  serialize and write keeps the window dirty. Top-level desktop only. */
+  currentEditSeq?(): number;
 };
+
+/** The desktop bridge's edit counter, or undefined off-desktop. Read this
+ *  synchronously right after serializing the workbook so it pins the exact
+ *  edit state the bytes represent. */
+function readDeskEditSeq(): number | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return (window as unknown as { __deskApp__?: DeskBridge }).__deskApp__?.currentEditSeq?.();
+}
 
 /**
  * Save through the desktop bridge when it's present. Returns the SaveResult, or
@@ -495,6 +518,7 @@ async function deliverViaDesktopBridge(
   filename: string,
   sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv',
   forcePrompt = false,
+  baselineSeq?: number,
 ): Promise<SaveResult | null> {
   const bridge =
     typeof window !== 'undefined'
@@ -505,10 +529,13 @@ async function deliverViaDesktopBridge(
   // Plain Save of the native xlsx → overwrite the bound path (or prompt if
   // untitled). Save As / Export (`forcePrompt`) and every non-xlsx format →
   // always open the native picker so the user sees and chooses the location.
+  // `baselineSeq` is the edit counter captured when these bytes were
+  // serialized, so the bridge can keep the window dirty if the doc changed
+  // between serialization and the write landing on disk.
   const savedPath =
     !forcePrompt && sourceFormat === 'xlsx'
-      ? await bridge.save(bytes)
-      : await bridge.saveAs(filename, bytes);
+      ? await bridge.save(bytes, baselineSeq)
+      : await bridge.saveAs(filename, bytes, baselineSeq);
   if (savedPath == null) return { kind: 'cancelled' };
   const folderName = savedPath.replace(/[\\/][^\\/]*$/, '') || savedPath;
   return { kind: 'folder', folderName };
