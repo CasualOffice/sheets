@@ -203,7 +203,11 @@ export function TitleBar() {
               type="button"
               className="titlebar__filename"
               data-testid="titlebar-filename"
-              title="Rename"
+              // The filename text IS the button's accessible name (announced by
+              // screen readers and used by getByRole name lookups). Don't set
+              // aria-label here — it would override the filename with a generic
+              // string. The rename affordance is conveyed via the title tooltip.
+              title={`${filename} — click to rename`}
               onClick={() => setEditing(true)}
             >
               {filename}

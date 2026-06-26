@@ -16,7 +16,7 @@ test('desktop injects local @font-face for the chrome fonts', async ({ page }) =
   );
   expect(css).toContain('Material Symbols Outlined');
   expect(css).toContain('inter-400.woff2');
-  expect(css).toContain('./fonts/material-symbols-outlined.woff2');
+  expect(css).toContain('./fonts/material-symbols-outlined.subset.woff2');
 });
 
 test('web build does NOT inject local fonts and keeps the Google Fonts CDN', async ({ page }) => {

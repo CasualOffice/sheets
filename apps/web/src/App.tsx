@@ -323,6 +323,43 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reload when the open file is modified by another process (e.g. the user
+  // saves from Excel while the sheet is open here). The bootstrap translates
+  // the Rust watcher's Tauri event into a DOM CustomEvent. Only 'modified'
+  // triggers a reload; 'removed'/'renamed' are handled on the Rust side and
+  // are no-ops here for now.
+  useEffect(() => {
+    if (!isDesktop()) return;
+    const onFileChanged = (e: Event) => {
+      const { kind, path } =
+        (e as CustomEvent<{ kind: string; path: string }>).detail ?? {};
+      if (kind !== 'modified') return;
+      const bridge = typeof window !== 'undefined' ? window.__deskApp__ : undefined;
+      if (!bridge?.isDesktop || !bridge.filePath) return;
+      if (path !== bridge.filePath) return;
+      void (async () => {
+        try {
+          const buffer = await bridge.loadDocument();
+          const fp = bridge.filePath!;
+          const lower = fp.toLowerCase();
+          let data: IWorkbookData;
+          if (lower.endsWith('.ods')) data = await odsToWorkbookData(buffer);
+          else if (lower.endsWith('.csv')) data = await csvToWorkbookData(buffer);
+          else if (lower.endsWith('.tsv') || lower.endsWith('.tab'))
+            data = await tsvToWorkbookData(buffer);
+          else data = await xlsxToWorkbookData(buffer);
+          const fileName = fp.split(/[\\/]/).pop() || 'Workbook.xlsx';
+          data.name = fileName.replace(/\.(xlsx|xlsm|ods|csv|tsv|tab)$/i, '');
+          replaceWorkbook(data);
+        } catch (err) {
+          console.error('[deskApp] file-changed reload failed', err);
+        }
+      })();
+    };
+    window.addEventListener('deskapp:file-changed', onFileChanged);
+    return () => window.removeEventListener('deskapp:file-changed', onFileChanged);
+  }, [replaceWorkbook]);
+
   const updateServerEtag = useCallback((etag: string | null) => {
     setMeta((prev) => (prev.serverEtag === etag ? prev : { ...prev, serverEtag: etag }));
   }, []);

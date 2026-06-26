@@ -497,6 +497,38 @@ if (typeof window !== 'undefined' && isDesktop()) {
         }
       });
     }
+
+    // External file-change listener (top-level windows only). The Rust
+    // filesystem watcher emits `deskapp://file-changed` with payload
+    // `{ kind: "modified"|"removed"|"renamed", path }` when the open
+    // file is touched by another process. Re-broadcast as a DOM
+    // CustomEvent so App.tsx can react without depending on __TAURI__.
+    if (isTopLevel) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tauriEvent = (window as any).__TAURI__?.event;
+        if (tauriEvent?.listen) {
+          void tauriEvent
+            .listen(
+              'deskapp://file-changed',
+              (e: { payload?: { kind?: string; path?: string } }) => {
+                const { kind, path } = e?.payload ?? {};
+                if (!kind || !path) return;
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent('deskapp:file-changed', { detail: { kind, path } }),
+                  );
+                } catch {
+                  /* CustomEvent not supported */
+                }
+              },
+            )
+            .catch(() => undefined);
+        }
+      } catch {
+        /* no Tauri event bus (web/iframe) — best-effort */
+      }
+    }
   }
 }
 
