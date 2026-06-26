@@ -483,9 +483,20 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
       { timeout: 30_000 },
     );
     const input = page.getByTestId('casual-sheets-formula-input');
-    await input.click();
-    await input.fill('=SU');
-    await expect(page.getByTestId('cs-formula-suggestions')).toBeVisible();
+    const suggestions = page.getByTestId('cs-formula-suggestions');
+    // The formula input is disabled until the SDK api binds; don't type early.
+    await expect(input).toBeEnabled();
+    // Right after the harness signals ready, background idle-plugin-load command
+    // bursts re-render the chrome and can swallow the first keystrokes' draft
+    // before the autocomplete renders. Retry the type→suggestions step (rather
+    // than racing a single fill) until the dropdown is actually up — generous
+    // budgets so a CPU-starved run under full e2e load still converges.
+    await expect(async () => {
+      await input.click();
+      await input.clear();
+      await input.pressSequentially('=SU');
+      await expect(suggestions).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
     await expect(page.getByTestId('cs-formula-suggestion-SUM')).toBeVisible();
     // Complete via keyboard (ArrowDown to SUM, then Enter). Keyboard-driven so
     // it's deterministic under suite load — clicking the item is flaky while the
