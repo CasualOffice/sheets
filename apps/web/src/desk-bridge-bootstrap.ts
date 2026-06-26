@@ -25,26 +25,45 @@ export function isDesktop(): boolean {
   }
 }
 
-// Surface runtime errors visibly — the iframe context hides DevTools by
-// default, so silent failures show up as a blank page. This overlay pins
-// the first error to the top of the iframe so we can see it. Gated on
-// desktop mode so plain web never installs these listeners.
+// Surface unexpected runtime errors without the alarming full-width red
+// monospace banner across the grid (which reads like a crash/dev artifact).
+// Full detail goes to the console — DevTools is available in release builds —
+// and the user sees a single compact, dismissible notice. Gated on desktop
+// mode so plain web never installs these listeners.
 if (typeof window !== 'undefined' && isDesktop()) {
-  const showError = (msg: string) => {
+  const notify = (detail: string) => {
+    // eslint-disable-next-line no-console
+    console.error('[deskApp]', detail);
     if (document.getElementById('__deskapp_err__')) return;
-    const div = document.createElement('div');
-    div.id = '__deskapp_err__';
-    div.style.cssText =
-      'position:fixed;top:0;left:0;right:0;background:#dc2626;color:#fff;' +
-      'padding:8px 12px;z-index:99999;font:12px/1.4 monospace;white-space:pre-wrap;';
-    div.textContent = msg;
-    (document.body || document.documentElement).appendChild(div);
+    const el = document.createElement('div');
+    el.id = '__deskapp_err__';
+    el.setAttribute('role', 'alert');
+    el.style.cssText =
+      'position:fixed;top:12px;right:12px;max-width:320px;z-index:99999;' +
+      'display:flex;gap:10px;align-items:flex-start;' +
+      'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;' +
+      'box-shadow:0 4px 14px rgba(0,0,0,0.12);padding:10px 12px;' +
+      "font:13px/1.4 -apple-system,system-ui,'Segoe UI',sans-serif;";
+    const text = document.createElement('div');
+    text.style.flex = '1';
+    text.textContent = 'Something went wrong. See the console for details.';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.style.cssText =
+      'border:0;background:transparent;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:0;';
+    close.addEventListener('click', () => el.remove());
+    el.appendChild(text);
+    el.appendChild(close);
+    (document.body || document.documentElement).appendChild(el);
   };
   window.addEventListener('error', (e) => {
-    showError(`[error] ${e.message}\n  at ${e.filename}:${e.lineno}:${e.colno}`);
+    notify(`[error] ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
   });
   window.addEventListener('unhandledrejection', (e) => {
-    showError(`[unhandled rejection] ${e.reason?.message ?? e.reason}`);
+    const reason = e.reason as { message?: string } | undefined;
+    notify(`[unhandled rejection] ${reason?.message ?? String(e.reason)}`);
   });
 }
 
