@@ -293,8 +293,17 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
             cd.p = buildHyperlinkBody(display, url, nextHyperlinkId());
           }
         } else if (raw && typeof raw === 'object' && 'sharedFormula' in raw) {
-          const sf = (raw as { sharedFormula: string; result?: unknown }).sharedFormula;
-          cd.f = sf.startsWith('=') ? sf : `=${sf}`;
+          // A filled-down (shared) formula's slave cells. ExcelJS exposes
+          // `cell.value` as `{ sharedFormula: <masterAddress>, result }` —
+          // `sharedFormula` is the MASTER CELL ADDRESS (e.g. "B1"), NOT a
+          // formula. Using it directly corrupts every slave into `=<master>`.
+          // The `cell.formula` getter runs ExcelJS's slideFormula() to give the
+          // correct position-translated formula; fall back to the raw value
+          // only if the getter can't resolve the master.
+          const translated = (cell as { formula?: string }).formula;
+          const sf = (raw as { sharedFormula: string }).sharedFormula;
+          const f = typeof translated === 'string' && translated.length > 0 ? translated : sf;
+          cd.f = f.startsWith('=') ? f : `=${f}`;
           const result = (raw as { result?: unknown }).result;
           if (result !== undefined && result !== null && typeof result !== 'object') {
             cd.v = result as ICellData['v'];
