@@ -91,6 +91,7 @@ export function excelStyleToUniver(cell: ExcelJS.Cell): IStyleData | undefined {
     if (cell.font.bold) s.bl = 1;
     if (cell.font.italic) s.it = 1;
     if (cell.font.underline) s.ul = { s: 1 };
+    if (cell.font.strike) s.st = { s: 1 };
     const fc = normalizeColor((cell.font.color as { argb?: string } | undefined)?.argb);
     if (fc) s.cl = { rgb: fc };
   }
@@ -106,11 +107,17 @@ export function excelStyleToUniver(cell: ExcelJS.Cell): IStyleData | undefined {
     const va = cell.alignment.vertical;
     if (va && V_ALIGN_FROM_EXCEL[va] !== undefined) s.vt = V_ALIGN_FROM_EXCEL[va];
     if (cell.alignment.wrapText) s.tb = 3; // WrapStrategy.WRAP
+    // Text rotation. ExcelJS gives a signed degree (-90..90) or 'vertical'
+    // (stacked). Univer's tr.a is the angle (same OOXML convention) and tr.v
+    // flags the vertical/stacked mode.
+    const rot = cell.alignment.textRotation as number | 'vertical' | undefined;
+    if (rot === 'vertical') s.tr = { a: 0, v: 1 };
+    else if (typeof rot === 'number' && rot !== 0) s.tr = { a: rot };
   }
 
   if (cell.numFmt) s.n = { pattern: cell.numFmt };
 
-  // Borders — keep simple: any side present => thin border, color from spec.
+  // Borders — map each present side's line style (EXCEL_BORDER_TO_UNIVER) + color.
   if (cell.border) {
     const bd: NonNullable<IStyleData['bd']> = {};
     const sides: Array<['t' | 'b' | 'l' | 'r', 'top' | 'bottom' | 'left' | 'right']> = [
@@ -145,6 +152,7 @@ export function univerStyleToExcel(style: IStyleData): Partial<ExcelJS.Style> {
   if (style.bl === 1) font.bold = true;
   if (style.it === 1) font.italic = true;
   if (style.ul?.s === 1) font.underline = true;
+  if (style.st?.s === 1) font.strike = true;
   if (style.cl && typeof style.cl === 'object' && 'rgb' in style.cl) {
     const argb = toARGB(style.cl.rgb);
     if (argb) font.color = { argb };
@@ -170,6 +178,11 @@ export function univerStyleToExcel(style: IStyleData): Partial<ExcelJS.Style> {
     alignment.vertical = V_ALIGN_TO_EXCEL[style.vt] as ExcelJS.Style['alignment']['vertical'];
   }
   if (style.tb === 3) alignment.wrapText = true;
+  if (style.tr) {
+    if (style.tr.v === 1) alignment.textRotation = 'vertical';
+    else if (typeof style.tr.a === 'number' && style.tr.a !== 0)
+      alignment.textRotation = style.tr.a;
+  }
   if (Object.keys(alignment).length > 0) out.alignment = alignment;
 
   if (style.n?.pattern) out.numFmt = style.n.pattern;
