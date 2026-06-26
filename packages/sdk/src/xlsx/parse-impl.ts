@@ -39,6 +39,34 @@ let hyperlinkIdCounter = 0;
 const nextHyperlinkId = () =>
   `hl-${Date.now().toString(36)}-${(hyperlinkIdCounter++).toString(36)}`;
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Excel date serial number (days since 1899-12-30, including Excel's fictional
+ * 1900-02-29 leap day) from a JS Date. ExcelJS surfaces date-formatted cells as
+ * UTC Dates, so we read the UTC fields. Mirrors `excelDateTimeSerial` in the
+ * Univer fork (vendor/univer-revamp/packages/engine-formula/src/basics/date.ts:56)
+ * so imported dates agree with what the formula engine expects — storing the ISO
+ * string instead breaks date math (=NETWORKDAYS, =DATEDIF, …) and display.
+ */
+function excelSerialFromDate(date: Date): number {
+  const base = Date.UTC(1900, 0, 1);
+  const leapBug = Date.UTC(1900, 1, 28);
+  const t = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    date.getUTCSeconds(),
+    date.getUTCMilliseconds(),
+  );
+  let days = (t - base) / MS_PER_DAY;
+  // Account for Excel's 1900 leap-year bug past 1900-02-28.
+  if (t > leapBug) days += 1;
+  return days + 1; // Excel serial numbers start at 1.
+}
+
 /**
  * Build a rich-text doc body that encodes a hyperlink at the cell. The
  * shape mirrors what `AddHyperLinkCommand` writes into `cell.p.body`
@@ -262,6 +290,7 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
 
         const cd: ICellData = {};
         const raw = cell.value;
+        let style = excelStyleToUniver(cell);
         if (raw && typeof raw === 'object' && 'formula' in raw) {
           const f = (raw as { formula: string }).formula;
           cd.f = f.startsWith('=') ? f : `=${f}`;
@@ -300,12 +329,20 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
             cd.v = result as ICellData['v'];
           }
         } else if (raw instanceof Date) {
-          cd.v = raw.toISOString();
+          // ExcelJS yields a Date for any date/time-formatted cell. Store the
+          // Excel serial number (not the ISO string) so the value stays numeric
+          // for date math and the date number-format renders it correctly.
+          cd.v = excelSerialFromDate(raw);
+          // ExcelJS only produces a Date when a date number-format is present, so
+          // `style.n` is normally set; guard with a default for the rare case it
+          // isn't, otherwise the cell would show a bare serial number.
+          if (!style) style = { n: { pattern: 'yyyy-mm-dd' } };
+          else if (!style.n) style.n = { pattern: 'yyyy-mm-dd' };
         } else if (typeof raw === 'number' || typeof raw === 'boolean' || typeof raw === 'string') {
           cd.v = raw;
         }
 
-        const styleId = internStyle(excelStyleToUniver(cell));
+        const styleId = internStyle(style);
         if (styleId) cd.s = styleId;
 
         if (cd.v !== undefined || cd.f || cd.s) {
