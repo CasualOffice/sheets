@@ -991,7 +991,16 @@ export function MenuBar() {
     };
   }, [api]);
 
-  const handleNew = () => workbook.replaceWorkbook(emptyWorkbook(), null);
+  const handleNew = () => {
+    workbook.replaceWorkbook(emptyWorkbook(), null);
+    // Desktop: a brand-new blank workbook must not stay bound to the path of
+    // the file this window previously had open — otherwise the next Save would
+    // overwrite that file on disk with the empty workbook. Clear the bound path
+    // so save() falls through to saveAs() (prompts for a location), matching the
+    // untitled-document save semantics.
+    const bridge = typeof window !== 'undefined' ? window.__deskApp__ : undefined;
+    if (bridge?.isDesktop) bridge.filePath = null;
+  };
   const handleOpen = async () => {
     let openedFile: File | null = null;
     try {
