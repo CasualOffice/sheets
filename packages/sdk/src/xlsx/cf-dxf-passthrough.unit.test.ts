@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
-import { applyDxfCfRulesToZip, captureDxfCfRulesFromBuffer } from './cf-dxf-passthrough.js';
+import {
+  applyDxfCfRulesToZip,
+  captureDxfCfRulesFromBuffer,
+  captureRawCfFromBuffer,
+} from './cf-dxf-passthrough.js';
 import {
   dxfCfRulesToSynthCf,
   readDxfCfRulesFromSnapshot,
@@ -136,4 +140,45 @@ test('the ExcelJS export path never writes a duplicate/unique rule', async () =>
   const zip = await JSZip.loadAsync(buf);
   const sheet = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
   assert.doesNotMatch(sheet, /duplicateValues/);
+});
+
+test('captureRawCfFromBuffer recovers data-bar colours + dup/unique in one pass', async () => {
+  // Build a sheet with both a data bar and a duplicateValues rule (ExcelJS
+  // writes neither faithfully — inject both via raw XML), then capture once.
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 5; r++) ws.getCell(`A${r}`).value = r;
+  const raw = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  const zip = await JSZip.loadAsync(raw);
+  let styles = await zip.file('xl/styles.xml')!.async('string');
+  styles = styles.replace(
+    /<dxfs count="0"\/>/,
+    '<dxfs count="1"><dxf><fill><patternFill patternType="solid"><bgColor rgb="FF00FF00"/></patternFill></fill></dxf></dxfs>',
+  );
+  zip.file('xl/styles.xml', styles);
+  let sheet = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+  sheet = sheet.replace(
+    '<pageMargins',
+    '<conditionalFormatting sqref="B1:B5"><cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar></cfRule></conditionalFormatting>' +
+      '<conditionalFormatting sqref="A1:A5"><cfRule type="duplicateValues" dxfId="0" priority="2"/></conditionalFormatting>' +
+      '<pageMargins',
+  );
+  zip.file('xl/worksheets/sheet1.xml', sheet);
+  const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+  const { dataBarColors, dxfCfRules } = await captureRawCfFromBuffer(buf);
+  assert.equal(dataBarColors?.S?.[0]?.positiveColor, '#638ec6');
+  assert.equal(dataBarColors?.S?.[0]?.sqref, 'B1:B5');
+  assert.equal(dxfCfRules?.S?.[0]?.type, 'duplicateValues');
+  assert.deepEqual(dxfCfRules?.S?.[0]?.style, { bg: { rgb: '#00ff00' } });
+});
+
+test('captureRawCfFromBuffer returns empties for a CF-free workbook', async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 5; r++) ws.getCell(`A${r}`).value = r;
+  const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  const out = await captureRawCfFromBuffer(buf);
+  assert.equal(out.dataBarColors, undefined);
+  assert.equal(out.dxfCfRules, undefined);
 });

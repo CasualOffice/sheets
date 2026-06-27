@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { readDataBarColors, type DataBarColor } from './databar-passthrough';
 
 /**
  * Raw-OOXML bridge for conditional-formatting rules that ExcelJS drops
@@ -72,7 +73,7 @@ function parseRels(relsXml: string): Array<{ id: string; target: string }> {
 }
 
 /** Map sheet name (decoded) → `xl/worksheets/sheetN.xml` path. */
-async function sheetNameToPath(zip: JSZip): Promise<Map<string, string>> {
+export async function sheetNameToPath(zip: JSZip): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const workbookXml = await zip.file('xl/workbook.xml')?.async('string');
   const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('string');
@@ -129,14 +130,14 @@ function dxfXmlForStyle(style: CfStyle): string {
 // --- IMPORT ----------------------------------------------------------------
 
 /** Parse the `<dxfs>` element of styles.xml into an ordered CfStyle array. */
-function parseDxfs(stylesXml: string): CfStyle[] {
+export function parseDxfs(stylesXml: string): CfStyle[] {
   const block = stylesXml.match(/<dxfs\b[^>]*>([\s\S]*?)<\/dxfs>/)?.[1];
   if (!block) return [];
   return [...block.matchAll(/<dxf>[\s\S]*?<\/dxf>|<dxf\/>/g)].map((m) => parseDxf(m[0]));
 }
 
 /** Pull duplicate/unique cfRules + their resolved dxf style from one sheet XML. */
-function readDxfCfRules(sheetXml: string, dxfs: CfStyle[]): DxfCfRule[] {
+export function readDxfCfRules(sheetXml: string, dxfs: CfStyle[]): DxfCfRule[] {
   const out: DxfCfRule[] = [];
   for (const block of sheetXml.matchAll(
     /<conditionalFormatting\b[^>]*sqref="([^"]+)"[^>]*>([\s\S]*?)<\/conditionalFormatting>/g,
@@ -180,6 +181,47 @@ export async function captureDxfCfRulesFromBuffer(
     if (rules.length > 0) out[name] = rules;
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Recover BOTH data-bar positive colours and duplicate/unique CF rules from a
+ * source xlsx buffer in a SINGLE zip pass, keyed by sheet name. Reading the
+ * (potentially multi-MB) worksheet XML once for both — rather than each capture
+ * re-loading the zip and re-decompressing every sheet — roughly halves the
+ * raw-XML import cost on large files.
+ */
+export async function captureRawCfFromBuffer(buffer: ArrayBuffer): Promise<{
+  dataBarColors?: Record<string, DataBarColor[]>;
+  dxfCfRules?: Record<string, DxfCfRule[]>;
+}> {
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    return {};
+  }
+  const stylesXml = await zip.file('xl/styles.xml')?.async('string');
+  const dxfs = stylesXml ? parseDxfs(stylesXml) : [];
+  const paths = await sheetNameToPath(zip);
+  const dataBarColors: Record<string, DataBarColor[]> = {};
+  const dxfCfRules: Record<string, DxfCfRule[]> = {};
+  for (const [name, path] of paths) {
+    const xml = await zip.file(path)?.async('string');
+    // No conditionalFormatting at all on this sheet → nothing for either reader.
+    if (!xml || !xml.includes('conditionalFormatting')) continue;
+    if (xml.includes('type="dataBar"')) {
+      const colors = readDataBarColors(xml);
+      if (colors.length > 0) dataBarColors[name] = colors;
+    }
+    if (/type="(duplicateValues|uniqueValues)"/.test(xml)) {
+      const rules = readDxfCfRules(xml, dxfs);
+      if (rules.length > 0) dxfCfRules[name] = rules;
+    }
+  }
+  return {
+    dataBarColors: Object.keys(dataBarColors).length > 0 ? dataBarColors : undefined,
+    dxfCfRules: Object.keys(dxfCfRules).length > 0 ? dxfCfRules : undefined,
+  };
 }
 
 // --- EXPORT ----------------------------------------------------------------

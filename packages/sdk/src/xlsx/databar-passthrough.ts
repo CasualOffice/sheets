@@ -101,7 +101,7 @@ async function sheetNameToPath(zip: JSZip): Promise<Map<string, string>> {
 }
 
 /** Pull each data bar's positive `<color rgb>` out of one worksheet's XML. */
-function readDataBarColors(sheetXml: string): DataBarColor[] {
+export function readDataBarColors(sheetXml: string): DataBarColor[] {
   const out: DataBarColor[] = [];
   for (const block of sheetXml.matchAll(
     /<conditionalFormatting\b[^>]*sqref="([^"]+)"[^>]*>([\s\S]*?)<\/conditionalFormatting>/g,

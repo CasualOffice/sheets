@@ -28,8 +28,7 @@ import {
   capturePassthroughFromBuffer,
   mergePassthroughIntoResources,
 } from './passthrough-resource';
-import { captureDataBarColorsFromBuffer } from './databar-passthrough';
-import { captureDxfCfRulesFromBuffer } from './cf-dxf-passthrough';
+import { captureRawCfFromBuffer } from './cf-dxf-passthrough';
 import type { ImportedWorkbook } from './import';
 
 /**
@@ -205,11 +204,11 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
   // once as ExcelJS below — but the second JSZip pass is ~tens of ms even
   // for big files and means we don't lose macros on round-trip.
   const passthrough = await capturePassthroughFromBuffer(buffer);
-  // Data-bar positive fill colours — ExcelJS drops them, so read them straight
-  // from the worksheet XML and thread them into the CF mapping below.
-  const dataBarColors = await captureDataBarColorsFromBuffer(buffer);
-  // duplicate/unique CF rules (ExcelJS drops them) — captured by sheet name.
-  const dxfCfByName = await captureDxfCfRulesFromBuffer(buffer);
+  // Raw-XML CF that ExcelJS drops — data-bar positive fill colours + the
+  // duplicate/unique rules — recovered in a SINGLE zip pass (one decompress of
+  // each worksheet XML, shared by both readers) and threaded into the CF
+  // mapping below.
+  const { dataBarColors, dxfCfRules: dxfCfByName } = await captureRawCfFromBuffer(buffer);
 
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
