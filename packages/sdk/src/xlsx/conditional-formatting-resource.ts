@@ -22,8 +22,10 @@ import type { DxfCfRule } from './cf-dxf-passthrough';
  *   - `rank`     ← ExcelJS `top10` (top/bottom N, optionally percent)
  *   - `average`  ← ExcelJS `aboveAverage` (above / below the range mean)
  *   - `timePeriod` ← ExcelJS `timePeriod` (today / last7Days / thisMonth / …)
- *   - `text`     ← ExcelJS `containsText` (operators: containsText, plus the
- *                  no-value blanks/errors operators)
+ *   - `text`     ← ExcelJS `containsText` / `beginsWith` / `endsWith` /
+ *                  `notContainsText` (search-string operators, recovered from /
+ *                  written into the rule formula) + the no-value blanks/errors
+ *                  predicates
  * each with the rule's fill / font style; the `duplicateValues` /
  * `uniqueValues` highlight rules (style only); plus the visual rule types
  *   - `colorScale` ← ExcelJS `colorScale` (value-mapped gradient stops)
@@ -35,10 +37,9 @@ import type { DxfCfRule } from './cf-dxf-passthrough';
  * `uniqueValues` itself (it drops the rule and/or its colour), so those are
  * bridged via raw OOXML — see databar-passthrough.ts and cf-dxf-passthrough.ts.
  *
- * Deliberately NOT mapped (ExcelJS itself can't round-trip them, so they'd be
- * silently lost rather than preserved — see the bridge tests): the text
- * `beginsWith` / `endsWith` / `notContainsText` operators (ExcelJS drops their
- * search text). Unmapped rules are skipped, never corrupted.
+ * All Excel CF rule types now round-trip. Remaining fidelity gaps (out of
+ * scope here): the `stopIfTrue` flag, original rule priority/evaluation order,
+ * data-bar negative/axis colours (x14), and average `stdDev`/`equalAverage`.
  */
 
 export const CONDITIONAL_FORMATTING_RESOURCE = 'SHEET_CONDITIONAL_FORMATTING_PLUGIN';
@@ -56,11 +57,17 @@ const NUMBER_OPERATORS = new Set([
   'notEqual',
 ]);
 
-// ExcelJS `containsText` operators we preserve. `containsText` carries a search
-// string (recovered from its formula); the rest are value-less predicates.
-// `beginsWith` / `endsWith` / `notContainsText` are intentionally absent —
-// ExcelJS drops their search text on round-trip, leaving a meaningless rule.
-const TEXT_VALUE_OPERATOR = 'containsText';
+// Text operators that carry a search string (recovered from / written into the
+// rule's formula): containsText, plus beginsWith / endsWith / notContainsText.
+// ExcelJS surfaces all of these on read (type + operator + formula + style) and
+// writes them back when given an explicit formula, so they round-trip fully.
+const TEXT_VALUE_OPERATORS = new Set([
+  'containsText',
+  'notContainsText',
+  'beginsWith',
+  'endsWith',
+]);
+// The value-less text predicates.
 const TEXT_VALUELESS_OPERATORS = new Set([
   'containsBlanks',
   'notContainsBlanks',
@@ -300,14 +307,34 @@ function cfStyleToDxf(rawStyle: CfStyle | undefined | null): Record<string, unkn
   return out;
 }
 
-/** Recover a `containsText` rule's search string from its formula. ExcelJS drops
- *  the `text` attribute on read, leaving only the formula it (and Excel) emit:
- *  `NOT(ISERROR(SEARCH("term",A1)))`. Pull the first SEARCH("…") literal,
- *  un-escaping Excel's doubled quotes. Returns undefined when no match. */
-function containsTextValue(formulae: unknown[]): string | undefined {
+/** Recover a text rule's search string from its formula. ExcelJS drops the
+ *  `text` attribute on read but keeps the formula it (and Excel) emit, where the
+ *  search string is the first quoted literal:
+ *    containsText      `NOT(ISERROR(SEARCH("term",A1)))`
+ *    notContainsText   `ISERROR(SEARCH("term",A1))`
+ *    beginsWith        `LEFT(A1,LEN("term"))="term"`
+ *    endsWith          `RIGHT(A1,LEN("term"))="term"`
+ *  Pull the first "…" literal, un-escaping Excel's doubled quotes. */
+function textRuleValue(formulae: unknown[]): string | undefined {
   const f = typeof formulae[0] === 'string' ? formulae[0] : '';
-  const m = /SEARCH\("((?:[^"]|"")*)"/.exec(f);
+  const m = /"((?:[^"]|"")*)"/.exec(f);
   return m ? m[1].replace(/""/g, '"') : undefined;
+}
+
+/** Build the OOXML formula for a value text operator at a range's top-left
+ *  cell (mirrors what Excel writes). */
+function textRuleFormula(operator: string, value: string, topLeft: string): string {
+  const lit = `"${value.replace(/"/g, '""')}"`;
+  switch (operator) {
+    case 'beginsWith':
+      return `LEFT(${topLeft},LEN(${lit}))=${lit}`;
+    case 'endsWith':
+      return `RIGHT(${topLeft},LEN(${lit}))=${lit}`;
+    case 'notContainsText':
+      return `ISERROR(SEARCH(${lit},${topLeft}))`;
+    default: // containsText
+      return `NOT(ISERROR(SEARCH(${lit},${topLeft})))`;
+  }
 }
 
 /** Map one ExcelJS conditional-formatting rule to a Univer highlight-cell rule,
@@ -386,20 +413,28 @@ function excelRuleToSynthRule(raw: unknown, injectedColor?: string): SynthRule |
     return { type: 'highlightCell', subType: 'timePeriod', operator: r.timePeriod, style };
   }
 
-  // ExcelJS folds containsText / blanks / errors under type `containsText`,
-  // discriminated by `operator`. (beginsWith / endsWith / notContainsText keep
-  // their own type and lose their text — we don't map those.)
-  if (r.type === 'containsText' && typeof r.operator === 'string') {
-    if (r.operator === TEXT_VALUE_OPERATOR) {
+  // Text rules. ExcelJS folds containsText / blanks / errors under type
+  // `containsText` (discriminated by `operator`); beginsWith / endsWith /
+  // notContainsText keep their own type. The value operators carry a search
+  // string in the formula (the `text` attribute is dropped on read); the
+  // blanks/errors predicates carry none.
+  const textOperator =
+    r.type === 'containsText'
+      ? r.operator
+      : r.type === 'beginsWith' || r.type === 'endsWith' || r.type === 'notContainsText'
+        ? r.type
+        : undefined;
+  if (typeof textOperator === 'string') {
+    if (TEXT_VALUE_OPERATORS.has(textOperator)) {
       // A loaded xlsx drops the `text` attribute (recover from the formula); an
       // in-memory ExcelJS rule has `text` but no formula yet. Prefer whichever
       // is present.
-      const value = typeof r.text === 'string' ? r.text : containsTextValue(formulae);
+      const value = typeof r.text === 'string' ? r.text : textRuleValue(formulae);
       if (value === undefined) return null; // couldn't recover the search text
-      return { type: 'highlightCell', subType: 'text', operator: r.operator, value, style };
+      return { type: 'highlightCell', subType: 'text', operator: textOperator, value, style };
     }
-    if (TEXT_VALUELESS_OPERATORS.has(r.operator)) {
-      return { type: 'highlightCell', subType: 'text', operator: r.operator, style };
+    if (TEXT_VALUELESS_OPERATORS.has(textOperator)) {
+      return { type: 'highlightCell', subType: 'text', operator: textOperator, style };
     }
   }
 
@@ -700,7 +735,7 @@ function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is S
     case 'timePeriod':
       return typeof rule.operator === 'string' && TIME_PERIODS.has(rule.operator);
     case 'text':
-      return rule.operator === TEXT_VALUE_OPERATOR
+      return TEXT_VALUE_OPERATORS.has(rule.operator)
         ? typeof rule.value === 'string'
         : TEXT_VALUELESS_OPERATORS.has(rule.operator);
     case 'duplicateValues':
@@ -715,7 +750,11 @@ function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is S
 
 /** Turn one synthesised rule into the ExcelJS shape that round-trips back to the
  *  same rule. Returns null for shapes ExcelJS can't faithfully write. */
-function synthRuleToExcel(rule: SynthRule, priority: number): Record<string, unknown> | null {
+function synthRuleToExcel(
+  rule: SynthRule,
+  priority: number,
+  topLeft: string,
+): Record<string, unknown> | null {
   // Data bars are written via raw XML (databar-passthrough.ts), never ExcelJS —
   // ExcelJS emits a broken `<color auto="1"/>` with no fill.
   if (rule.type === 'dataBar') return null;
@@ -780,14 +819,19 @@ function synthRuleToExcel(rule: SynthRule, priority: number): Record<string, unk
     case 'timePeriod':
       return { type: 'timePeriod', timePeriod: rule.operator, priority, style };
     case 'text':
-      // ExcelJS folds these under `containsText`, building the formula from
-      // `text` for the value operator; the rest are value-less.
+      // ExcelJS keys the OOXML cfRule `type` off `operator` (containsText keeps
+      // type=containsText; beginsWith/endsWith/notContainsText get their own
+      // type) and emits the formula we provide. Value operators ship an explicit
+      // formula (ExcelJS only auto-builds containsText/blanks/errors); the
+      // value-less predicates carry none.
       return {
         type: 'containsText',
         operator: rule.operator,
-        ...(rule.operator === TEXT_VALUE_OPERATOR ? { text: rule.value ?? '' } : {}),
         priority,
         style,
+        ...(TEXT_VALUE_OPERATORS.has(rule.operator)
+          ? { formulae: [textRuleFormula(rule.operator, rule.value ?? '', topLeft)] }
+          : {}),
       };
     default:
       return null;
@@ -805,7 +849,11 @@ export function applyConditionalFormattingToXlsxWorksheet(
     const ref = entry.ranges.map(iRangeToStr).join(' ');
     if (!ref) return;
     if (!isExportableSynthRule(entry.rule)) return;
-    const exceljsRule = synthRuleToExcel(entry.rule, i + 1);
+    // Top-left of the first range — text-rule formulas are written relative to
+    // it (Excel adjusts per-cell across the range).
+    const first = entry.ranges[0];
+    const topLeft = `${colToLetters(first.startColumn)}${first.startRow + 1}`;
+    const exceljsRule = synthRuleToExcel(entry.rule, i + 1, topLeft);
     if (!exceljsRule) return;
     try {
       ws.addConditionalFormatting({ ref, rules: [exceljsRule] });

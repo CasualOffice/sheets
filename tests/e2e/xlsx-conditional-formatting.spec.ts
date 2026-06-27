@@ -602,3 +602,55 @@ test('duplicate-values CF (raw-XML rule + dxf) paints duplicate cells on open', 
   });
   expect(a4).toBeNull();
 });
+
+test('beginsWith text CF paints matching cells on open', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  // A1=PROJ, A2=other, A3=PRINT → "PR" prefix matches A1 and A3.
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  ['PROJ', 'other', 'PRINT'].forEach((v, i) => (ws.getCell(`A${i + 1}`).value = v));
+  ws.addConditionalFormatting({
+    ref: 'A1:A3',
+    rules: [
+      {
+        type: 'containsText',
+        operator: 'beginsWith',
+        formulae: ['LEFT(A1,LEN("PR"))="PR"'],
+        priority: 1,
+        style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF00FF00' } } },
+      },
+    ],
+  });
+  const bytes = Array.from(new Uint8Array((await wb.xlsx.writeBuffer()) as ArrayBuffer));
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  const fixture = '/tmp/casual-sheets-cf-beginswith.xlsx';
+  const fs = await import('node:fs');
+  fs.writeFileSync(fixture, Buffer.from(bytes));
+
+  await page.getByTestId('menubar-file').click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByTestId('menu-item-open').click(),
+  ]);
+  await chooser.setFiles(fixture);
+
+  // A1 (PROJ, begins "PR") → green on open.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const s = window.__composeCfStyle__?.(0, 0);
+          return (s?.style?.bg?.rgb ?? null) as string | null;
+        }),
+      { timeout: 10_000, message: 'A1 (begins with PR) should compose green on open' },
+    )
+    .toBe('#00ff00');
+
+  // A2 (other) → no CF style.
+  const a2 = await page.evaluate(() => window.__composeCfStyle__?.(1, 0)?.style?.bg?.rgb ?? null);
+  expect(a2).toBeNull();
+});

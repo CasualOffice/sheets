@@ -129,13 +129,48 @@ test('containsText recovers search value from formula; blanks/errors are value-l
   assert.equal((out[2] as { operator: string }).operator, 'containsErrors');
 });
 
-test('unmappable rules (beginsWith, duplicateValues) are skipped, not corrupted', async () => {
-  // ExcelJS drops these on round-trip; the bridge must not emit a broken rule.
+test('beginsWith / endsWith / notContainsText round-trip with their search value', async () => {
   const out = await roundTrip([
-    { type: 'containsText', operator: 'beginsWith', text: 'it', priority: 1, style: FILL },
-    { type: 'duplicateValues', priority: 2, style: FILL },
-    // A mappable rule alongside them still survives.
-    { type: 'top10', rank: 2, percent: false, bottom: false, priority: 3, style: FILL },
+    {
+      type: 'containsText',
+      operator: 'beginsWith',
+      formulae: ['LEFT(A1,LEN("PR"))="PR"'],
+      priority: 1,
+      style: FILL,
+    },
+    {
+      type: 'containsText',
+      operator: 'endsWith',
+      formulae: ['RIGHT(A1,LEN("X"))="X"'],
+      priority: 2,
+      style: FILL,
+    },
+    {
+      type: 'containsText',
+      operator: 'notContainsText',
+      formulae: ['ISERROR(SEARCH("zz",A1))'],
+      priority: 3,
+      style: FILL,
+    },
+  ]);
+  const byOp = Object.fromEntries(
+    out.map((r) => [
+      (r as { operator: string }).operator,
+      r as { subType: string; value?: string },
+    ]),
+  );
+  assert.equal(byOp.beginsWith?.subType, 'text');
+  assert.equal(byOp.beginsWith?.value, 'PR');
+  assert.equal(byOp.endsWith?.value, 'X');
+  assert.equal(byOp.notContainsText?.value, 'zz');
+});
+
+test('a text value-rule with no recoverable search string is skipped, not corrupted', async () => {
+  // A beginsWith with neither text nor formula has no recoverable value → drop
+  // it rather than emit a meaningless rule; a sibling rule still survives.
+  const out = await roundTrip([
+    { type: 'containsText', operator: 'beginsWith', priority: 1, style: FILL },
+    { type: 'top10', rank: 2, percent: false, bottom: false, priority: 2, style: FILL },
   ]);
   assert.deepEqual(
     out.map((r) => r.subType),
