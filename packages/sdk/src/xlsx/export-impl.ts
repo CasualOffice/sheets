@@ -12,6 +12,7 @@ import {
 import {
   applyConditionalFormattingToXlsxWorksheet,
   readConditionalFormattingFromSnapshot,
+  readDataBarsFromSnapshot,
 } from './conditional-formatting-resource';
 import { applyTablesToXlsxWorksheet, readTablesFromSnapshot } from './tables-resource';
 import {
@@ -349,13 +350,23 @@ export async function workbookDataToXlsxImpl(
 
   const buf = await wb.xlsx.writeBuffer();
 
-  // Re-inject raw OOXML parts captured at parse time (today: VBA macros).
-  // No-op when the snapshot has no passthrough sidecar; ExcelJS-written
-  // buffer is returned as-is in that path.
+  // Re-inject raw OOXML parts captured at parse time (today: VBA macros,
+  // pivots) plus data bars, which ExcelJS can't write — we splice the CF
+  // blocks into the worksheet XML ourselves. No-op when there's nothing to add.
   const passthrough = readPassthroughFromSnapshot(data);
-  const patched = await applyPassthroughToXlsxBuffer(buf as ArrayBuffer, passthrough);
+  const dataBarsBySheetId = readDataBarsFromSnapshot(data);
+  const dataBarsByName: Record<string, (typeof dataBarsBySheetId)[string]> = {};
+  for (const [sheetId, bars] of Object.entries(dataBarsBySheetId)) {
+    const name = data.sheets?.[sheetId]?.name ?? sheetId;
+    dataBarsByName[name] = bars;
+  }
+  const fullPassthrough =
+    Object.keys(dataBarsByName).length > 0
+      ? { ...(passthrough ?? {}), dataBars: dataBarsByName }
+      : passthrough;
+  const patched = await applyPassthroughToXlsxBuffer(buf as ArrayBuffer, fullPassthrough);
 
-  return new Blob([patched], { type: mimeForPassthrough(passthrough) });
+  return new Blob([patched], { type: mimeForPassthrough(fullPassthrough) });
 }
 
 const DEFINED_NAMES_RESOURCE = 'SHEET_DEFINED_NAME_PLUGIN';

@@ -27,6 +27,7 @@ import {
   capturePassthroughFromBuffer,
   mergePassthroughIntoResources,
 } from './passthrough-resource';
+import { captureDataBarColorsFromBuffer } from './databar-passthrough';
 import type { ImportedWorkbook } from './import';
 
 /**
@@ -202,6 +203,9 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
   // once as ExcelJS below — but the second JSZip pass is ~tens of ms even
   // for big files and means we don't lose macros on round-trip.
   const passthrough = await capturePassthroughFromBuffer(buffer);
+  // Data-bar positive fill colours — ExcelJS drops them, so read them straight
+  // from the worksheet XML and thread them into the CF mapping below.
+  const dataBarColors = await captureDataBarColorsFromBuffer(buffer);
 
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
@@ -262,7 +266,11 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
   const xlsxDv = readDataValidationFromXlsx(wb, (excelId) => `sheet-${excelId}`);
   resources = mergeDataValidationIntoResources(resources, xlsxDv);
 
-  const xlsxCf = readConditionalFormattingFromXlsx(wb, (excelId) => `sheet-${excelId}`);
+  const xlsxCf = readConditionalFormattingFromXlsx(
+    wb,
+    (excelId) => `sheet-${excelId}`,
+    dataBarColors,
+  );
   resources = mergeConditionalFormattingIntoResources(resources, xlsxCf);
 
   // xlsx ListObjects → passthrough table sidecar. Round-trips via

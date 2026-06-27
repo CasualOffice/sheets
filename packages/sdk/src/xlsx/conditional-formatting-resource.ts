@@ -1,5 +1,6 @@
 import type ExcelJS from 'exceljs';
 import type { IRange, IWorkbookData } from '@univerjs/core';
+import type { DataBarEntry } from './databar-passthrough';
 
 /**
  * xlsx-native `worksheet.conditionalFormattings` ⇄ Univer
@@ -190,6 +191,20 @@ type SynthRule =
       type: 'iconSet';
       isShowValue: boolean;
       config: Array<{ operator: string; value: CfValueConfig; iconType: string; iconId: string }>;
+    }
+  // Visual rule. dataBar paints a value-proportional bar; no fill/font style.
+  // The positive bar colour is recovered from raw XML on import and re-emitted
+  // via raw XML on export (ExcelJS botches it) — see databar-passthrough.ts.
+  | {
+      type: 'dataBar';
+      isShowValue: boolean;
+      config: {
+        min: CfValueConfig;
+        max: CfValueConfig;
+        isGradient: boolean;
+        positiveColor: string;
+        nativeColor: string;
+      };
     };
 
 interface SynthCfRule {
@@ -291,7 +306,7 @@ function containsTextValue(formulae: unknown[]): string | undefined {
 
 /** Map one ExcelJS conditional-formatting rule to a Univer highlight-cell rule,
  *  or null if its type/operator isn't one we preserve (see the module header). */
-function excelRuleToSynthRule(raw: unknown): SynthRule | null {
+function excelRuleToSynthRule(raw: unknown, injectedColor?: string): SynthRule | null {
   const r = raw as {
     type?: string;
     operator?: string;
@@ -307,6 +322,7 @@ function excelRuleToSynthRule(raw: unknown): SynthRule | null {
     iconSet?: string;
     reverse?: boolean;
     showValue?: boolean;
+    gradient?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     style?: any;
   };
@@ -424,19 +440,48 @@ function excelRuleToSynthRule(raw: unknown): SynthRule | null {
     return { type: 'iconSet', isShowValue: r.showValue !== false, config };
   }
 
+  // Data bar: ExcelJS gives the shape (cfvo / gradient) but never the colour —
+  // the positive fill is recovered from raw XML by the caller and threaded in
+  // as `injectedColor` (see databar-passthrough.ts). Negative colour has no
+  // ExcelJS surface either, so default it.
+  if (r.type === 'dataBar' && Array.isArray(r.cfvo) && r.cfvo.length >= 2) {
+    const min = cfvoToValueConfig(r.cfvo[0]);
+    const max = cfvoToValueConfig(r.cfvo[1]);
+    if (!min || !max) return null; // formula/garbled anchor — skip
+    return {
+      type: 'dataBar',
+      isShowValue: r.showValue !== false,
+      config: {
+        min,
+        max,
+        isGradient: r.gradient !== false,
+        positiveColor: injectedColor ?? '#638ec6', // Excel's default data-bar blue
+        nativeColor: '#ff0000',
+      },
+    };
+  }
+
   return null;
 }
 
-/** Lift every worksheet's conditional formatting into the synthesised plugin shape. */
+const normalizeSqref = (s: string): string => s.replace(/\s+/g, ' ').trim().toUpperCase();
+
+/** Lift every worksheet's conditional formatting into the synthesised plugin
+ *  shape. `dataBarColors` carries the positive bar colours recovered from raw
+ *  XML (keyed by sheet name), since ExcelJS drops them — see
+ *  databar-passthrough.ts. */
 export function readConditionalFormattingFromXlsx(
   wb: ExcelJS.Workbook,
   sheetIdForExcel: (excelId: number) => string,
+  dataBarColors?: Record<string, Array<{ sqref: string; positiveColor: string }>>,
 ): Record<string, SynthCfRule[]> {
   const out: Record<string, SynthCfRule[]> = {};
   let seq = 0;
   for (const ws of wb.worksheets) {
     const cfs = (ws as unknown as { conditionalFormattings?: unknown }).conditionalFormattings;
     if (!Array.isArray(cfs)) continue;
+
+    const sheetColors = dataBarColors?.[ws.name] ?? [];
 
     const rules: SynthCfRule[] = [];
     for (const cf of cfs) {
@@ -451,7 +496,11 @@ export function readConditionalFormattingFromXlsx(
       if (ranges.length === 0) continue;
 
       for (const raw of cfRules) {
-        const rule = excelRuleToSynthRule(raw);
+        const isDataBar = (raw as { type?: string }).type === 'dataBar';
+        const injectedColor = isDataBar
+          ? sheetColors.find((c) => normalizeSqref(c.sqref) === normalizeSqref(ref))?.positiveColor
+          : undefined;
+        const rule = excelRuleToSynthRule(raw, injectedColor);
         if (rule) rules.push({ cfId: `cf-${seq++}`, ranges, stopIfTrue: false, rule });
         // Unmapped rule types (see the module header) are skipped, not corrupted.
       }
@@ -504,10 +553,55 @@ export function readConditionalFormattingFromSnapshot(
   }
 }
 
+/** Read data-bar rules off a snapshot's CF resource as raw-XML export entries,
+ *  keyed by sheetId. ExcelJS can't write a data bar, so the export pipeline
+ *  emits these via databar-passthrough.ts instead. */
+export function readDataBarsFromSnapshot(data: IWorkbookData): Record<string, DataBarEntry[]> {
+  const entry = data.resources?.find((r) => r.name === CONDITIONAL_FORMATTING_RESOURCE);
+  if (!entry?.data) return {};
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(entry.data) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object') return {};
+  const out: Record<string, DataBarEntry[]> = {};
+  for (const [sheetId, value] of Object.entries(parsed)) {
+    if (!Array.isArray(value)) continue;
+    const bars: DataBarEntry[] = [];
+    for (const item of value) {
+      const obj = item as SynthCfRule;
+      if (!obj || !Array.isArray(obj.ranges) || obj.rule?.type !== 'dataBar') continue;
+      if (!isExportableSynthRule(obj.rule)) continue;
+      const sqref = obj.ranges.map(iRangeToStr).join(' ');
+      if (!sqref) continue;
+      bars.push({
+        sqref,
+        positiveColor: obj.rule.config.positiveColor,
+        isShowValue: obj.rule.isShowValue !== false,
+        min: obj.rule.config.min,
+        max: obj.rule.config.max,
+      });
+    }
+    if (bars.length > 0) out[sheetId] = bars;
+  }
+  return out;
+}
+
 /** Validate a synthesised rule we can faithfully export (guards foreign /
  *  partially-mapped payloads read off a snapshot). */
 function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is SynthRule {
   if (!rule) return false;
+  if (rule.type === 'dataBar') {
+    // Kept so the rule survives the snapshot read (renders on re-open) and is
+    // available to the raw-XML export path; synthRuleToExcel deliberately
+    // refuses it so ExcelJS never writes a (broken) data bar.
+    const c = rule.config;
+    return (
+      !!c && isValueConfig(c.min) && isValueConfig(c.max) && typeof c.positiveColor === 'string'
+    );
+  }
   if (rule.type === 'colorScale') {
     return (
       Array.isArray(rule.config) &&
@@ -553,6 +647,9 @@ function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is S
 /** Turn one synthesised rule into the ExcelJS shape that round-trips back to the
  *  same rule. Returns null for shapes ExcelJS can't faithfully write. */
 function synthRuleToExcel(rule: SynthRule, priority: number): Record<string, unknown> | null {
+  // Data bars are written via raw XML (databar-passthrough.ts), never ExcelJS —
+  // ExcelJS emits a broken `<color auto="1"/>` with no fill.
+  if (rule.type === 'dataBar') return null;
   if (rule.type === 'colorScale') {
     const ordered = [...rule.config].sort((a, b) => a.index - b.index);
     return {

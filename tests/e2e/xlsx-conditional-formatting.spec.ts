@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { waitForUniver } from './_helpers';
 
 /**
@@ -479,4 +480,60 @@ test('icon-set CF survives round-trip and paints the right icon per band on open
   ]);
   expect(a1).toBe('2');
   expect(a5).toBe('1');
+});
+
+test('data-bar CF (positive colour recovered from raw XML) paints on open', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  // ExcelJS writes a broken <color auto="1"/> for data bars, so author the
+  // fixture and patch in a real <color rgb> — exactly what a real Excel file
+  // carries and what the importer recovers from raw XML.
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 5; r++) ws.getCell(`A${r}`).value = r * 10;
+  ws.addConditionalFormatting({
+    ref: 'A1:A5',
+    rules: [{ type: 'dataBar', cfvo: [{ type: 'min' }, { type: 'max' }], priority: 1 }],
+  });
+  const raw = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  const zip = await JSZip.loadAsync(raw);
+  let sheetXml = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+  sheetXml = sheetXml.replace('<color auto="1"/>', '<color rgb="FF638EC6"/>');
+  zip.file('xl/worksheets/sheet1.xml', sheetXml);
+  const bytes = Array.from(
+    new Uint8Array((await zip.generateAsync({ type: 'arraybuffer' })) as ArrayBuffer),
+  );
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  const fixture = '/tmp/casual-sheets-cf-databar.xlsx';
+  const fs = await import('node:fs');
+  fs.writeFileSync(fixture, Buffer.from(bytes));
+
+  await page.getByTestId('menubar-file').click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByTestId('menu-item-open').click(),
+  ]);
+  await chooser.setFiles(fixture);
+
+  // A3 (row 2) is inside the data-bar range → composes a dataBar render entry.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const s = window.__composeCfStyle__?.(2, 0);
+          return s?.dataBar ? true : false;
+        }),
+      { timeout: 10_000, message: 'A3 should compose a data bar on open' },
+    )
+    .toBe(true);
+
+  // A cell outside the range composes nothing.
+  const outside = await page.evaluate(() => {
+    const s = window.__composeCfStyle__?.(2, 5); // F3
+    return s?.dataBar ? true : false;
+  });
+  expect(outside).toBe(false);
 });

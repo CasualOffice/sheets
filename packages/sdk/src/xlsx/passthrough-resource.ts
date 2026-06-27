@@ -5,6 +5,7 @@ import {
   capturePivotsFromBuffer,
   type PivotPassthroughPayload,
 } from './pivot-passthrough';
+import { applyDataBarsToZip, type DataBarEntry } from './databar-passthrough';
 
 /**
  * Sidecar resource that carries raw OOXML parts ExcelJS silently drops.
@@ -28,19 +29,18 @@ export type XlsxPassthroughPayload = {
   vba?: { binBase64: string };
   /** raw OOXML pivot machinery — see pivot-passthrough.ts */
   pivots?: PivotPassthroughPayload;
+  /** data-bar CF blocks to splice in (ExcelJS can't write them) — keyed by
+   *  sheet name; see databar-passthrough.ts */
+  dataBars?: Record<string, DataBarEntry[]>;
 };
 
-const VBA_REL_TYPE =
-  'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
+const VBA_REL_TYPE = 'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
 const VBA_CONTENT_TYPE = 'application/vnd.ms-office.vbaProject';
 
-export const XLSX_MIME =
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const XLSM_MIME = 'application/vnd.ms-excel.sheet.macroEnabled.12';
 
-export function mimeForPassthrough(
-  payload: XlsxPassthroughPayload | undefined,
-): string {
+export function mimeForPassthrough(payload: XlsxPassthroughPayload | undefined): string {
   return payload?.vba ? XLSM_MIME : XLSX_MIME;
 }
 
@@ -80,21 +80,14 @@ export function mergePassthroughIntoResources(
   payload: XlsxPassthroughPayload | undefined,
 ): IWorkbookData['resources'] {
   if (!payload) return resources;
-  const filtered = (resources ?? []).filter(
-    (r) => r.name !== XLSX_PASSTHROUGH_RESOURCE,
-  );
-  return [
-    ...filtered,
-    { name: XLSX_PASSTHROUGH_RESOURCE, data: JSON.stringify(payload) },
-  ];
+  const filtered = (resources ?? []).filter((r) => r.name !== XLSX_PASSTHROUGH_RESOURCE);
+  return [...filtered, { name: XLSX_PASSTHROUGH_RESOURCE, data: JSON.stringify(payload) }];
 }
 
 export function readPassthroughFromSnapshot(
   data: IWorkbookData,
 ): XlsxPassthroughPayload | undefined {
-  const entry = data.resources?.find(
-    (r) => r.name === XLSX_PASSTHROUGH_RESOURCE,
-  );
+  const entry = data.resources?.find((r) => r.name === XLSX_PASSTHROUGH_RESOURCE);
   if (!entry?.data) return undefined;
   try {
     return JSON.parse(entry.data) as XlsxPassthroughPayload;
@@ -103,8 +96,7 @@ export function readPassthroughFromSnapshot(
   }
 }
 
-const REL_TYPE_REGEX_ESCAPE = (s: string) =>
-  s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const REL_TYPE_REGEX_ESCAPE = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Re-inject every captured OOXML payload into the ExcelJS-written
@@ -119,7 +111,8 @@ export async function applyPassthroughToXlsxBuffer(
   excelJsBuffer: ArrayBuffer | Uint8Array,
   payload: XlsxPassthroughPayload | undefined,
 ): Promise<ArrayBuffer> {
-  if (!payload?.vba && !payload?.pivots) {
+  const hasDataBars = payload?.dataBars && Object.keys(payload.dataBars).length > 0;
+  if (!payload?.vba && !payload?.pivots && !hasDataBars) {
     if (excelJsBuffer instanceof ArrayBuffer) return excelJsBuffer;
     return excelJsBuffer.buffer.slice(
       excelJsBuffer.byteOffset,
@@ -131,6 +124,7 @@ export async function applyPassthroughToXlsxBuffer(
 
   if (payload.vba) await applyVbaToZip(zip, payload.vba);
   if (payload.pivots) await applyPivotsToZip(zip, payload.pivots);
+  if (payload.dataBars) await applyDataBarsToZip(zip, payload.dataBars);
 
   return zip.generateAsync({ type: 'arraybuffer' });
 }
@@ -159,9 +153,7 @@ async function applyVbaToZip(
   const relsEntry = zip.file(relsPath);
   if (relsEntry) {
     let rels = await relsEntry.async('string');
-    const vbaRelTypeRegex = new RegExp(
-      `Type="${REL_TYPE_REGEX_ESCAPE(VBA_REL_TYPE)}"`,
-    );
+    const vbaRelTypeRegex = new RegExp(`Type="${REL_TYPE_REGEX_ESCAPE(VBA_REL_TYPE)}"`);
     if (!vbaRelTypeRegex.test(rels)) {
       const used = new Set<number>();
       for (const m of rels.matchAll(/Id="rId(\d+)"/g)) used.add(Number(m[1]));
