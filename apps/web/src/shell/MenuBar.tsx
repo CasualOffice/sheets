@@ -40,6 +40,7 @@ import { NameManagerDialog } from './NameManagerDialog';
 import { GoalSeekDialog } from './GoalSeekDialog';
 import { GoToSpecialDialog } from './GoToSpecialDialog';
 import { RemoveDuplicatesDialog } from './RemoveDuplicatesDialog';
+import { TextToColumnsDialog } from './TextToColumnsDialog';
 import { MacrosDialog } from './MacrosDialog';
 import { InsertSparklineDialog } from '../sparklines/InsertSparklineDialog';
 import { useSparklines } from '../sparklines/sparklines-context';
@@ -138,7 +139,6 @@ import {
   openCustomSort,
   openDataValidation,
   showAllRows,
-  splitTextToColumns,
   toggleCommentPanel,
   toggleFilter,
   reapplyFilter,
@@ -452,6 +452,7 @@ export function MenuBar() {
   const [showGoalSeek, setShowGoalSeek] = useState(false);
   const [showGoToSpecial, setShowGoToSpecial] = useState(false);
   const [showRemoveDuplicates, setShowRemoveDuplicates] = useState(false);
+  const [showTextToColumns, setShowTextToColumns] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
@@ -2326,9 +2327,9 @@ export function MenuBar() {
         {
           kind: 'item',
           id: 'text-to-columns',
-          label: 'Text to Columns',
+          label: 'Text to Columns…',
           icon: 'splitscreen',
-          run: splitTextToColumns,
+          onClick: () => setShowTextToColumns(true),
         },
         {
           kind: 'item',
@@ -2627,6 +2628,9 @@ export function MenuBar() {
       )}
       {showRemoveDuplicates && api && (
         <RemoveDuplicatesDialog api={api} onClose={() => setShowRemoveDuplicates(false)} />
+      )}
+      {showTextToColumns && api && (
+        <TextToColumnsDialog api={api} onClose={() => setShowTextToColumns(false)} />
       )}
       {showMacros && api && (
         <MacrosDialog

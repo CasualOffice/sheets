@@ -431,10 +431,6 @@ export function insertFunction(api: FUniver, name: string) {
  * Cleared rows are blanked in place (Excel typically deletes; doing so via
  * the sheet ops is a bigger commit-undo dance and beyond MVP scope).
  */
-export function splitTextToColumns(api: FUniver) {
-  api.executeCommand('sheet.command.split-text-to-columns');
-}
-
 /* ── Review — comments ──────────────────────────────────────────────────── */
 
 export function toggleCommentPanel(api: FUniver) {
