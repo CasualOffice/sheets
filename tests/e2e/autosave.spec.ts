@@ -124,4 +124,62 @@ test.describe('Autosave restore', () => {
     await waitForUniver(page);
     await expect(page.getByTestId('autosave-banner')).toHaveCount(0);
   });
+
+  // Exercises the LIVE driver write end-to-end (not the seeded path): a real
+  // edit must still reach IndexedDB now that the snapshot is deferred to an
+  // idle slot. Guards against the idle scheduling silently dropping the save.
+  test('a live edit is written to the autosave slot (idle-scheduled)', async ({ page }) => {
+    test.setTimeout(30_000);
+    // A real interaction is required before the driver will mark dirty.
+    await page.mouse.click(200, 200);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange(0, 0).setValue({ v: 'live-autosave' });
+    });
+
+    // The driver debounces 5s, then writes on idle — poll the slot until the
+    // edit lands in IndexedDB.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              new Promise<unknown>((resolve) => {
+                const req = indexedDB.open('casual-sheets', 4);
+                req.onsuccess = () => {
+                  const db = req.result;
+                  const get = db
+                    .transaction('autosave', 'readonly')
+                    .objectStore('autosave')
+                    .get('current');
+                  get.onsuccess = () => {
+                    const rec = get.result as
+                      | {
+                          data?: {
+                            sheetOrder?: string[];
+                            sheets?: Record<
+                              string,
+                              { cellData?: Record<string, Record<string, { v?: unknown }>> }
+                            >;
+                          };
+                        }
+                      | undefined;
+                    const sid = rec?.data?.sheetOrder?.[0];
+                    db.close();
+                    resolve(sid ? rec?.data?.sheets?.[sid]?.cellData?.['0']?.['0']?.v : null);
+                  };
+                  get.onerror = () => {
+                    db.close();
+                    resolve(null);
+                  };
+                };
+                req.onerror = () => resolve(null);
+              }),
+          ),
+        { timeout: 20_000, intervals: [500] },
+      )
+      .toBe('live-autosave');
+  });
 });

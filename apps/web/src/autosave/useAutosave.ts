@@ -1,9 +1,39 @@
 import { useEffect, useRef } from 'react';
-import { ICommandService, type ICommandInfo, type IExecutionOptions } from '@univerjs/core';
+import {
+  ICommandService,
+  type ICommandInfo,
+  type IExecutionOptions,
+  type IWorkbookData,
+} from '@univerjs/core';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useCollab } from '../collab/collab-context';
+import { timeIt } from '../perf';
 import { clearAutosave, writeAutosave } from './store';
+
+interface IdleHandle {
+  cancel: () => void;
+}
+
+/**
+ * Run `cb` at the next idle moment so the autosave snapshot — a full
+ * `wb.save()` deep clone that can take hundreds of ms on a large workbook —
+ * doesn't hitch the UI mid-keystroke. `timeout` guarantees it still runs soon
+ * even if the page never goes idle (continuous typing). Falls back to a microish
+ * setTimeout where `requestIdleCallback` isn't available (older Safari).
+ */
+function runWhenIdle(cb: () => void, timeout = 2_000): IdleHandle {
+  const w = window as typeof window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    cancelIdleCallback?: (id: number) => void;
+  };
+  if (typeof w.requestIdleCallback === 'function') {
+    const id = w.requestIdleCallback(cb, { timeout });
+    return { cancel: () => w.cancelIdleCallback?.(id) };
+  }
+  const id = window.setTimeout(cb, 1);
+  return { cancel: () => window.clearTimeout(id) };
+}
 
 /**
  * Catches the "I closed the tab without saving" failure mode. Every
@@ -34,9 +64,7 @@ export function useAutosave(): void {
     if (collab.roomId) return; // covered by the room server
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const injector = (api as any)._injector as
-      | { get: (t: unknown) => unknown }
-      | undefined;
+    const injector = (api as any)._injector as { get: (t: unknown) => unknown } | undefined;
     if (!injector) return;
     const cmdSvc = injector.get(ICommandService) as {
       onMutationExecutedForCollab: (
@@ -47,6 +75,7 @@ export function useAutosave(): void {
     let cancelled = false;
     let debounce: ReturnType<typeof setTimeout> | null = null;
     let tick: ReturnType<typeof setInterval> | null = null;
+    let idle: IdleHandle | null = null;
     // Only persist after the user has actually interacted. Univer
     // fires a stream of structural mutations during mount + background
     // services (formula resize, lazy plugin init, etc.) that aren't
@@ -57,7 +86,9 @@ export function useAutosave(): void {
     // keydown / wheel on the document are the same signals
     // browsers use to allow autoplay / Notification permission etc.
     let userInteracted = false;
-    const markInteracted = () => { userInteracted = true; };
+    const markInteracted = () => {
+      userInteracted = true;
+    };
     window.addEventListener('pointerdown', markInteracted, { capture: true });
     window.addEventListener('keydown', markInteracted, { capture: true });
 
@@ -66,7 +97,7 @@ export function useAutosave(): void {
       if (!dirtyRef.current) return;
       const wb = api.getActiveWorkbook();
       if (!wb) return;
-      const data = wb.save() as unknown as import('@univerjs/core').IWorkbookData;
+      const data = timeIt('autosave-snapshot', () => wb.save() as unknown as IWorkbookData);
       try {
         await writeAutosave({
           name: workbook.meta.name,
@@ -82,9 +113,17 @@ export function useAutosave(): void {
       }
     };
 
+    // Defer the heavy snapshot to an idle slot so it never lands mid-keystroke.
+    // The 30s tick in particular fires regardless of activity; without this it
+    // would freeze the grid for the clone's duration while the user is typing.
+    const persistWhenIdle = (reason: 'debounce' | 'tick') => {
+      idle?.cancel();
+      idle = runWhenIdle(() => void persist(reason));
+    };
+
     const scheduleDebounce = () => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => void persist('debounce'), DEBOUNCE_MS);
+      debounce = setTimeout(() => persistWhenIdle('debounce'), DEBOUNCE_MS);
     };
 
     const subscription = cmdSvc.onMutationExecutedForCollab((info, options) => {
@@ -104,7 +143,7 @@ export function useAutosave(): void {
       scheduleDebounce();
     });
 
-    tick = setInterval(() => void persist('tick'), TICK_MS);
+    tick = setInterval(() => persistWhenIdle('tick'), TICK_MS);
 
     const onPageHide = () => {
       // pagehide fires on tab close + on bfcache stash. Try to flush
@@ -120,6 +159,7 @@ export function useAutosave(): void {
       subscription.dispose();
       if (debounce) clearTimeout(debounce);
       if (tick) clearInterval(tick);
+      idle?.cancel();
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onPageHide);
       window.removeEventListener('pointerdown', markInteracted, { capture: true });
