@@ -2566,8 +2566,7 @@ export function MenuBar() {
             target,
             rowFieldColumns,
             colFieldColumns,
-            valueFieldColumn,
-            aggregation,
+            valueFields,
             filters,
           }) => {
             const wb = api.getActiveWorkbook();
@@ -2597,7 +2596,7 @@ export function MenuBar() {
               // / matrix layout (value fans out one block per distinct
               // column-field value). Empty keeps the classic row layout.
               cols: colFieldColumns.map((column) => ({ column })),
-              values: [{ column: valueFieldColumn, agg: aggregation }],
+              values: valueFields.map((v) => ({ column: v.column, agg: v.aggregation })),
               filters,
               title: `PivotTable ${pivots.pivots.length + 1}`,
             };

@@ -17,8 +17,8 @@ type Props = {
      *  field (the classic single-column-per-value layout). P2 ships a
      *  single column field; the array shape leaves room for nesting. */
     colFieldColumns: number[];
-    valueFieldColumn: number;
-    aggregation: PivotAggregation;
+    /** One or more value fields, each a source column + its aggregation. */
+    valueFields: Array<{ column: number; aggregation: PivotAggregation }>;
     filters: PivotFilter[];
   }) => void;
 };
@@ -53,8 +53,12 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
   // "no column field" (classic row-only layout). When set, the value
   // field fans out across one column per distinct value of this field.
   const [colField, setColField] = useState<number>(-1);
-  const [valueField, setValueField] = useState<number>(1);
-  const [aggregation, setAggregation] = useState<PivotAggregation>('sum');
+  // One or more value fields. Each produces its own column in the output
+  // (compute.ts already fans out multiple values). Defaults to a single
+  // Sum-of-column-1 to match the prior single-value behaviour.
+  const [valueFields, setValueFields] = useState<Array<{ column: number; agg: PivotAggregation }>>([
+    { column: 1, agg: 'sum' },
+  ]);
   // P1 — filter field. -1 means "no filter".
   const [filterField, setFilterField] = useState<number>(-1);
   // Set of currently-allowed values for the filter field. Empty = none
@@ -132,8 +136,8 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
       setError('Pick a row field from the source columns.');
       return;
     }
-    if (valueField < 0 || valueField >= cols) {
-      setError('Pick a value field from the source columns.');
+    if (valueFields.length === 0 || valueFields.some((v) => v.column < 0 || v.column >= cols)) {
+      setError('Pick at least one value field from the source columns.');
       return;
     }
     // Only ship a filter when the user picked a column AND restricted
@@ -165,8 +169,7 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
       target,
       rowFieldColumns,
       colFieldColumns,
-      valueFieldColumn: valueField,
-      aggregation,
+      valueFields: valueFields.map((v) => ({ column: v.column, aggregation: v.agg })),
       filters,
     });
   };
@@ -290,37 +293,82 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
               ))}
             </select>
           </label>
-          <label className="insert-pivot__field">
-            <span className="insert-pivot__field-label">Value field</span>
-            <select
-              className="insert-pivot__select"
-              data-testid="insert-pivot-value-field"
-              value={valueField}
-              onChange={(e) => setValueField(Number(e.target.value))}
-              disabled={headers.length === 0}
-            >
-              {headers.map((h, i) => (
-                <option key={i} value={i}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="insert-pivot__field">
-            <span className="insert-pivot__field-label">Aggregation</span>
-            <select
-              className="insert-pivot__select"
-              data-testid="insert-pivot-aggregation"
-              value={aggregation}
-              onChange={(e) => setAggregation(e.target.value as PivotAggregation)}
-            >
-              {(Object.keys(PIVOT_AGG_LABELS) as PivotAggregation[]).map((a) => (
-                <option key={a} value={a}>
-                  {PIVOT_AGG_LABELS[a]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="insert-pivot__field" style={{ gridColumn: '1 / -1' }}>
+            <span className="insert-pivot__field-label">Value fields</span>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {valueFields.map((vf, i) => {
+                // Keep the first row's testids unsuffixed for back-compat with
+                // the existing pivot e2e; index the additional rows.
+                const sfx = i === 0 ? '' : `-${i}`;
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <select
+                      className="insert-pivot__select"
+                      data-testid={`insert-pivot-value-field${sfx}`}
+                      value={vf.column}
+                      disabled={headers.length === 0}
+                      onChange={(e) =>
+                        setValueFields((cur) =>
+                          cur.map((x, j) =>
+                            j === i ? { ...x, column: Number(e.target.value) } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {headers.map((h, hi) => (
+                        <option key={hi} value={hi}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="insert-pivot__select"
+                      data-testid={`insert-pivot-aggregation${sfx}`}
+                      value={vf.agg}
+                      onChange={(e) =>
+                        setValueFields((cur) =>
+                          cur.map((x, j) =>
+                            j === i ? { ...x, agg: e.target.value as PivotAggregation } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {(Object.keys(PIVOT_AGG_LABELS) as PivotAggregation[]).map((a) => (
+                        <option key={a} value={a}>
+                          {PIVOT_AGG_LABELS[a]}
+                        </option>
+                      ))}
+                    </select>
+                    {valueFields.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        aria-label="Remove value field"
+                        data-testid={`insert-pivot-value-remove-${i}`}
+                        onClick={() => setValueFields((cur) => cur.filter((_, j) => j !== i))}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                className="btn-secondary"
+                data-testid="insert-pivot-value-add"
+                disabled={headers.length === 0}
+                onClick={() =>
+                  setValueFields((cur) => [
+                    ...cur,
+                    { column: cur[cur.length - 1]?.column ?? 0, agg: 'sum' },
+                  ])
+                }
+              >
+                + Add value field
+              </button>
+            </div>
+          </div>
         </div>
 
         <fieldset className="insert-pivot__group">
