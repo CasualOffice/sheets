@@ -30,6 +30,9 @@ const KEY_SYMBOLS: Record<string, string> = {
   End: 'End',
   Space: 'Space',
   Escape: 'Esc',
+  // `+` doubles as the separator, so callers pass it as `Plus` (or the
+  // `++` tail, normalized below) and we render the literal key.
+  Plus: '+',
 };
 
 /** True when the running platform reports any Mac-flavoured string —
@@ -61,7 +64,13 @@ export function isMacPlatform(platform: string): boolean {
 export function formatShortcut(canonical: string, platform: string): string {
   if (!canonical) return '';
   const isMac = isMacPlatform(platform);
-  const parts = canonical.split('+').map((p) => p.trim()).filter(Boolean);
+  // A trailing `++` means the key itself is `+` (e.g. Ctrl++ = insert cells).
+  // Rewrite to `+Plus` so the split below doesn't swallow it as a separator.
+  const normalized = canonical.replace(/\+\+$/, '+Plus');
+  const parts = normalized
+    .split('+')
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (parts.length === 0) return canonical;
 
   // Substitute friendly key names (PgUp / PgDn / Esc).
@@ -74,12 +83,7 @@ export function formatShortcut(canonical: string, platform: string): string {
   // Mac path: split modifiers from the trailing key. Modifiers stack
   // in Apple-HIG order (Ctrl, Alt/Opt, Shift, Cmd — but render as
   // ⌃⌥⇧⌘) and the final key sits to the right of the symbols.
-  const MOD_ORDER: Array<'Ctrl' | 'Alt' | 'Shift' | 'Cmd'> = [
-    'Ctrl',
-    'Alt',
-    'Shift',
-    'Cmd',
-  ];
+  const MOD_ORDER: Array<'Ctrl' | 'Alt' | 'Shift' | 'Cmd'> = ['Ctrl', 'Alt', 'Shift', 'Cmd'];
   const presentMods = new Set<string>();
   let key: string | null = null;
   for (const p of parts) {

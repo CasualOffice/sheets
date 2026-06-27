@@ -45,6 +45,13 @@ describe('formatShortcut', () => {
     assert.equal(formatShortcut('Shift+F11', 'MacIntel'), '⇧F11');
   });
 
+  it('renders the literal + key from a trailing ++ (Ctrl++ = insert cells)', () => {
+    assert.equal(formatShortcut('Ctrl++', 'Win32'), 'Ctrl++');
+    assert.equal(formatShortcut('Ctrl++', 'MacIntel'), '⌘+');
+    // The minus counterpart was never ambiguous; keep it covered.
+    assert.equal(formatShortcut('Ctrl+-', 'MacIntel'), '⌘-');
+  });
+
   it('returns empty string for empty input (defensive)', () => {
     assert.equal(formatShortcut('', 'Win32'), '');
   });

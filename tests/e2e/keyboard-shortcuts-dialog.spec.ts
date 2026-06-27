@@ -19,12 +19,18 @@ test.describe('Keyboard shortcuts dialog', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('heading', { name: 'Essentials' })).toBeVisible();
     await expect(dialog.getByRole('heading', { name: 'Editing' })).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Navigation' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Navigation & selection' })).toBeVisible();
     await expect(dialog.getByRole('heading', { name: 'Formatting' })).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'View' })).toBeVisible();
-    // Spot-check a couple of rows we explicitly listed.
+    await expect(dialog.getByRole('heading', { name: 'Formulas & data' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Insert & sheets' })).toBeVisible();
+    // Spot-check rows we explicitly listed, including the Excel-muscle-memory
+    // fills and AutoSum that were previously undocumented.
     await expect(dialog.getByText('Save', { exact: true })).toBeVisible();
-    await expect(dialog.getByText('Flash Fill', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Fill down', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Fill right', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('AutoSum', { exact: true })).toBeVisible();
+    // The old cheat sheet wrongly listed Ctrl++ as "Zoom in"; it inserts cells.
+    await expect(dialog.getByText('Zoom in', { exact: true })).toHaveCount(0);
   });
 
   test('Escape closes the dialog', async ({ page }) => {
