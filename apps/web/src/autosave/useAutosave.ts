@@ -9,31 +9,8 @@ import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useCollab } from '../collab/collab-context';
 import { timeIt } from '../perf';
+import { runWhenIdle, type IdleHandle } from '../idle';
 import { clearAutosave, writeAutosave } from './store';
-
-interface IdleHandle {
-  cancel: () => void;
-}
-
-/**
- * Run `cb` at the next idle moment so the autosave snapshot — a full
- * `wb.save()` deep clone that can take hundreds of ms on a large workbook —
- * doesn't hitch the UI mid-keystroke. `timeout` guarantees it still runs soon
- * even if the page never goes idle (continuous typing). Falls back to a microish
- * setTimeout where `requestIdleCallback` isn't available (older Safari).
- */
-function runWhenIdle(cb: () => void, timeout = 2_000): IdleHandle {
-  const w = window as typeof window & {
-    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-    cancelIdleCallback?: (id: number) => void;
-  };
-  if (typeof w.requestIdleCallback === 'function') {
-    const id = w.requestIdleCallback(cb, { timeout });
-    return { cancel: () => w.cancelIdleCallback?.(id) };
-  }
-  const id = window.setTimeout(cb, 1);
-  return { cancel: () => window.clearTimeout(id) };
-}
 
 /**
  * Catches the "I closed the tab without saving" failure mode. Every

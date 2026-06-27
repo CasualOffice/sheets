@@ -4,6 +4,8 @@ import type { IWorkbookData } from '@univerjs/core';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useCollab } from '../collab/collab-context';
+import { timeIt } from '../perf';
+import { runWhenIdle, type IdleHandle } from '../idle';
 import { createLiveVersionFeed, type LiveVersionFeed } from './live-feed';
 import { setLiveFeed, writeVersion } from './store';
 
@@ -77,9 +79,7 @@ export function useVersionHistoryCapture(): void {
     if (collab.roomId) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const injector = (api as any)._injector as
-      | { get: (t: unknown) => unknown }
-      | undefined;
+    const injector = (api as any)._injector as { get: (t: unknown) => unknown } | undefined;
     if (!injector) return;
     const cmdSvc = injector.get(ICommandService) as {
       onMutationExecutedForCollab: (
@@ -109,11 +109,14 @@ export function useVersionHistoryCapture(): void {
       dirtyRef.current = true;
     });
 
-    const tick = setInterval(() => {
+    let idle: IdleHandle | null = null;
+    const capture = () => {
       if (!dirtyRef.current) return;
       const wb = api.getActiveWorkbook();
       if (!wb) return;
-      const data = wb.save() as unknown as IWorkbookData;
+      // The snapshot is a full deep clone; defer it to an idle slot so it never
+      // freezes the grid mid-edit (the interval fires regardless of activity).
+      const data = timeIt('version-snapshot', () => wb.save() as unknown as IWorkbookData);
       void writeVersion({
         kind: 'auto',
         name: deriveAutoLabel(workbook.meta.name),
@@ -125,11 +128,18 @@ export function useVersionHistoryCapture(): void {
           dirtyRef.current = false;
         })
         .catch((err) => console.warn('[version-history] auto-capture failed', err));
+    };
+
+    const tick = setInterval(() => {
+      if (!dirtyRef.current) return;
+      idle?.cancel();
+      idle = runWhenIdle(capture);
     }, IDLE_INTERVAL_MS);
 
     return () => {
       sub.dispose();
       clearInterval(tick);
+      idle?.cancel();
       window.removeEventListener('pointerdown', markInteracted, { capture: true });
       window.removeEventListener('keydown', markInteracted, { capture: true });
     };
