@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import {
   ICommandService,
   type ICommandInfo,
@@ -42,6 +42,16 @@ function deskBridge() {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');
 
+// Whether there are edits worth snapshotting. Module-level (not the writer
+// hook's local ref) so clearDesktopRecovery — invoked from the save chokepoint
+// OUTSIDE the hook — can reset it: a debounced snapshot still pending when a
+// clean Save fires must NOT resurrect the just-cleared sidecar.
+let recoveryDirty = false;
+// Bumped on every edit AND every clear. persist() captures it before its async
+// write and only marks clean afterwards if it's unchanged — so an edit (or a
+// Save's clear) that lands mid-write isn't silently dropped from the next snap.
+let recoveryGen = 0;
+
 export async function writeDesktopRecovery(record: DesktopRecoveryRecord): Promise<void> {
   const b = deskBridge();
   if (!b?.writeRecovery) return;
@@ -64,6 +74,10 @@ export async function readDesktopRecovery(): Promise<DesktopRecoveryRecord | nul
 }
 
 export async function clearDesktopRecovery(): Promise<void> {
+  // Reset synchronously, before the await, so a debounced snapshot that fires
+  // while the clear IPC is in flight sees a clean state and skips its write.
+  recoveryDirty = false;
+  recoveryGen += 1;
   const b = deskBridge();
   if (!b?.clearRecovery) return;
   try {
@@ -84,7 +98,6 @@ export function useDesktopRecoveryWriter(): void {
   const api = useUniverAPI();
   const workbook = useWorkbook();
   const collab = useCollab();
-  const dirtyRef = useRef(false);
 
   useEffect(() => {
     if (!api) return;
@@ -109,9 +122,10 @@ export function useDesktopRecoveryWriter(): void {
     let tick: ReturnType<typeof setInterval> | null = null;
 
     const persist = async () => {
-      if (cancelled || !dirtyRef.current) return;
+      if (cancelled || !recoveryDirty) return;
       const wb = api.getActiveWorkbook();
       if (!wb) return;
+      const gen = recoveryGen;
       const data = wb.save() as unknown as IWorkbookData;
       try {
         await writeDesktopRecovery({
@@ -120,7 +134,9 @@ export function useDesktopRecoveryWriter(): void {
           data,
           savedAt: Date.now(),
         });
-        dirtyRef.current = false;
+        // Only mark clean if nothing changed (an edit OR a Save's clear) while
+        // the snapshot was being written — otherwise we'd drop the newer edit.
+        if (recoveryGen === gen) recoveryDirty = false;
       } catch (err) {
         // Best-effort — a recovery snapshot must never disrupt editing.
         console.debug('[deskApp] recovery snapshot failed', err);
@@ -138,7 +154,8 @@ export function useDesktopRecoveryWriter(): void {
       // Same noisy-mutation filter as useAutosave.
       if (id.startsWith('sheet.mutation.set-selections')) return;
       if (id === 'sheet.mutation.set-worksheet-active-operation') return;
-      dirtyRef.current = true;
+      recoveryDirty = true;
+      recoveryGen += 1;
       scheduleDebounce();
     });
 

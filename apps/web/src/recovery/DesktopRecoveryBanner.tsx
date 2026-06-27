@@ -48,9 +48,10 @@ export function DesktopRecoveryBanner() {
       rec.sourceFormat as Parameters<typeof workbook.replaceWorkbook>[1],
     );
     toast.success(`Restored unsaved changes to ${rec.name}`);
-    // Fire-and-forget — the snapshot is now live in the editor and will be
-    // re-snapshotted by the writer on the next edit.
-    void clearDesktopRecovery();
+    // Intentionally do NOT clear the sidecar here. The restored content is
+    // unsaved (it differs from disk); replaceWorkbook re-dirties the workbook so
+    // the writer re-snapshots it, and a clean Save clears it. Clearing now would
+    // leave an immediate re-crash with nothing to recover.
     setDismissed(true);
   };
 
