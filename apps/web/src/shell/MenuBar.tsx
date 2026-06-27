@@ -38,6 +38,7 @@ import { InsertCellsDialog } from './InsertCellsDialog';
 import { PasteSpecialDialog } from './PasteSpecialDialog';
 import { NameManagerDialog } from './NameManagerDialog';
 import { GoalSeekDialog } from './GoalSeekDialog';
+import { GoToSpecialDialog } from './GoToSpecialDialog';
 import { MacrosDialog } from './MacrosDialog';
 import { InsertSparklineDialog } from '../sparklines/InsertSparklineDialog';
 import { useSparklines } from '../sparklines/sparklines-context';
@@ -449,6 +450,7 @@ export function MenuBar() {
   const [showPasteSpecial, setShowPasteSpecial] = useState(false);
   const [showNameManager, setShowNameManager] = useState(false);
   const [showGoalSeek, setShowGoalSeek] = useState(false);
+  const [showGoToSpecial, setShowGoToSpecial] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
@@ -485,6 +487,13 @@ export function MenuBar() {
         const tag = (e.target as HTMLElement | null)?.tagName;
         return tag === 'INPUT' || tag === 'TEXTAREA';
       })();
+      // F5 — Excel's Go To. On the web F5 is browser-refresh, so only claim it
+      // when focus is on the grid (not a text input), and open Go To Special.
+      if (!mod && !e.altKey && !e.shiftKey && e.key === 'F5' && !inTextInput) {
+        e.preventDefault();
+        setShowGoToSpecial(true);
+        return;
+      }
       if (mod && !e.altKey) {
         // ── File / global ───────────────────────────────────────────
         if (k === 'p' && !e.shiftKey) {
@@ -504,13 +513,12 @@ export function MenuBar() {
           e.preventDefault();
           void handlersRef.current.open();
         } else if (k === 'g' && !e.shiftKey) {
-          // Ctrl+G — Excel-style Go To. Phase 1 focuses the Name Box
-          // and selects its contents so typing replaces the current A1.
-          // Unlike Find/Replace, this should work even from other text
-          // inputs inside the shell because users expect it to jump into
-          // the navigation affordance from anywhere.
+          // Ctrl+G — Excel's Go To. The Name Box already covers
+          // reference/named-range jumps (the lightweight half of Go To),
+          // so the shortcut now opens Go To Special — the part Excel users
+          // reach for here (select all constants / formulas / blanks / …).
           e.preventDefault();
-          document.dispatchEvent(new CustomEvent('casual-focus-name-box'));
+          setShowGoToSpecial(true);
         } else if (k === 'f' && !e.shiftKey) {
           // Skip when focus is in a plain text input — browsers expect
           // Ctrl+F to do in-page find there. The find dialog is for the
@@ -1647,6 +1655,14 @@ export function MenuBar() {
           shortcut: 'Ctrl+F',
           run: openFindReplace,
         },
+        {
+          kind: 'item',
+          id: 'go-to-special',
+          label: 'Go To Special…',
+          icon: 'highlight_alt',
+          shortcut: 'Ctrl+G',
+          onClick: () => setShowGoToSpecial(true),
+        },
         { kind: 'separator', id: 'sep-cells' },
         // The Insert / Delete dialogs were keyboard-only via Polish #1;
         // surface them in the menu so they're discoverable.
@@ -2605,6 +2621,9 @@ export function MenuBar() {
       )}
 
       {showGoalSeek && api && <GoalSeekDialog api={api} onClose={() => setShowGoalSeek(false)} />}
+      {showGoToSpecial && api && (
+        <GoToSpecialDialog api={api} onClose={() => setShowGoToSpecial(false)} />
+      )}
       {showMacros && api && (
         <MacrosDialog
           api={api}
