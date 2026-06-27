@@ -533,6 +533,40 @@ if (typeof window !== 'undefined' && isDesktop()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__deskApp__ = bridge;
 
+    // Drag-and-drop onto the editor window → open the dropped file(s). Only the
+    // launcher had a drop handler, so dropping a file on a spreadsheet window
+    // did nothing. Opens each supported file in a NEW window via
+    // open_document_window (which dedups, so re-dropping an already-open file
+    // just focuses it) — dragging never replaces the workbook you're viewing.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tauriWindow = (window as any).__TAURI__?.window;
+      const currentWindow = tauriWindow?.getCurrentWindow?.();
+      const invoke = tauriCore?.invoke;
+      if (currentWindow?.onDragDropEvent && invoke) {
+        void currentWindow.onDragDropEvent(
+          (event: { payload?: { type?: string; paths?: string[] } }) => {
+            if (event?.payload?.type !== 'drop') return;
+            for (const p of event.payload.paths ?? []) {
+              const ext = p.split('.').pop()?.toLowerCase() ?? '';
+              const kind = ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'tab'].includes(ext)
+                ? 'sheets'
+                : ['docx', 'txt', 'md', 'markdown'].includes(ext)
+                  ? 'docx'
+                  : null;
+              if (kind) {
+                void invoke('open_document_window', { kind, filePath: p }).catch((e) =>
+                  console.error('[deskApp] drop-open failed', e),
+                );
+              }
+            }
+          },
+        );
+      }
+    } catch {
+      /* drag-drop is best-effort — never break editor boot */
+    }
+
     // --- Theme plumbing --------------------------------------------------
     // The launcher passes its theme as `?theme=<system|light|dark>` and
     // emits a Tauri event `deskapp://theme` (payload `{ theme }`) when the
