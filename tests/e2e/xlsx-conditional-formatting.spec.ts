@@ -537,3 +537,68 @@ test('data-bar CF (positive colour recovered from raw XML) paints on open', asyn
   });
   expect(outside).toBe(false);
 });
+
+test('duplicate-values CF (raw-XML rule + dxf) paints duplicate cells on open', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  // A1=10, A2=20, A3=10 (dup), A4=30, A5=20 (dup) → 10 and 20 are duplicates.
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  [10, 20, 10, 30, 20].forEach((v, i) => (ws.getCell(`A${i + 1}`).value = v));
+  const raw = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+
+  // Inject a duplicateValues cfRule + its green dxf (ExcelJS writes neither).
+  // ExcelJS emits an empty <dxfs count="0"/>; populate it in place — adding a
+  // second <dxfs> element would crash ExcelJS's loader on reconcile.
+  const zip = await JSZip.loadAsync(raw);
+  let styles = await zip.file('xl/styles.xml')!.async('string');
+  styles = styles.replace(
+    /<dxfs count="0"\/>/,
+    '<dxfs count="1"><dxf><fill><patternFill patternType="solid"><bgColor rgb="FF00FF00"/></patternFill></fill></dxf></dxfs>',
+  );
+  zip.file('xl/styles.xml', styles);
+  let sheet = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+  sheet = sheet.replace(
+    '<pageMargins',
+    '<conditionalFormatting sqref="A1:A5"><cfRule type="duplicateValues" dxfId="0" priority="1"/></conditionalFormatting><pageMargins',
+  );
+  zip.file('xl/worksheets/sheet1.xml', sheet);
+  const bytes = Array.from(
+    new Uint8Array((await zip.generateAsync({ type: 'arraybuffer' })) as ArrayBuffer),
+  );
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  const fixture = '/tmp/casual-sheets-cf-dup.xlsx';
+  const fs = await import('node:fs');
+  fs.writeFileSync(fixture, Buffer.from(bytes));
+
+  await page.getByTestId('menubar-file').click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByTestId('menu-item-open').click(),
+  ]);
+  await chooser.setFiles(fixture);
+
+  // A1 (=10, duplicated) → green fill on open, no interaction.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const s = window.__composeCfStyle__?.(0, 0);
+          return (s?.style?.bg?.rgb ?? null) as string | null;
+        }),
+      { timeout: 10_000, message: 'A1 (duplicate) should compose the green fill on open' },
+    )
+    .toBe('#00ff00');
+
+  // A4 (=30, unique) → no CF style.
+  const a4 = await page.evaluate(() => {
+    const s = window.__composeCfStyle__?.(3, 0);
+    return s?.style?.bg?.rgb ?? null;
+  });
+  expect(a4).toBeNull();
+});

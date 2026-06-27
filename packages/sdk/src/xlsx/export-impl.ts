@@ -13,6 +13,7 @@ import {
   applyConditionalFormattingToXlsxWorksheet,
   readConditionalFormattingFromSnapshot,
   readDataBarsFromSnapshot,
+  readDxfCfRulesFromSnapshot,
 } from './conditional-formatting-resource';
 import { applyTablesToXlsxWorksheet, readTablesFromSnapshot } from './tables-resource';
 import {
@@ -354,15 +355,21 @@ export async function workbookDataToXlsxImpl(
   // pivots) plus data bars, which ExcelJS can't write — we splice the CF
   // blocks into the worksheet XML ourselves. No-op when there's nothing to add.
   const passthrough = readPassthroughFromSnapshot(data);
-  const dataBarsBySheetId = readDataBarsFromSnapshot(data);
-  const dataBarsByName: Record<string, (typeof dataBarsBySheetId)[string]> = {};
-  for (const [sheetId, bars] of Object.entries(dataBarsBySheetId)) {
-    const name = data.sheets?.[sheetId]?.name ?? sheetId;
-    dataBarsByName[name] = bars;
-  }
+  const nameOf = (sheetId: string) => data.sheets?.[sheetId]?.name ?? sheetId;
+  const byName = <T>(bySheetId: Record<string, T>): Record<string, T> => {
+    const out: Record<string, T> = {};
+    for (const [sheetId, v] of Object.entries(bySheetId)) out[nameOf(sheetId)] = v;
+    return out;
+  };
+  const dataBarsByName = byName(readDataBarsFromSnapshot(data));
+  const dxfCfByName = byName(readDxfCfRulesFromSnapshot(data));
   const fullPassthrough =
-    Object.keys(dataBarsByName).length > 0
-      ? { ...(passthrough ?? {}), dataBars: dataBarsByName }
+    Object.keys(dataBarsByName).length > 0 || Object.keys(dxfCfByName).length > 0
+      ? {
+          ...(passthrough ?? {}),
+          ...(Object.keys(dataBarsByName).length > 0 ? { dataBars: dataBarsByName } : {}),
+          ...(Object.keys(dxfCfByName).length > 0 ? { dxfCfRules: dxfCfByName } : {}),
+        }
       : passthrough;
   const patched = await applyPassthroughToXlsxBuffer(buf as ArrayBuffer, fullPassthrough);
 

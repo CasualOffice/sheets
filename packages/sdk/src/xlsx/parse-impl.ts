@@ -19,6 +19,7 @@ import {
   readDataValidationFromXlsx,
 } from './data-validation-resource';
 import {
+  dxfCfRulesToSynthCf,
   mergeConditionalFormattingIntoResources,
   readConditionalFormattingFromXlsx,
 } from './conditional-formatting-resource';
@@ -28,6 +29,7 @@ import {
   mergePassthroughIntoResources,
 } from './passthrough-resource';
 import { captureDataBarColorsFromBuffer } from './databar-passthrough';
+import { captureDxfCfRulesFromBuffer } from './cf-dxf-passthrough';
 import type { ImportedWorkbook } from './import';
 
 /**
@@ -206,6 +208,8 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
   // Data-bar positive fill colours — ExcelJS drops them, so read them straight
   // from the worksheet XML and thread them into the CF mapping below.
   const dataBarColors = await captureDataBarColorsFromBuffer(buffer);
+  // duplicate/unique CF rules (ExcelJS drops them) — captured by sheet name.
+  const dxfCfByName = await captureDxfCfRulesFromBuffer(buffer);
 
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
@@ -271,6 +275,18 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
     (excelId) => `sheet-${excelId}`,
     dataBarColors,
   );
+  // duplicate/unique rules — ExcelJS drops them, so they're captured from raw
+  // XML (keyed by sheet name) and folded into the CF map under their sheetId.
+  if (dxfCfByName) {
+    const bySheetId: Record<string, (typeof dxfCfByName)[string]> = {};
+    for (const ws of wb.worksheets) {
+      const rules = dxfCfByName[ws.name];
+      if (rules) bySheetId[`sheet-${ws.id}`] = rules;
+    }
+    for (const [sheetId, rules] of Object.entries(dxfCfRulesToSynthCf(bySheetId))) {
+      xlsxCf[sheetId] = [...(xlsxCf[sheetId] ?? []), ...rules];
+    }
+  }
   resources = mergeConditionalFormattingIntoResources(resources, xlsxCf);
 
   // xlsx ListObjects → passthrough table sidecar. Round-trips via
