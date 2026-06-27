@@ -41,6 +41,7 @@ import { GoalSeekDialog } from './GoalSeekDialog';
 import { GoToSpecialDialog } from './GoToSpecialDialog';
 import { RemoveDuplicatesDialog } from './RemoveDuplicatesDialog';
 import { TextToColumnsDialog } from './TextToColumnsDialog';
+import { SubtotalsDialog } from './SubtotalsDialog';
 import { MacrosDialog } from './MacrosDialog';
 import { InsertSparklineDialog } from '../sparklines/InsertSparklineDialog';
 import { useSparklines } from '../sparklines/sparklines-context';
@@ -453,6 +454,7 @@ export function MenuBar() {
   const [showGoToSpecial, setShowGoToSpecial] = useState(false);
   const [showRemoveDuplicates, setShowRemoveDuplicates] = useState(false);
   const [showTextToColumns, setShowTextToColumns] = useState(false);
+  const [showSubtotals, setShowSubtotals] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
@@ -2340,6 +2342,13 @@ export function MenuBar() {
         },
         {
           kind: 'item',
+          id: 'subtotal',
+          label: 'Subtotal…',
+          icon: 'functions',
+          onClick: () => setShowSubtotals(true),
+        },
+        {
+          kind: 'item',
           id: 'show-all-rows',
           label: 'Show all rows',
           icon: 'unfold_more',
@@ -2631,6 +2640,9 @@ export function MenuBar() {
       )}
       {showTextToColumns && api && (
         <TextToColumnsDialog api={api} onClose={() => setShowTextToColumns(false)} />
+      )}
+      {showSubtotals && api && (
+        <SubtotalsDialog api={api} onClose={() => setShowSubtotals(false)} />
       )}
       {showMacros && api && (
         <MacrosDialog
