@@ -99,9 +99,7 @@ const SET_SELECTIONS_OP_ID = 'sheet.operation.set-selections';
 const FORMAT_PAINTER_OP_ID = 'sheet.operation.set-format-painter';
 const shouldRecompute = (id: string | undefined) =>
   !!id &&
-  (id.startsWith('sheet.mutation.') ||
-    id === SET_SELECTIONS_OP_ID ||
-    id === FORMAT_PAINTER_OP_ID);
+  (id.startsWith('sheet.mutation.') || id === SET_SELECTIONS_OP_ID || id === FORMAT_PAINTER_OP_ID);
 
 export function useActiveCellState(): ActiveCellState {
   const api = useUniverAPI();
@@ -189,19 +187,39 @@ export function useActiveCellState(): ActiveCellState {
       // to [lastRow, lastColumn] — `getValues()` then only materializes cells that
       // can actually hold data, and the cap still guards a genuinely huge *dense*
       // selection.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const lastRow = (sheet as any).getLastRow?.() ?? -1;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const lastCol = (sheet as any).getLastColumn?.() ?? -1;
-      const ranges: { getValues: () => unknown[][]; getWidth: () => number; getHeight: () => number }[] = [];
+      //
+      // getLastRow()/getLastColumn() each scan the whole cell matrix (O(cells)) —
+      // on a large sheet that dominated every edit / selection change. Only a
+      // selection already larger than the cap can need clamping (a smaller one
+      // materializes fine, and empty cells past the data add nothing to the
+      // stats), so compute the used range lazily and only when one does.
+      let lastRow = -1;
+      let lastCol = -1;
+      let usedRangeReady = false;
+      const ensureUsedRange = () => {
+        if (usedRangeReady) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        lastRow = (sheet as any).getLastRow?.() ?? -1;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        lastCol = (sheet as any).getLastColumn?.() ?? -1;
+        usedRangeReady = true;
+      };
+      const ranges: {
+        getValues: () => unknown[][];
+        getWidth: () => number;
+        getHeight: () => number;
+      }[] = [];
       let totalCells = 0;
       for (const r of rawRanges) {
         const sr = r.getRow();
         const sc = r.getColumn();
         let er = sr + r.getHeight() - 1;
         let ec = sc + r.getWidth() - 1;
-        if (lastRow >= 0) er = Math.min(er, lastRow);
-        if (lastCol >= 0) ec = Math.min(ec, lastCol);
+        if ((er - sr + 1) * (ec - sc + 1) > SELECTION_STATS_CAP) {
+          ensureUsedRange();
+          if (lastRow >= 0) er = Math.min(er, lastRow);
+          if (lastCol >= 0) ec = Math.min(ec, lastCol);
+        }
         if (er < sr || ec < sc) continue; // selection lies entirely past the data
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ranges.push((sheet as any).getRange(sr, sc, er - sr + 1, ec - sc + 1));
@@ -260,12 +278,28 @@ export function useActiveCellState(): ActiveCellState {
         isWrapped: cell.getWrap(),
         fontFamily: style?.ff ?? '',
         fontSize: style?.fs ?? 11,
-        fontColor: (style?.cl && typeof style.cl === 'object' && 'rgb' in style.cl ? style.cl.rgb : '') ?? '',
-        fillColor: (style?.bg && typeof style.bg === 'object' && 'rgb' in style.bg ? style.bg.rgb : '') ?? '',
+        fontColor:
+          (style?.cl && typeof style.cl === 'object' && 'rgb' in style.cl ? style.cl.rgb : '') ??
+          '',
+        fillColor:
+          (style?.bg && typeof style.bg === 'object' && 'rgb' in style.bg ? style.bg.rgb : '') ??
+          '',
         align:
-          style?.ht === 1 ? 'left' : style?.ht === 2 ? 'center' : style?.ht === 3 ? 'right' : 'unset',
+          style?.ht === 1
+            ? 'left'
+            : style?.ht === 2
+              ? 'center'
+              : style?.ht === 3
+                ? 'right'
+                : 'unset',
         vAlign:
-          style?.vt === 1 ? 'top' : style?.vt === 2 ? 'middle' : style?.vt === 3 ? 'bottom' : 'unset',
+          style?.vt === 1
+            ? 'top'
+            : style?.vt === 2
+              ? 'middle'
+              : style?.vt === 3
+                ? 'bottom'
+                : 'unset',
         numberFormat: style?.n?.pattern ?? '',
         isMerged,
         isMultiCell,
