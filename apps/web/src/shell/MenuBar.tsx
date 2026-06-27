@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { Icon } from './Icon';
 import { openExternal } from './openExternal';
+import { promptModal } from './modals';
 import { activeSheet, rangeFromA1, sheetId as facadeSheetId } from '../univer-facade';
 import { PropertiesDialog } from './PropertiesDialog';
 import { FormatCellsDialog } from './FormatCellsDialog';
@@ -1551,11 +1552,13 @@ export function MenuBar() {
           id: 'save-version',
           label: 'Save version…',
           icon: 'bookmark_add',
-          onClick: () => {
-            const name = window.prompt(
-              'Name this version (e.g. "Q3 draft", "before pivot redo"):',
-              'New version',
-            );
+          onClick: async () => {
+            const name = await promptModal({
+              title: 'Save version',
+              label: 'Name this version (e.g. "Q3 draft", "before pivot redo")',
+              defaultValue: 'New version',
+              confirmLabel: 'Save',
+            });
             if (!name || !api) return;
             const data = api.getActiveWorkbook()?.save() as unknown as
               | Parameters<typeof saveNamedVersion>[0]

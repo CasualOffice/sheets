@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import { confirmModal } from '../shell/modals';
 import { Icon } from '../shell/Icon';
 import { useAuth, useCurrentUser } from './auth-context';
 import { logout } from './api';
@@ -70,12 +71,14 @@ export function AccountMenu() {
     // UX_AUDIT.md §2.14 — confirm before discarding unsaved edits. The
     // dirty flag is reset on every successful save, so this only fires
     // when the user has typed since the last save (or since opening a
-    // fresh draft). Native `confirm` is fine here: it's the same
-    // pattern Google Docs / Excel use for the equivalent surface.
+    // fresh draft).
     if (wbCtx?.meta.hasUserEdited) {
-      const ok = window.confirm(
-        'You have unsaved changes. Sign out anyway? Your edits will be lost.',
-      );
+      const ok = await confirmModal({
+        title: 'Sign out?',
+        body: 'You have unsaved changes. Sign out anyway? Your edits will be lost.',
+        confirmLabel: 'Sign out',
+        danger: true,
+      });
       if (!ok) return;
     }
     setOpen(false);

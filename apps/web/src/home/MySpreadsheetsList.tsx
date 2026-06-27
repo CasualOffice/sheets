@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { confirmModal } from '../shell/modals';
 
 import { useFileSource } from '../file-source';
 import { navigate } from '../router';
@@ -187,13 +188,7 @@ function FilesGrid({
   return (
     <ul style={gridStyle} data-testid="home-files-grid">
       {rows.map((row) => (
-        <FileRow
-          key={row.id}
-          row={row}
-          isMobile={isMobile}
-          onOpen={onOpen}
-          onDelete={onDelete}
-        />
+        <FileRow key={row.id} row={row} isMobile={isMobile} onOpen={onOpen} onDelete={onDelete} />
       ))}
     </ul>
   );
@@ -243,11 +238,15 @@ function FileRow({
       <button
         type="button"
         style={deleteBtnStyle(showDelete, hover)}
-        onClick={(e) => {
+        onClick={async (e) => {
           e.stopPropagation();
-          if (window.confirm(`Delete "${row.name}"?`)) {
-            onDelete(row.id);
-          }
+          const ok = await confirmModal({
+            title: 'Delete spreadsheet',
+            body: `Delete "${row.name}"?`,
+            confirmLabel: 'Delete',
+            danger: true,
+          });
+          if (ok) onDelete(row.id);
         }}
         aria-label={`Delete ${row.name}`}
         data-testid={`home-file-delete-${row.id}`}
@@ -283,11 +282,7 @@ function EmptyState() {
       <h2 style={emptyTitleStyle}>No spreadsheets yet</h2>
       <p style={emptySubStyle}>Create your first workbook or pick a template to get started.</p>
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-        <button
-          type="button"
-          onClick={() => navigate('/templates')}
-          style={secondaryBtnStyle}
-        >
+        <button type="button" onClick={() => navigate('/templates')} style={secondaryBtnStyle}>
           Browse templates
         </button>
         <button type="button" onClick={() => navigate('/sheet/new')} style={primaryBtnStyle}>
@@ -339,8 +334,7 @@ function formatRelative(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
-    year:
-      new Date(ts).getFullYear() === new Date(now).getFullYear() ? undefined : 'numeric',
+    year: new Date(ts).getFullYear() === new Date(now).getFullYear() ? undefined : 'numeric',
   });
 }
 
@@ -353,8 +347,7 @@ const pageStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 24,
-  fontFamily:
-    'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif',
+  fontFamily: 'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif',
 };
 
 const headerStyle: CSSProperties = {
