@@ -1,6 +1,7 @@
 import type ExcelJS from 'exceljs';
 import type { IRange, IWorkbookData } from '@univerjs/core';
 import type { DataBarEntry } from './databar-passthrough';
+import type { DxfCfRule } from './cf-dxf-passthrough';
 
 /**
  * xlsx-native `worksheet.conditionalFormattings` ⇄ Univer
@@ -23,20 +24,21 @@ import type { DataBarEntry } from './databar-passthrough';
  *   - `timePeriod` ← ExcelJS `timePeriod` (today / last7Days / thisMonth / …)
  *   - `text`     ← ExcelJS `containsText` (operators: containsText, plus the
  *                  no-value blanks/errors operators)
- * each with the rule's fill / font style; plus the visual rule types
+ * each with the rule's fill / font style; the `duplicateValues` /
+ * `uniqueValues` highlight rules (style only); plus the visual rule types
  *   - `colorScale` ← ExcelJS `colorScale` (value-mapped gradient stops)
  *   - `iconSet`    ← ExcelJS `iconSet` (named icon group + threshold bands)
+ *   - `dataBar`    ← ExcelJS `dataBar` (value-proportional bar)
  * which have no fill/font style. (A colorScale/iconSet using a `formula`
  * threshold is dropped — ExcelJS floatifies a cfvo value on read, destroying
- * the formula text.)
+ * the formula text.) ExcelJS can't carry `dataBar` or `duplicateValues` /
+ * `uniqueValues` itself (it drops the rule and/or its colour), so those are
+ * bridged via raw OOXML — see databar-passthrough.ts and cf-dxf-passthrough.ts.
  *
  * Deliberately NOT mapped (ExcelJS itself can't round-trip them, so they'd be
  * silently lost rather than preserved — see the bridge tests): the text
  * `beginsWith` / `endsWith` / `notContainsText` operators (ExcelJS drops their
- * search text), `duplicateValues` / `uniqueValues` (ExcelJS drops the rule
- * entirely), and `dataBar` (ExcelJS surfaces the bar via its x14 extension on
- * read without the fill colour, so it can't round-trip). Unmapped rules are
- * skipped, never corrupted.
+ * search text). Unmapped rules are skipped, never corrupted.
  */
 
 export const CONDITIONAL_FORMATTING_RESOURCE = 'SHEET_CONDITIONAL_FORMATTING_PLUGIN';
@@ -182,6 +184,10 @@ type SynthRule =
     }
   | { type: 'highlightCell'; subType: 'average'; operator: string; style: CfStyle }
   | { type: 'highlightCell'; subType: 'timePeriod'; operator: string; style: CfStyle }
+  // duplicate/unique highlight rules carry only a style (no operator/value).
+  // ExcelJS drops them entirely, so they're bridged via raw XML — see
+  // cf-dxf-passthrough.ts.
+  | { type: 'highlightCell'; subType: 'duplicateValues' | 'uniqueValues'; style: CfStyle }
   // Visual rule. colorScale has no fill/font style — it paints a value-mapped
   // gradient; `config` is the ordered list of gradient stops.
   | { type: 'colorScale'; config: Array<{ index: number; color: string; value: CfValueConfig }> }
@@ -589,6 +595,64 @@ export function readDataBarsFromSnapshot(data: IWorkbookData): Record<string, Da
   return out;
 }
 
+/** Read duplicate/unique rules off a snapshot's CF resource as raw-XML export
+ *  entries, keyed by sheetId. ExcelJS can't write them, so the export pipeline
+ *  emits these via cf-dxf-passthrough.ts. */
+export function readDxfCfRulesFromSnapshot(data: IWorkbookData): Record<string, DxfCfRule[]> {
+  const entry = data.resources?.find((r) => r.name === CONDITIONAL_FORMATTING_RESOURCE);
+  if (!entry?.data) return {};
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(entry.data) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object') return {};
+  const out: Record<string, DxfCfRule[]> = {};
+  for (const [sheetId, value] of Object.entries(parsed)) {
+    if (!Array.isArray(value)) continue;
+    const rules: DxfCfRule[] = [];
+    for (const item of value) {
+      const obj = item as SynthCfRule;
+      if (!obj || !Array.isArray(obj.ranges) || obj.rule?.type !== 'highlightCell') continue;
+      if (obj.rule.subType !== 'duplicateValues' && obj.rule.subType !== 'uniqueValues') continue;
+      const sqref = obj.ranges.map(iRangeToStr).join(' ');
+      if (!sqref) continue;
+      rules.push({ type: obj.rule.subType, sqref, style: obj.rule.style ?? {} });
+    }
+    if (rules.length > 0) out[sheetId] = rules;
+  }
+  return out;
+}
+
+/** Convert duplicate/unique rules captured from raw XML (keyed by sheetId) into
+ *  synthesised CF rules to merge into the resource map. */
+export function dxfCfRulesToSynthCf(
+  rulesBySheetId: Record<string, DxfCfRule[]>,
+): Record<string, SynthCfRule[]> {
+  const out: Record<string, SynthCfRule[]> = {};
+  let seq = 0;
+  for (const [sheetId, rules] of Object.entries(rulesBySheetId)) {
+    const bucket: SynthCfRule[] = [];
+    for (const r of rules) {
+      const ranges: IRange[] = [];
+      for (const piece of r.sqref.split(/[\s,]+/)) {
+        const range = rangeStrToIRange(piece);
+        if (range) ranges.push(range);
+      }
+      if (ranges.length === 0) continue;
+      bucket.push({
+        cfId: `cf-dxf-${seq++}`,
+        ranges,
+        stopIfTrue: false,
+        rule: { type: 'highlightCell', subType: r.type, style: r.style },
+      });
+    }
+    if (bucket.length > 0) out[sheetId] = bucket;
+  }
+  return out;
+}
+
 /** Validate a synthesised rule we can faithfully export (guards foreign /
  *  partially-mapped payloads read off a snapshot). */
 function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is SynthRule {
@@ -639,6 +703,11 @@ function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is S
       return rule.operator === TEXT_VALUE_OPERATOR
         ? typeof rule.value === 'string'
         : TEXT_VALUELESS_OPERATORS.has(rule.operator);
+    case 'duplicateValues':
+    case 'uniqueValues':
+      // Kept so it survives the snapshot read (renders + feeds the raw-XML
+      // export); synthRuleToExcel refuses it so ExcelJS never writes one.
+      return true;
     default:
       return false;
   }
@@ -650,6 +719,14 @@ function synthRuleToExcel(rule: SynthRule, priority: number): Record<string, unk
   // Data bars are written via raw XML (databar-passthrough.ts), never ExcelJS —
   // ExcelJS emits a broken `<color auto="1"/>` with no fill.
   if (rule.type === 'dataBar') return null;
+  // duplicate/unique are written via raw XML (cf-dxf-passthrough.ts) — ExcelJS
+  // has no writer branch for them.
+  if (
+    rule.type === 'highlightCell' &&
+    (rule.subType === 'duplicateValues' || rule.subType === 'uniqueValues')
+  ) {
+    return null;
+  }
   if (rule.type === 'colorScale') {
     const ordered = [...rule.config].sort((a, b) => a.index - b.index);
     return {

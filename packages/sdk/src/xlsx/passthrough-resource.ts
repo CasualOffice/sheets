@@ -6,6 +6,7 @@ import {
   type PivotPassthroughPayload,
 } from './pivot-passthrough';
 import { applyDataBarsToZip, type DataBarEntry } from './databar-passthrough';
+import { applyDxfCfRulesToZip, type DxfCfRule } from './cf-dxf-passthrough';
 
 /**
  * Sidecar resource that carries raw OOXML parts ExcelJS silently drops.
@@ -32,6 +33,9 @@ export type XlsxPassthroughPayload = {
   /** data-bar CF blocks to splice in (ExcelJS can't write them) — keyed by
    *  sheet name; see databar-passthrough.ts */
   dataBars?: Record<string, DataBarEntry[]>;
+  /** duplicate/unique CF blocks (+ their dxf styles) to splice in — keyed by
+   *  sheet name; see cf-dxf-passthrough.ts */
+  dxfCfRules?: Record<string, DxfCfRule[]>;
 };
 
 const VBA_REL_TYPE = 'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
@@ -112,7 +116,8 @@ export async function applyPassthroughToXlsxBuffer(
   payload: XlsxPassthroughPayload | undefined,
 ): Promise<ArrayBuffer> {
   const hasDataBars = payload?.dataBars && Object.keys(payload.dataBars).length > 0;
-  if (!payload?.vba && !payload?.pivots && !hasDataBars) {
+  const hasDxfCf = payload?.dxfCfRules && Object.keys(payload.dxfCfRules).length > 0;
+  if (!payload?.vba && !payload?.pivots && !hasDataBars && !hasDxfCf) {
     if (excelJsBuffer instanceof ArrayBuffer) return excelJsBuffer;
     return excelJsBuffer.buffer.slice(
       excelJsBuffer.byteOffset,
@@ -125,6 +130,7 @@ export async function applyPassthroughToXlsxBuffer(
   if (payload.vba) await applyVbaToZip(zip, payload.vba);
   if (payload.pivots) await applyPivotsToZip(zip, payload.pivots);
   if (payload.dataBars) await applyDataBarsToZip(zip, payload.dataBars);
+  if (payload.dxfCfRules) await applyDxfCfRulesToZip(zip, payload.dxfCfRules);
 
   return zip.generateAsync({ type: 'arraybuffer' });
 }
