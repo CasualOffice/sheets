@@ -713,6 +713,17 @@ if (typeof window !== 'undefined' && isDesktop()) {
           '</div>';
         (document.body || document.documentElement).appendChild(overlay);
 
+        // The shell builds doc windows hidden so the first visible frame is this
+        // full-window overlay, not WebKitGTK's small initial render + maximize
+        // settle. Reveal the window now that the overlay is painted; the shell
+        // also reveals it on page-load as a fallback.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__TAURI__?.window?.getCurrentWindow?.()?.show?.();
+        } catch {
+          /* not in the desktop shell — no-op */
+        }
+
         let dismissed = false;
         const dismissBoot = () => {
           if (dismissed) return;
