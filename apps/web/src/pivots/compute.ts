@@ -424,6 +424,16 @@ function aggregate(values: PivotCell[], agg: PivotAggregation): PivotCell {
       return nums.length === 0 ? null : Math.min(...nums);
     case 'max':
       return nums.length === 0 ? null : Math.max(...nums);
+    case 'distinctCount': {
+      // Count distinct non-empty values (compared as strings, like Excel's
+      // "Distinct Count"). Empty/blank cells are ignored.
+      const seen = new Set<string>();
+      for (const v of values) {
+        if (v == null || v === '') continue;
+        seen.add(String(v));
+      }
+      return seen.size;
+    }
   }
 }
 
