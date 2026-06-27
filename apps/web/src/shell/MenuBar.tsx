@@ -39,6 +39,7 @@ import { PasteSpecialDialog } from './PasteSpecialDialog';
 import { NameManagerDialog } from './NameManagerDialog';
 import { GoalSeekDialog } from './GoalSeekDialog';
 import { GoToSpecialDialog } from './GoToSpecialDialog';
+import { RemoveDuplicatesDialog } from './RemoveDuplicatesDialog';
 import { MacrosDialog } from './MacrosDialog';
 import { InsertSparklineDialog } from '../sparklines/InsertSparklineDialog';
 import { useSparklines } from '../sparklines/sparklines-context';
@@ -136,7 +137,6 @@ import {
   openConditionalFormatting,
   openCustomSort,
   openDataValidation,
-  removeDuplicates,
   showAllRows,
   splitTextToColumns,
   toggleCommentPanel,
@@ -451,6 +451,7 @@ export function MenuBar() {
   const [showNameManager, setShowNameManager] = useState(false);
   const [showGoalSeek, setShowGoalSeek] = useState(false);
   const [showGoToSpecial, setShowGoToSpecial] = useState(false);
+  const [showRemoveDuplicates, setShowRemoveDuplicates] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
@@ -2332,9 +2333,9 @@ export function MenuBar() {
         {
           kind: 'item',
           id: 'remove-duplicates',
-          label: 'Remove Duplicates',
+          label: 'Remove Duplicates…',
           icon: 'filter_list_off',
-          run: removeDuplicates,
+          onClick: () => setShowRemoveDuplicates(true),
         },
         {
           kind: 'item',
@@ -2623,6 +2624,9 @@ export function MenuBar() {
       {showGoalSeek && api && <GoalSeekDialog api={api} onClose={() => setShowGoalSeek(false)} />}
       {showGoToSpecial && api && (
         <GoToSpecialDialog api={api} onClose={() => setShowGoToSpecial(false)} />
+      )}
+      {showRemoveDuplicates && api && (
+        <RemoveDuplicatesDialog api={api} onClose={() => setShowRemoveDuplicates(false)} />
       )}
       {showMacros && api && (
         <MacrosDialog

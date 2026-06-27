@@ -431,40 +431,6 @@ export function insertFunction(api: FUniver, name: string) {
  * Cleared rows are blanked in place (Excel typically deletes; doing so via
  * the sheet ops is a bigger commit-undo dance and beyond MVP scope).
  */
-export function removeDuplicates(api: FUniver) {
-  const sheet = activeSheet(api);
-  const range = activeRange(api);
-  if (!sheet || !range) return;
-
-  const startRow = range.getRow();
-  const startCol = range.getColumn();
-  const height = range.getHeight();
-  const width = range.getWidth();
-  const values = range.getValues();
-
-  const seen = new Set<string>();
-  for (let r = 0; r < height; r++) {
-    const row = values[r] ?? [];
-    const key = row.map((v: unknown) => stringify(v)).join('|');
-    if (seen.has(key)) {
-      // Wipe this row's values inside the selection.
-      for (let c = 0; c < width; c++) {
-        sheet.getRange(startRow + r, startCol + c).setValue({ v: null });
-      }
-    } else {
-      seen.add(key);
-    }
-  }
-}
-
-function stringify(v: unknown): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'object' && 'v' in (v as Record<string, unknown>)) {
-    return String((v as { v: unknown }).v ?? '');
-  }
-  return String(v);
-}
-
 export function splitTextToColumns(api: FUniver) {
   api.executeCommand('sheet.command.split-text-to-columns');
 }
