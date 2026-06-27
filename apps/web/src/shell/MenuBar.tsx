@@ -43,6 +43,7 @@ import { GoToSpecialDialog } from './GoToSpecialDialog';
 import { RemoveDuplicatesDialog } from './RemoveDuplicatesDialog';
 import { TextToColumnsDialog } from './TextToColumnsDialog';
 import { SubtotalsDialog } from './SubtotalsDialog';
+import { AdvancedFilterDialog } from './AdvancedFilterDialog';
 import { MacrosDialog } from './MacrosDialog';
 import { InsertSparklineDialog } from '../sparklines/InsertSparklineDialog';
 import { useSparklines } from '../sparklines/sparklines-context';
@@ -456,6 +457,7 @@ export function MenuBar() {
   const [showRemoveDuplicates, setShowRemoveDuplicates] = useState(false);
   const [showTextToColumns, setShowTextToColumns] = useState(false);
   const [showSubtotals, setShowSubtotals] = useState(false);
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
   const [showInsertSparkline, setShowInsertSparkline] = useState(false);
   const sparklinesCtx = useSparklines();
@@ -2350,6 +2352,13 @@ export function MenuBar() {
         },
         {
           kind: 'item',
+          id: 'advanced-filter',
+          label: 'Advanced Filter…',
+          icon: 'filter_alt',
+          onClick: () => setShowAdvancedFilter(true),
+        },
+        {
+          kind: 'item',
           id: 'show-all-rows',
           label: 'Show all rows',
           icon: 'unfold_more',
@@ -2644,6 +2653,9 @@ export function MenuBar() {
       )}
       {showSubtotals && api && (
         <SubtotalsDialog api={api} onClose={() => setShowSubtotals(false)} />
+      )}
+      {showAdvancedFilter && api && (
+        <AdvancedFilterDialog api={api} onClose={() => setShowAdvancedFilter(false)} />
       )}
       {showMacros && api && (
         <MacrosDialog
