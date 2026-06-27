@@ -161,6 +161,20 @@ test('colorScale maps cfvo + color to ordered gradient stops', async () => {
   ]);
 });
 
+test('colorScale with a formula threshold is dropped (ExcelJS floatifies cfvo val)', async () => {
+  const out = await roundTrip([
+    {
+      type: 'colorScale',
+      priority: 1,
+      cfvo: [{ type: 'min' }, { type: 'formula', value: '=A1*2' }, { type: 'max' }],
+      color: [{ argb: 'FFF8696B' }, { argb: 'FFFFEB84' }, { argb: 'FF63BE7B' }],
+    },
+  ]);
+  // The formula stop can't round-trip, so the whole rule is skipped rather than
+  // emitted with a corrupt "NaN" threshold.
+  assert.equal(out.length, 0);
+});
+
 test('a foreign rule with no style does not throw the export', async () => {
   // A resource payload from another tool / future version may omit `style`.
   // Export must tolerate it (cfStyleToDxf guards null) rather than aborting save.

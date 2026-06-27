@@ -23,8 +23,11 @@ import type { IRange, IWorkbookData } from '@univerjs/core';
  *   - `text`     ← ExcelJS `containsText` (operators: containsText, plus the
  *                  no-value blanks/errors operators)
  * each with the rule's fill / font style; plus the visual rule type
- *   - `colorScale` ← ExcelJS `colorScale` (value-mapped gradient stops)
- * which has no fill/font style.
+ *   - `colorScale` ← ExcelJS `colorScale` (value-mapped gradient stops, with
+ *                    min/max/num/percent/percentile thresholds)
+ * which has no fill/font style. (A colorScale that uses a `formula` threshold
+ * is dropped — ExcelJS floatifies a cfvo's value on read, destroying the
+ * formula text.)
  *
  * Deliberately NOT mapped (ExcelJS itself can't round-trip them, so they'd be
  * silently lost rather than preserved — see the bridge tests): the text
@@ -79,18 +82,20 @@ const TIME_PERIODS = new Set([
 
 // ExcelJS color-scale / data-bar / icon-set thresholds (`cfvo`) carry a type +
 // optional value. Univer's CFValueType is the same set minus ExcelJS's
-// auto-min/max (which collapse to plain min/max).
+// auto-min/max (which collapse to plain min/max). `formula` is intentionally
+// absent: ExcelJS parses a cfvo's `val` with parseFloat on read, so a formula
+// threshold's text is destroyed (becomes NaN) — it can't round-trip, so a rule
+// using one is dropped rather than emitted with a corrupt "NaN" stop.
 const CFVO_TYPE_TO_UNIVER: Record<string, string> = {
   num: 'num',
   percent: 'percent',
   percentile: 'percentile',
   min: 'min',
   max: 'max',
-  formula: 'formula',
   autoMin: 'min',
   autoMax: 'max',
 };
-const UNIVER_VALUE_TYPES = new Set(['num', 'percent', 'percentile', 'min', 'max', 'formula']);
+const UNIVER_VALUE_TYPES = new Set(['num', 'percent', 'percentile', 'min', 'max']);
 
 /** A Univer IValueConfig — a conditional-formatting threshold stop. */
 interface CfValueConfig {
@@ -104,7 +109,6 @@ function cfvoToValueConfig(cfvo: unknown): CfValueConfig | null {
   const type = c?.type ? CFVO_TYPE_TO_UNIVER[c.type] : undefined;
   if (!type) return null;
   if (type === 'min' || type === 'max') return { type };
-  if (type === 'formula') return { type, value: String(c.value ?? '') };
   const n = Number(c.value);
   if (Number.isNaN(n)) return null;
   return { type, value: n };
@@ -113,7 +117,6 @@ function cfvoToValueConfig(cfvo: unknown): CfValueConfig | null {
 /** Univer IValueConfig → ExcelJS `cfvo` entry. */
 function valueConfigToCfvo(vc: CfValueConfig): Record<string, unknown> {
   if (vc.type === 'min' || vc.type === 'max') return { type: vc.type };
-  if (vc.type === 'formula') return { type: 'formula', value: String(vc.value ?? '') };
   return { type: vc.type, value: Number(vc.value) || 0 };
 }
 
