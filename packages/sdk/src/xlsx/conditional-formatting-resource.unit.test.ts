@@ -4,6 +4,8 @@ import ExcelJS from 'exceljs';
 
 import {
   applyConditionalFormattingToXlsxWorksheet,
+  CONDITIONAL_FORMATTING_RESOURCE,
+  readConditionalFormattingFromSnapshot,
   readConditionalFormattingFromXlsx,
 } from './conditional-formatting-resource.js';
 
@@ -139,4 +141,50 @@ test('unmappable rules (beginsWith, duplicateValues) are skipped, not corrupted'
     out.map((r) => r.subType),
     ['rank'],
   );
+});
+
+test('colorScale maps cfvo + color to ordered gradient stops', async () => {
+  const out = await roundTrip([
+    {
+      type: 'colorScale',
+      priority: 1,
+      cfvo: [{ type: 'min' }, { type: 'percentile', value: 50 }, { type: 'max' }],
+      color: [{ argb: 'FFF8696B' }, { argb: 'FFFFEB84' }, { argb: 'FF63BE7B' }],
+    },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].type, 'colorScale');
+  assert.deepEqual((out[0] as { config: unknown }).config, [
+    { index: 0, color: '#f8696b', value: { type: 'min' } },
+    { index: 1, color: '#ffeb84', value: { type: 'percentile', value: 50 } },
+    { index: 2, color: '#63be7b', value: { type: 'max' } },
+  ]);
+});
+
+test('a foreign rule with no style does not throw the export', async () => {
+  // A resource payload from another tool / future version may omit `style`.
+  // Export must tolerate it (cfStyleToDxf guards null) rather than aborting save.
+  const snapshot = {
+    resources: [
+      {
+        name: CONDITIONAL_FORMATTING_RESOURCE,
+        data: JSON.stringify({
+          'sheet-1': [
+            {
+              cfId: 'x',
+              ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+              stopIfTrue: false,
+              rule: { type: 'highlightCell', subType: 'number', operator: 'greaterThan', value: 5 },
+            },
+          ],
+        }),
+      },
+    ],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+  const rules = readConditionalFormattingFromSnapshot(snapshot)['sheet-1'] ?? [];
+  assert.equal(rules.length, 1);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  assert.doesNotThrow(() => applyConditionalFormattingToXlsxWorksheet(ws, rules));
 });

@@ -320,3 +320,84 @@ test('imported rank conditional formatting paints on open', async ({ page }) => 
   });
   expect(a1).toBeNull();
 });
+
+test('color-scale CF survives round-trip and paints a value-mapped gradient on open', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 8; r++) ws.getCell(`A${r}`).value = r * 10;
+  // 3-colour scale: min = red, midpoint = yellow, max = green.
+  ws.addConditionalFormatting({
+    ref: 'A1:A8',
+    rules: [
+      {
+        type: 'colorScale',
+        priority: 1,
+        cfvo: [{ type: 'min' }, { type: 'percentile', value: 50 }, { type: 'max' }],
+        color: [{ argb: 'FFF8696B' }, { argb: 'FFFFEB84' }, { argb: 'FF63BE7B' }],
+      },
+    ],
+  });
+  const bytes = Array.from(new Uint8Array((await wb.xlsx.writeBuffer()) as ArrayBuffer));
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  // First assert the resource round-trips (import → export → re-import).
+  const round = await page.evaluate(
+    async ({ buf, resKey }: { buf: number[]; resKey: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const xlsx = await import(/* @vite-ignore */ '/src/xlsx/index.ts' as any);
+      const imported = await xlsx.xlsxToWorkbookData(new Uint8Array(buf).buffer);
+      const blob = await xlsx.workbookDataToXlsx(imported);
+      const re = await xlsx.xlsxToWorkbookData(await blob.arrayBuffer());
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cfg = (data: any) => {
+        const entry = (data.resources ?? []).find((r: { name: string }) => r.name === resKey);
+        const parsed = JSON.parse(entry.data);
+        return parsed[Object.keys(parsed)[0]][0].rule;
+      };
+      return { type: cfg(re).type, stops: cfg(re).config.length };
+    },
+    { buf: bytes, resKey: CF_RESOURCE },
+  );
+  expect(round).toEqual({ type: 'colorScale', stops: 3 });
+
+  // Then open it and assert the gradient paints on the canvas without interaction:
+  // the min cell composes the red endpoint, the max cell the green endpoint.
+  const fixture = '/tmp/casual-sheets-cf-colorscale.xlsx';
+  const fs = await import('node:fs');
+  fs.writeFileSync(fixture, Buffer.from(bytes));
+
+  await page.getByTestId('menubar-file').click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByTestId('menu-item-open').click(),
+  ]);
+  await chooser.setFiles(fixture);
+
+  // The gradient endpoints render as the exact stop colours. ColorKit emits
+  // interpolated fills as `rgb(r,g,b)` strings, so compare in that form:
+  // #f8696b = rgb(248,105,107), #63be7b = rgb(99,190,123).
+  // A1 (=10, the range min) → red endpoint.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const s = window.__composeCfStyle__?.(0, 0);
+          return (s?.style?.bg?.rgb ?? null) as string | null;
+        }),
+      { timeout: 10_000, message: 'A1 should compose the color-scale min (red) on open' },
+    )
+    .toBe('rgb(248,105,107)');
+
+  // A8 (=80, the range max) → green endpoint.
+  const a8 = await page.evaluate(() => {
+    const s = window.__composeCfStyle__?.(7, 0);
+    return s?.style?.bg?.rgb ?? null;
+  });
+  expect(a8).toBe('rgb(99,190,123)');
+});

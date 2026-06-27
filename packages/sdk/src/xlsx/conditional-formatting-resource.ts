@@ -22,14 +22,18 @@ import type { IRange, IWorkbookData } from '@univerjs/core';
  *   - `timePeriod` ← ExcelJS `timePeriod` (today / last7Days / thisMonth / …)
  *   - `text`     ← ExcelJS `containsText` (operators: containsText, plus the
  *                  no-value blanks/errors operators)
- * each with the rule's fill / font style.
+ * each with the rule's fill / font style; plus the visual rule type
+ *   - `colorScale` ← ExcelJS `colorScale` (value-mapped gradient stops)
+ * which has no fill/font style.
  *
  * Deliberately NOT mapped (ExcelJS itself can't round-trip them, so they'd be
  * silently lost rather than preserved — see the bridge tests): the text
  * `beginsWith` / `endsWith` / `notContainsText` operators (ExcelJS drops their
  * search text), `duplicateValues` / `uniqueValues` (ExcelJS drops the rule
- * entirely), and the visual rule types `colorScale` / `dataBar` / `iconSet`.
- * Unmapped rules are skipped, never corrupted.
+ * entirely), `dataBar` (ExcelJS surfaces the bar via its x14 extension on read
+ * without the fill colour, so it can't round-trip), and `iconSet` (pending —
+ * needs the OOXML-vs-Univer icon-ordering mapping). Unmapped rules are skipped,
+ * never corrupted.
  */
 
 export const CONDITIONAL_FORMATTING_RESOURCE = 'SHEET_CONDITIONAL_FORMATTING_PLUGIN';
@@ -73,6 +77,51 @@ const TIME_PERIODS = new Set([
   'nextWeek',
 ]);
 
+// ExcelJS color-scale / data-bar / icon-set thresholds (`cfvo`) carry a type +
+// optional value. Univer's CFValueType is the same set minus ExcelJS's
+// auto-min/max (which collapse to plain min/max).
+const CFVO_TYPE_TO_UNIVER: Record<string, string> = {
+  num: 'num',
+  percent: 'percent',
+  percentile: 'percentile',
+  min: 'min',
+  max: 'max',
+  formula: 'formula',
+  autoMin: 'min',
+  autoMax: 'max',
+};
+const UNIVER_VALUE_TYPES = new Set(['num', 'percent', 'percentile', 'min', 'max', 'formula']);
+
+/** A Univer IValueConfig — a conditional-formatting threshold stop. */
+interface CfValueConfig {
+  type: string;
+  value?: number | string;
+}
+
+/** ExcelJS `cfvo` entry → Univer IValueConfig, or null if untranslatable. */
+function cfvoToValueConfig(cfvo: unknown): CfValueConfig | null {
+  const c = cfvo as { type?: string; value?: unknown };
+  const type = c?.type ? CFVO_TYPE_TO_UNIVER[c.type] : undefined;
+  if (!type) return null;
+  if (type === 'min' || type === 'max') return { type };
+  if (type === 'formula') return { type, value: String(c.value ?? '') };
+  const n = Number(c.value);
+  if (Number.isNaN(n)) return null;
+  return { type, value: n };
+}
+
+/** Univer IValueConfig → ExcelJS `cfvo` entry. */
+function valueConfigToCfvo(vc: CfValueConfig): Record<string, unknown> {
+  if (vc.type === 'min' || vc.type === 'max') return { type: vc.type };
+  if (vc.type === 'formula') return { type: 'formula', value: String(vc.value ?? '') };
+  return { type: vc.type, value: Number(vc.value) || 0 };
+}
+
+function isValueConfig(v: unknown): v is CfValueConfig {
+  const c = v as CfValueConfig;
+  return !!c && typeof c.type === 'string' && UNIVER_VALUE_TYPES.has(c.type);
+}
+
 interface CfStyle {
   bg?: { rgb: string };
   cl?: { rgb: string };
@@ -103,7 +152,10 @@ type SynthRule =
       style: CfStyle;
     }
   | { type: 'highlightCell'; subType: 'average'; operator: string; style: CfStyle }
-  | { type: 'highlightCell'; subType: 'timePeriod'; operator: string; style: CfStyle };
+  | { type: 'highlightCell'; subType: 'timePeriod'; operator: string; style: CfStyle }
+  // Visual rule. colorScale has no fill/font style — it paints a value-mapped
+  // gradient; `config` is the ordered list of gradient stops.
+  | { type: 'colorScale'; config: Array<{ index: number; color: string; value: CfValueConfig }> };
 
 interface SynthCfRule {
   cfId: string;
@@ -174,7 +226,10 @@ function dxfToCfStyle(style: any): CfStyle {
   return out;
 }
 
-function cfStyleToDxf(style: CfStyle): Record<string, unknown> {
+function cfStyleToDxf(rawStyle: CfStyle | undefined | null): Record<string, unknown> {
+  // A foreign / partially-formed resource payload may carry a rule with no
+  // style; tolerate it rather than throwing and aborting the whole export.
+  const style = rawStyle ?? {};
   const out: Record<string, unknown> = {};
   const font: Record<string, unknown> = {};
   if (style.bl === 1) font.bold = true;
@@ -212,6 +267,8 @@ function excelRuleToSynthRule(raw: unknown): SynthRule | null {
     aboveAverage?: boolean;
     text?: string;
     formulae?: unknown[];
+    cfvo?: unknown[];
+    color?: unknown[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     style?: any;
   };
@@ -284,6 +341,21 @@ function excelRuleToSynthRule(raw: unknown): SynthRule | null {
     if (TEXT_VALUELESS_OPERATORS.has(r.operator)) {
       return { type: 'highlightCell', subType: 'text', operator: r.operator, style };
     }
+  }
+
+  // Color scale: parallel `cfvo` (threshold stops) + `color` arrays. Univer
+  // keeps an ordered `config` of { index, color, value } gradient stops.
+  if (r.type === 'colorScale' && Array.isArray(r.cfvo) && Array.isArray(r.color)) {
+    const n = Math.min(r.cfvo.length, r.color.length);
+    if (n < 2) return null; // a gradient needs at least two stops
+    const config: Array<{ index: number; color: string; value: CfValueConfig }> = [];
+    for (let i = 0; i < n; i++) {
+      const value = cfvoToValueConfig(r.cfvo[i]);
+      const color = normalizeArgb((r.color[i] as { argb?: string })?.argb);
+      if (!value || !color) return null; // bail rather than emit a broken gradient
+      config.push({ index: i, color, value });
+    }
+    return { type: 'colorScale', config };
   }
 
   return null;
@@ -369,7 +441,15 @@ export function readConditionalFormattingFromSnapshot(
 /** Validate a synthesised rule we can faithfully export (guards foreign /
  *  partially-mapped payloads read off a snapshot). */
 function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is SynthRule {
-  if (!rule || rule.type !== 'highlightCell') return false;
+  if (!rule) return false;
+  if (rule.type === 'colorScale') {
+    return (
+      Array.isArray(rule.config) &&
+      rule.config.length >= 2 &&
+      rule.config.every((c) => typeof c.color === 'string' && isValueConfig(c.value))
+    );
+  }
+  if (rule.type !== 'highlightCell') return false;
   switch (rule.subType) {
     case 'number':
       return typeof rule.operator === 'string' && rule.value !== undefined;
@@ -390,14 +470,19 @@ function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is S
   }
 }
 
-/** Turn one synthesised highlight-cell rule into the ExcelJS shape that
- *  round-trips back to the same rule. Returns null for shapes ExcelJS can't
- *  faithfully write. */
-function synthRuleToExcel(
-  rule: SynthRule,
-  priority: number,
-  style: Record<string, unknown>,
-): Record<string, unknown> | null {
+/** Turn one synthesised rule into the ExcelJS shape that round-trips back to the
+ *  same rule. Returns null for shapes ExcelJS can't faithfully write. */
+function synthRuleToExcel(rule: SynthRule, priority: number): Record<string, unknown> | null {
+  if (rule.type === 'colorScale') {
+    const ordered = [...rule.config].sort((a, b) => a.index - b.index);
+    return {
+      type: 'colorScale',
+      priority,
+      cfvo: ordered.map((c) => valueConfigToCfvo(c.value)),
+      color: ordered.map((c) => ({ argb: toArgb(c.color) })),
+    };
+  }
+  const style = cfStyleToDxf(rule.style);
   switch (rule.subType) {
     case 'number': {
       const formulae = Array.isArray(rule.value) ? rule.value.map(String) : [String(rule.value)];
@@ -451,8 +536,7 @@ export function applyConditionalFormattingToXlsxWorksheet(
     const ref = entry.ranges.map(iRangeToStr).join(' ');
     if (!ref) return;
     if (!isExportableSynthRule(entry.rule)) return;
-    const style = cfStyleToDxf(entry.rule.style);
-    const exceljsRule = synthRuleToExcel(entry.rule, i + 1, style);
+    const exceljsRule = synthRuleToExcel(entry.rule, i + 1);
     if (!exceljsRule) return;
     try {
       ws.addConditionalFormatting({ ref, rules: [exceljsRule] });
