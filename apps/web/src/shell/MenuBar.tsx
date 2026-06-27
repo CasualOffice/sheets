@@ -709,9 +709,11 @@ export function MenuBar() {
         e.preventDefault();
         if (api) (e.shiftKey ? unhideSelectedColumns : hideSelectedColumns)(api);
       }
-      // ── Insert Table: Ctrl+L ─────────────────────────────────────
-      // Browser default focuses the URL bar — preventDefault overrides.
-      if (mod && !e.altKey && !e.shiftKey && k === 'l') {
+      // ── Insert Table: Ctrl+T / Ctrl+L ────────────────────────────
+      // Excel binds Ctrl+T (and Ctrl+L) to "create table"; we honour both.
+      // Browser defaults (Ctrl+T new tab, Ctrl+L URL bar) are overridden by
+      // preventDefault where the browser allows it (always in the desktop app).
+      if (mod && !e.altKey && !e.shiftKey && (k === 'l' || k === 't')) {
         if (inTextInput) return;
         e.preventDefault();
         if (api) void insertTable(api);
@@ -1875,7 +1877,7 @@ export function MenuBar() {
           id: 'insert-table',
           label: 'Table',
           icon: 'table_rows',
-          shortcut: 'Ctrl+L',
+          shortcut: 'Ctrl+T',
           run: insertTable,
         },
         {

@@ -30,7 +30,9 @@ import { mainCanvas, waitForUniver } from './_helpers';
 async function setup(page: Page) {
   await page.goto('/');
   await waitForUniver(page);
-  await mainCanvas(page).first().click({ position: { x: 200, y: 200 } });
+  await mainCanvas(page)
+    .first()
+    .click({ position: { x: 200, y: 200 } });
 }
 
 async function activeCellValue(page: Page) {
@@ -77,10 +79,13 @@ async function dispatchShortcut(
 // ─────────────────────────────────────────────────────────────────────────
 
 test.describe('Frequently used', () => {
-  test('Ctrl+G — Go to specific cell (Name Box focus or Go To dialog)', async ({ page }) => {
+  test('Ctrl+G — opens Go To Special', async ({ page }) => {
+    // Excel's Ctrl+G is Go To, whose dialog carries the "Special" options.
+    // The Name Box already covers reference/named-range jumps, so Ctrl+G opens
+    // Go To Special here (see MenuBar keydown + go-to-special).
     await setup(page);
     await page.keyboard.press('Control+g');
-    await expect(page.getByTestId('name-box')).toBeFocused();
+    await expect(page.getByTestId('go-to-special-dialog')).toBeVisible();
   });
 
   test('Ctrl+P — opens print/page-setup dialog', async ({ page }) => {
@@ -170,7 +175,9 @@ test.describe('Frequently used', () => {
   test('Shift+F10 — Open context menu', async ({ page }) => {
     await setup(page);
     await page.keyboard.press('Shift+F10');
-    await expect(page.locator('section.univer-popup:visible').first()).toBeVisible({ timeout: 3_000 });
+    await expect(page.locator('section.univer-popup:visible').first()).toBeVisible({
+      timeout: 3_000,
+    });
   });
 
   test('Alt+Q — Jump to Search/Tell Me', async ({ page }) => {
@@ -231,6 +238,31 @@ test.describe('Editing cells', () => {
     expect(String(v)).toBe('h1');
   });
 
+  test('Ctrl+T — Insert table from selection (Excel alias)', async ({ page }) => {
+    await setup(page);
+    await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      ws.getRange('A1').setValue({ v: 'h1' });
+      ws.getRange('B1').setValue({ v: 'h2' });
+      ws.getRange('A2').setValue({ v: 'a' });
+      ws.getRange('B2').setValue({ v: 'b' });
+      ws.getRange('A1:B2').activate();
+    });
+    await page.keyboard.press('Control+t');
+    // insertTable awaits a lazy plugin load; give it a beat. Same smoke-check
+    // as Ctrl+L — the table command round-trips without disturbing the values.
+    await page.waitForTimeout(750);
+    const v = await page.evaluate(() => {
+      const api = window.__univerAPI!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+      return ws.getRange('A1').getValue();
+    });
+    expect(String(v)).toBe('h1');
+  });
+
   test('Ctrl+Shift+> / Ctrl+Shift+< — adjust font size', async ({ page }) => {
     await setup(page);
     await page.evaluate(() => {
@@ -249,9 +281,7 @@ test.describe('Editing cells', () => {
         const ws: any = wb.getActiveSheet();
         const cell = ws.getRange(0, 0).getCellData();
         const style =
-          typeof cell?.s === 'string'
-            ? wb.getWorkbook().getStyles().get(cell.s)
-            : cell?.s;
+          typeof cell?.s === 'string' ? wb.getWorkbook().getStyles().get(cell.s) : cell?.s;
         return typeof style?.fs === 'number' ? style.fs : 11;
       });
     await page.keyboard.press('Control+Shift+>');
@@ -487,9 +517,7 @@ test.describe('Formatting cells', () => {
       const ws: any = wb.getActiveSheet();
       const cell = ws.getRange('B2').getCellData();
       const style =
-        typeof cell?.s === 'string'
-          ? wb.getWorkbook().getStyles().get(cell.s)
-          : cell?.s;
+        typeof cell?.s === 'string' ? wb.getWorkbook().getStyles().get(cell.s) : cell?.s;
       return Boolean(style?.bd?.t || style?.bd?.l);
     });
     expect(hasBorder).toBe(true);
@@ -583,10 +611,14 @@ test.describe('Movement & scrolling', () => {
 
   test('Shift+F11 — insert new sheet', async ({ page }) => {
     await setup(page);
-    const before = await page.evaluate(() => window.__univerAPI!.getActiveWorkbook()!.getSheets().length);
+    const before = await page.evaluate(
+      () => window.__univerAPI!.getActiveWorkbook()!.getSheets().length,
+    );
     await page.keyboard.press('Shift+F11');
     await page.waitForTimeout(150);
-    const after = await page.evaluate(() => window.__univerAPI!.getActiveWorkbook()!.getSheets().length);
+    const after = await page.evaluate(
+      () => window.__univerAPI!.getActiveWorkbook()!.getSheets().length,
+    );
     expect(after).toBe(before + 1);
   });
 
