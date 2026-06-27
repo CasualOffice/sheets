@@ -301,13 +301,14 @@ export function hideSelectedRows(api: FUniver) {
   if (!wb || !sheet || !range) return;
   const startRow = range.getRow();
   const endRow = startRow + range.getHeight() - 1;
-  const maxCol =
-    (sheet as unknown as { getMaxColumns?: () => number }).getMaxColumns?.() ?? 1;
+  const maxCol = (sheet as unknown as { getMaxColumns?: () => number }).getMaxColumns?.() ?? 1;
   api.executeCommand('sheet.command.set-rows-hidden', {
     unitId: wb.getId(),
     subUnitId: sheet.getSheetId(),
     // rangeType: 1 === RANGE_TYPE.ROW
-    ranges: [{ startRow, endRow, startColumn: 0, endColumn: Math.max(0, maxCol - 1), rangeType: 1 }],
+    ranges: [
+      { startRow, endRow, startColumn: 0, endColumn: Math.max(0, maxCol - 1), rangeType: 1 },
+    ],
   });
 }
 
@@ -318,12 +319,13 @@ export function unhideSelectedRows(api: FUniver) {
   if (!wb || !sheet || !range) return;
   const startRow = range.getRow();
   const endRow = startRow + range.getHeight() - 1;
-  const maxCol =
-    (sheet as unknown as { getMaxColumns?: () => number }).getMaxColumns?.() ?? 1;
+  const maxCol = (sheet as unknown as { getMaxColumns?: () => number }).getMaxColumns?.() ?? 1;
   api.executeCommand('sheet.command.set-specific-rows-visible', {
     unitId: wb.getId(),
     subUnitId: sheet.getSheetId(),
-    ranges: [{ startRow, endRow, startColumn: 0, endColumn: Math.max(0, maxCol - 1), rangeType: 1 }],
+    ranges: [
+      { startRow, endRow, startColumn: 0, endColumn: Math.max(0, maxCol - 1), rangeType: 1 },
+    ],
   });
 }
 
@@ -357,13 +359,14 @@ export function hideSelectedColumns(api: FUniver) {
   if (!wb || !sheet || !range) return;
   const startColumn = range.getColumn();
   const endColumn = startColumn + range.getWidth() - 1;
-  const maxRow =
-    (sheet as unknown as { getMaxRows?: () => number }).getMaxRows?.() ?? 1;
+  const maxRow = (sheet as unknown as { getMaxRows?: () => number }).getMaxRows?.() ?? 1;
   api.executeCommand('sheet.command.set-col-hidden', {
     unitId: wb.getId(),
     subUnitId: sheet.getSheetId(),
     // rangeType: 2 === RANGE_TYPE.COLUMN
-    ranges: [{ startRow: 0, endRow: Math.max(0, maxRow - 1), startColumn, endColumn, rangeType: 2 }],
+    ranges: [
+      { startRow: 0, endRow: Math.max(0, maxRow - 1), startColumn, endColumn, rangeType: 2 },
+    ],
   });
 }
 
@@ -374,8 +377,7 @@ export function unhideSelectedColumns(api: FUniver) {
   if (!wb || !sheet || !range) return;
   const startColumn = range.getColumn();
   const endColumn = startColumn + range.getWidth() - 1;
-  const maxRow =
-    (sheet as unknown as { getMaxRows?: () => number }).getMaxRows?.() ?? 1;
+  const maxRow = (sheet as unknown as { getMaxRows?: () => number }).getMaxRows?.() ?? 1;
   // Univer's "show specific cols" command id is `set-col-visible-on-cols`
   // (asymmetric with the row variant `set-specific-rows-visible`). Using
   // the wrong id silently no-ops the unhide. Verified against
@@ -383,7 +385,9 @@ export function unhideSelectedColumns(api: FUniver) {
   api.executeCommand('sheet.command.set-col-visible-on-cols', {
     unitId: wb.getId(),
     subUnitId: sheet.getSheetId(),
-    ranges: [{ startRow: 0, endRow: Math.max(0, maxRow - 1), startColumn, endColumn, rangeType: 2 }],
+    ranges: [
+      { startRow: 0, endRow: Math.max(0, maxRow - 1), startColumn, endColumn, rangeType: 2 },
+    ],
   });
 }
 
@@ -683,13 +687,19 @@ export async function formatAsTable(api: FUniver, themeId?: TableThemeId) {
     const result = fws.addTable(name, bounds, id, options);
 
     const after = () => {
+      // Auto-fit the table's columns to their content — but only for small /
+      // medium tables. setColumnAutoWidth measures (font-shapes) every cell in
+      // the range, which is O(rows×cols): on a 21k-row table that's ~10s of pure
+      // text measurement. Excel doesn't auto-fit on "Format as Table" anyway, so
+      // for large ranges keep the imported widths instead of freezing the UI.
+      const AUTO_WIDTH_CELL_CAP = 20_000;
+      const cells =
+        (bounds.endRow - bounds.startRow + 1) * (bounds.endColumn - bounds.startColumn + 1);
+      if (cells > AUTO_WIDTH_CELL_CAP) return;
       const sheetAny = sheet as unknown as {
         setColumnAutoWidth?: (col: number, n: number) => unknown;
       };
-      sheetAny.setColumnAutoWidth?.(
-        bounds.startColumn,
-        bounds.endColumn - bounds.startColumn + 1,
-      );
+      sheetAny.setColumnAutoWidth?.(bounds.startColumn, bounds.endColumn - bounds.startColumn + 1);
     };
     if (result && typeof (result as Promise<boolean>).then === 'function') {
       await (result as Promise<boolean>).then(after).catch(() => {});
