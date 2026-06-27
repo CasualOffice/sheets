@@ -401,3 +401,82 @@ test('color-scale CF survives round-trip and paints a value-mapped gradient on o
   });
   expect(a8).toBe('rgb(99,190,123)');
 });
+
+test('icon-set CF survives round-trip and paints the right icon per band on open', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 8; r++) ws.getCell(`A${r}`).value = r * 10;
+  // 3 traffic lights with absolute thresholds: >=67 top, >=33 mid, else bottom.
+  ws.addConditionalFormatting({
+    ref: 'A1:A8',
+    rules: [
+      {
+        type: 'iconSet',
+        priority: 1,
+        iconSet: '3TrafficLights1',
+        cfvo: [
+          { type: 'num', value: 0 },
+          { type: 'num', value: 33 },
+          { type: 'num', value: 67 },
+        ],
+      },
+    ],
+  });
+  const bytes = Array.from(new Uint8Array((await wb.xlsx.writeBuffer()) as ArrayBuffer));
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  // Resource round-trips.
+  const round = await page.evaluate(
+    async ({ buf, resKey }: { buf: number[]; resKey: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const xlsx = await import(/* @vite-ignore */ '/src/xlsx/index.ts' as any);
+      const imported = await xlsx.xlsxToWorkbookData(new Uint8Array(buf).buffer);
+      const blob = await xlsx.workbookDataToXlsx(imported);
+      const re = await xlsx.xlsxToWorkbookData(await blob.arrayBuffer());
+      const entry = (re.resources ?? []).find((r: { name: string }) => r.name === resKey);
+      const parsed = JSON.parse(entry.data);
+      const rule = parsed[Object.keys(parsed)[0]][0].rule;
+      return { type: rule.type, bands: rule.config.length, topIcon: rule.config[0].iconId };
+    },
+    { buf: bytes, resKey: CF_RESOURCE },
+  );
+  expect(round).toEqual({ type: 'iconSet', bands: 3, topIcon: '0' });
+
+  // Open and assert the painted icon per band, no interaction.
+  const fixture = '/tmp/casual-sheets-cf-iconset.xlsx';
+  const fs = await import('node:fs');
+  fs.writeFileSync(fixture, Buffer.from(bytes));
+
+  await page.getByTestId('menubar-file').click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByTestId('menu-item-open').click(),
+  ]);
+  await chooser.setFiles(fixture);
+
+  // A8 (=80, >=67) → top icon (iconId '0').
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const s = window.__composeCfStyle__?.(7, 0);
+          return (s?.iconSet?.iconId ?? null) as string | null;
+        }),
+      { timeout: 10_000, message: 'A8 should compose the top icon on open' },
+    )
+    .toBe('0');
+
+  // A1 (=10, < 33) → bottom icon (iconId '2'); A5 (=50, [33,67)) → mid (iconId '1').
+  const [a1, a5] = await page.evaluate(() => [
+    window.__composeCfStyle__?.(0, 0)?.iconSet?.iconId ?? null,
+    window.__composeCfStyle__?.(4, 0)?.iconSet?.iconId ?? null,
+  ]);
+  expect(a1).toBe('2');
+  expect(a5).toBe('1');
+});

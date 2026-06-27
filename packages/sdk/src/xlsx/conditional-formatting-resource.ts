@@ -22,18 +22,20 @@ import type { IRange, IWorkbookData } from '@univerjs/core';
  *   - `timePeriod` ← ExcelJS `timePeriod` (today / last7Days / thisMonth / …)
  *   - `text`     ← ExcelJS `containsText` (operators: containsText, plus the
  *                  no-value blanks/errors operators)
- * each with the rule's fill / font style; plus the visual rule type
+ * each with the rule's fill / font style; plus the visual rule types
  *   - `colorScale` ← ExcelJS `colorScale` (value-mapped gradient stops)
- * which has no fill/font style.
+ *   - `iconSet`    ← ExcelJS `iconSet` (named icon group + threshold bands)
+ * which have no fill/font style. (A colorScale/iconSet using a `formula`
+ * threshold is dropped — ExcelJS floatifies a cfvo value on read, destroying
+ * the formula text.)
  *
  * Deliberately NOT mapped (ExcelJS itself can't round-trip them, so they'd be
  * silently lost rather than preserved — see the bridge tests): the text
  * `beginsWith` / `endsWith` / `notContainsText` operators (ExcelJS drops their
  * search text), `duplicateValues` / `uniqueValues` (ExcelJS drops the rule
- * entirely), `dataBar` (ExcelJS surfaces the bar via its x14 extension on read
- * without the fill colour, so it can't round-trip), and `iconSet` (pending —
- * needs the OOXML-vs-Univer icon-ordering mapping). Unmapped rules are skipped,
- * never corrupted.
+ * entirely), and `dataBar` (ExcelJS surfaces the bar via its x14 extension on
+ * read without the fill colour, so it can't round-trip). Unmapped rules are
+ * skipped, never corrupted.
  */
 
 export const CONDITIONAL_FORMATTING_RESOURCE = 'SHEET_CONDITIONAL_FORMATTING_PLUGIN';
@@ -79,18 +81,20 @@ const TIME_PERIODS = new Set([
 
 // ExcelJS color-scale / data-bar / icon-set thresholds (`cfvo`) carry a type +
 // optional value. Univer's CFValueType is the same set minus ExcelJS's
-// auto-min/max (which collapse to plain min/max).
+// auto-min/max (which collapse to plain min/max). `formula` is intentionally
+// absent: ExcelJS parses a cfvo's `val` with parseFloat on read, so a formula
+// threshold's text is destroyed (becomes NaN) — it can't round-trip, so a rule
+// using one is dropped rather than emitted with a corrupt "NaN" stop.
 const CFVO_TYPE_TO_UNIVER: Record<string, string> = {
   num: 'num',
   percent: 'percent',
   percentile: 'percentile',
   min: 'min',
   max: 'max',
-  formula: 'formula',
   autoMin: 'min',
   autoMax: 'max',
 };
-const UNIVER_VALUE_TYPES = new Set(['num', 'percent', 'percentile', 'min', 'max', 'formula']);
+const UNIVER_VALUE_TYPES = new Set(['num', 'percent', 'percentile', 'min', 'max']);
 
 /** A Univer IValueConfig — a conditional-formatting threshold stop. */
 interface CfValueConfig {
@@ -104,7 +108,6 @@ function cfvoToValueConfig(cfvo: unknown): CfValueConfig | null {
   const type = c?.type ? CFVO_TYPE_TO_UNIVER[c.type] : undefined;
   if (!type) return null;
   if (type === 'min' || type === 'max') return { type };
-  if (type === 'formula') return { type, value: String(c.value ?? '') };
   const n = Number(c.value);
   if (Number.isNaN(n)) return null;
   return { type, value: n };
@@ -113,7 +116,6 @@ function cfvoToValueConfig(cfvo: unknown): CfValueConfig | null {
 /** Univer IValueConfig → ExcelJS `cfvo` entry. */
 function valueConfigToCfvo(vc: CfValueConfig): Record<string, unknown> {
   if (vc.type === 'min' || vc.type === 'max') return { type: vc.type };
-  if (vc.type === 'formula') return { type: 'formula', value: String(vc.value ?? '') };
   return { type: vc.type, value: Number(vc.value) || 0 };
 }
 
@@ -121,6 +123,32 @@ function isValueConfig(v: unknown): v is CfValueConfig {
   const c = v as CfValueConfig;
   return !!c && typeof c.type === 'string' && UNIVER_VALUE_TYPES.has(c.type);
 }
+
+// Icon-set names we round-trip: the standard ECMA-376 `ST_IconSetType` values,
+// which are exactly Univer's IIconSetType minus its non-OOXML extras. The three
+// Excel-2010 x14 sets (`3Triangles` / `3Stars` / `5Boxes`) are excluded — ExcelJS
+// treats them as non-primitive and its base `<iconSet>` writer drops them (they
+// belong in an x14 extension it doesn't emit), so claiming them would lose the
+// rule on save. Such a rule is skipped instead.
+const ICON_SET_TYPES = new Set([
+  '3Arrows',
+  '3ArrowsGray',
+  '4Arrows',
+  '4ArrowsGray',
+  '5Arrows',
+  '5ArrowsGray',
+  '3TrafficLights1',
+  '3TrafficLights2',
+  '3Signs',
+  '4RedToBlack',
+  '4TrafficLights',
+  '3Symbols',
+  '3Symbols2',
+  '3Flags',
+  '4Rating',
+  '5Rating',
+  '5Quarters',
+]);
 
 interface CfStyle {
   bg?: { rgb: string };
@@ -155,7 +183,14 @@ type SynthRule =
   | { type: 'highlightCell'; subType: 'timePeriod'; operator: string; style: CfStyle }
   // Visual rule. colorScale has no fill/font style — it paints a value-mapped
   // gradient; `config` is the ordered list of gradient stops.
-  | { type: 'colorScale'; config: Array<{ index: number; color: string; value: CfValueConfig }> };
+  | { type: 'colorScale'; config: Array<{ index: number; color: string; value: CfValueConfig }> }
+  // Visual rule. iconSet paints a per-cell icon. `config` is Univer-ordered
+  // (descending: config[0] = highest band, iconId '0'); no fill/font style.
+  | {
+      type: 'iconSet';
+      isShowValue: boolean;
+      config: Array<{ operator: string; value: CfValueConfig; iconType: string; iconId: string }>;
+    };
 
 interface SynthCfRule {
   cfId: string;
@@ -269,6 +304,9 @@ function excelRuleToSynthRule(raw: unknown): SynthRule | null {
     formulae?: unknown[];
     cfvo?: unknown[];
     color?: unknown[];
+    iconSet?: string;
+    reverse?: boolean;
+    showValue?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     style?: any;
   };
@@ -356,6 +394,34 @@ function excelRuleToSynthRule(raw: unknown): SynthRule | null {
       config.push({ index: i, color, value });
     }
     return { type: 'colorScale', config };
+  }
+
+  // Icon set: a named icon group + `cfvo` threshold stops (ascending in OOXML).
+  // Univer keeps the bands DESCENDING (config[0] = highest), iconId = position
+  // in the icon group. `reverse` flips which icon maps to which band.
+  if (
+    r.type === 'iconSet' &&
+    typeof r.iconSet === 'string' &&
+    ICON_SET_TYPES.has(r.iconSet) &&
+    Array.isArray(r.cfvo)
+  ) {
+    const n = r.cfvo.length;
+    if (n < 2) return null;
+    const stops = r.cfvo.map(cfvoToValueConfig);
+    if (stops.some((s) => !s)) return null; // a formula/garbled threshold — skip
+    const reverse = r.reverse === true;
+    const config = stops.map((_stop, i) => {
+      const last = i === n - 1;
+      return {
+        // Non-last bands use >= their stop; the last band is the unconditional
+        // fallback (Univer renders it regardless), mirroring the canonical shape.
+        operator: last ? 'lessThanOrEqual' : 'greaterThanOrEqual',
+        value: stops[n - 1 - i]!, // invert ascending cfvo → descending bands
+        iconType: r.iconSet!,
+        iconId: String(reverse ? n - 1 - i : i),
+      };
+    });
+    return { type: 'iconSet', isShowValue: r.showValue !== false, config };
   }
 
   return null;
@@ -449,6 +515,20 @@ function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is S
       rule.config.every((c) => typeof c.color === 'string' && isValueConfig(c.value))
     );
   }
+  if (rule.type === 'iconSet') {
+    return (
+      Array.isArray(rule.config) &&
+      rule.config.length >= 2 &&
+      rule.config.every(
+        (c) =>
+          typeof c.iconType === 'string' &&
+          ICON_SET_TYPES.has(c.iconType) &&
+          typeof c.iconId === 'string' &&
+          typeof c.operator === 'string' &&
+          isValueConfig(c.value),
+      )
+    );
+  }
   if (rule.type !== 'highlightCell') return false;
   switch (rule.subType) {
     case 'number':
@@ -480,6 +560,21 @@ function synthRuleToExcel(rule: SynthRule, priority: number): Record<string, unk
       priority,
       cfvo: ordered.map((c) => valueConfigToCfvo(c.value)),
       color: ordered.map((c) => ({ argb: toArgb(c.color) })),
+    };
+  }
+  if (rule.type === 'iconSet') {
+    const n = rule.config.length;
+    // OOXML cfvo is ascending; Univer config is descending → reverse back.
+    const cfvo = rule.config.map((_c, j) => valueConfigToCfvo(rule.config[n - 1 - j].value));
+    // A non-'0' first iconId means the import inverted the icon order (reverse).
+    const reverse = rule.config[0]?.iconId !== '0';
+    return {
+      type: 'iconSet',
+      iconSet: rule.config[0].iconType,
+      cfvo,
+      showValue: rule.isShowValue,
+      reverse,
+      priority,
     };
   }
   const style = cfStyleToDxf(rule.style);

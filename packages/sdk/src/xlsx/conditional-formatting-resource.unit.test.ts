@@ -161,6 +161,99 @@ test('colorScale maps cfvo + color to ordered gradient stops', async () => {
   ]);
 });
 
+test('iconSet maps to descending bands (config[0] = highest, iconId 0)', async () => {
+  const out = await roundTrip([
+    {
+      type: 'iconSet',
+      priority: 1,
+      iconSet: '3TrafficLights1',
+      cfvo: [
+        { type: 'percent', value: 0 },
+        { type: 'percent', value: 33 },
+        { type: 'percent', value: 67 },
+      ],
+    },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].type, 'iconSet');
+  // Univer order is descending: highest band first, iconId 0 → top icon.
+  assert.deepEqual((out[0] as { config: unknown }).config, [
+    {
+      operator: 'greaterThanOrEqual',
+      value: { type: 'percent', value: 67 },
+      iconType: '3TrafficLights1',
+      iconId: '0',
+    },
+    {
+      operator: 'greaterThanOrEqual',
+      value: { type: 'percent', value: 33 },
+      iconType: '3TrafficLights1',
+      iconId: '1',
+    },
+    {
+      operator: 'lessThanOrEqual',
+      value: { type: 'percent', value: 0 },
+      iconType: '3TrafficLights1',
+      iconId: '2',
+    },
+  ]);
+});
+
+test('iconSet reverse flips icon assignment and round-trips', async () => {
+  const out = await roundTrip([
+    {
+      type: 'iconSet',
+      priority: 1,
+      iconSet: '3Arrows',
+      reverse: true,
+      cfvo: [
+        { type: 'percent', value: 0 },
+        { type: 'percent', value: 33 },
+        { type: 'percent', value: 67 },
+      ],
+    },
+  ]);
+  // Reversed: the highest band (config[0]) gets the LAST icon.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cfg = (out[0] as any).config;
+  assert.equal(cfg[0].iconId, '2');
+  assert.equal(cfg[2].iconId, '0');
+  assert.equal(cfg[0].iconType, '3Arrows');
+});
+
+test('unknown and x14-only icon-set names are skipped', async () => {
+  // `NoIcons` is value-less; `3Stars` is an Excel-2010 x14 set ExcelJS can't
+  // write via the base element — both are dropped rather than corrupting save.
+  for (const iconSet of ['NoIcons', '3Stars']) {
+    const out = await roundTrip([
+      {
+        type: 'iconSet',
+        priority: 1,
+        iconSet,
+        cfvo: [
+          { type: 'percent', value: 0 },
+          { type: 'percent', value: 50 },
+        ],
+      },
+    ]);
+    assert.equal(out.length, 0, `${iconSet} should be skipped`);
+  }
+});
+
+test('colorScale with a formula threshold is dropped (ExcelJS floatifies cfvo val)', async () => {
+  const out = await roundTrip([
+    {
+      type: 'colorScale',
+      priority: 1,
+      cfvo: [{ type: 'min' }, { type: 'formula', value: '=A1*2' }, { type: 'max' }],
+      color: [{ argb: 'FFF8696B' }, { argb: 'FFFFEB84' }, { argb: 'FF63BE7B' }],
+    },
+  ]);
+  // The formula stop can't round-trip, so the whole rule is skipped rather than
+  // emitted with a corrupt "NaN" threshold.
+  assert.equal(out.length, 0);
+});
+
 test('a foreign rule with no style does not throw the export', async () => {
   // A resource payload from another tool / future version may omit `style`.
   // Export must tolerate it (cfStyleToDxf guards null) rather than aborting save.
