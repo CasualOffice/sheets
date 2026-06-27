@@ -12,6 +12,11 @@ import {
   captureDrawingsFromBuffer,
   type DrawingPassthroughPayload,
 } from './drawing-passthrough';
+import {
+  applyExternalLinksToZip,
+  captureExternalLinksFromBuffer,
+  type ExternalLinkPassthroughPayload,
+} from './external-link-passthrough';
 
 /**
  * Sidecar resource that carries raw OOXML parts ExcelJS silently drops.
@@ -44,6 +49,9 @@ export type XlsxPassthroughPayload = {
   /** embedded images / shapes (xl/media + xl/drawings) — Univer has no drawing
    *  model so they'd be dropped on save; see drawing-passthrough.ts */
   drawings?: DrawingPassthroughPayload;
+  /** external-workbook links (xl/externalLinks) — ExcelJS drops them, breaking
+   *  `[N]Sheet!A1` formulas; see external-link-passthrough.ts */
+  externalLinks?: ExternalLinkPassthroughPayload;
 };
 
 const VBA_REL_TYPE = 'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
@@ -83,9 +91,10 @@ export async function capturePassthroughFromBuffer(
   // files and the symmetry with VBA is more important.
   const pivots = await capturePivotsFromBuffer(buffer);
   const drawings = await captureDrawingsFromBuffer(buffer);
+  const externalLinks = await captureExternalLinksFromBuffer(buffer);
 
-  if (!vba && !pivots && !drawings) return undefined;
-  return { vba, pivots, drawings };
+  if (!vba && !pivots && !drawings && !externalLinks) return undefined;
+  return { vba, pivots, drawings, externalLinks };
 }
 
 export function mergePassthroughIntoResources(
@@ -127,7 +136,16 @@ export async function applyPassthroughToXlsxBuffer(
   const hasDataBars = payload?.dataBars && Object.keys(payload.dataBars).length > 0;
   const hasDxfCf = payload?.dxfCfRules && Object.keys(payload.dxfCfRules).length > 0;
   const hasDrawings = payload?.drawings && Object.keys(payload.drawings.parts).length > 0;
-  if (!payload?.vba && !payload?.pivots && !hasDataBars && !hasDxfCf && !hasDrawings) {
+  const hasExternalLinks =
+    payload?.externalLinks && Object.keys(payload.externalLinks.parts).length > 0;
+  if (
+    !payload?.vba &&
+    !payload?.pivots &&
+    !hasDataBars &&
+    !hasDxfCf &&
+    !hasDrawings &&
+    !hasExternalLinks
+  ) {
     if (excelJsBuffer instanceof ArrayBuffer) return excelJsBuffer;
     return excelJsBuffer.buffer.slice(
       excelJsBuffer.byteOffset,
@@ -142,6 +160,7 @@ export async function applyPassthroughToXlsxBuffer(
   if (payload.dataBars) await applyDataBarsToZip(zip, payload.dataBars);
   if (payload.dxfCfRules) await applyDxfCfRulesToZip(zip, payload.dxfCfRules);
   if (payload.drawings) await applyDrawingsToZip(zip, payload.drawings);
+  if (payload.externalLinks) await applyExternalLinksToZip(zip, payload.externalLinks);
 
   return zip.generateAsync({ type: 'arraybuffer' });
 }
