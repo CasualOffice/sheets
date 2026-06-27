@@ -94,6 +94,101 @@ test('conditional formatting highlight rules survive import + round-trip', async
   expect(out.round).toEqual(expected);
 });
 
+test('rank / average / time-period / text CF rules survive import + round-trip', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 8; r++) {
+    ws.getCell(`A${r}`).value = r * 10;
+    ws.getCell(`B${r}`).value = `item${r}`;
+    ws.getCell(`C${r}`).value = new Date(2026, 0, r);
+  }
+  const fill = {
+    fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF00' } },
+  } as const;
+  ws.addConditionalFormatting({
+    ref: 'A1:A8',
+    rules: [
+      { type: 'top10', rank: 3, percent: false, bottom: false, priority: 1, style: fill },
+      { type: 'aboveAverage', aboveAverage: true, priority: 2, style: fill },
+      { type: 'aboveAverage', aboveAverage: false, priority: 3, style: fill },
+    ],
+  });
+  ws.addConditionalFormatting({
+    ref: 'C1:C8',
+    rules: [{ type: 'timePeriod', timePeriod: 'lastWeek', priority: 4, style: fill }],
+  });
+  ws.addConditionalFormatting({
+    ref: 'B1:B8',
+    rules: [
+      { type: 'containsText', operator: 'containsText', text: 'item', priority: 5, style: fill },
+      { type: 'containsText', operator: 'containsBlanks', priority: 6, style: fill },
+    ],
+  });
+  const bytes = Array.from(new Uint8Array((await wb.xlsx.writeBuffer()) as ArrayBuffer));
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  const out = await page.evaluate(
+    async ({ buf, resKey }: { buf: number[]; resKey: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const xlsx = await import(/* @vite-ignore */ '/src/xlsx/index.ts' as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rulesOf = (data: any) => {
+        const entry = (data.resources ?? []).find((r: { name: string }) => r.name === resKey);
+        if (!entry?.data) return [];
+        const parsed = JSON.parse(entry.data);
+        // Flatten across all sheets, in rule order.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return Object.values(parsed).flatMap((arr: any) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (arr ?? []).map((x: any) => ({
+            subType: x.rule?.subType,
+            operator: x.rule?.operator ?? null,
+            value: x.rule?.value ?? null,
+            isBottom: x.rule?.isBottom ?? null,
+            isPercent: x.rule?.isPercent ?? null,
+          })),
+        );
+      };
+      const imported = await xlsx.xlsxToWorkbookData(new Uint8Array(buf).buffer);
+      const blob = await xlsx.workbookDataToXlsx(imported);
+      const round = await xlsx.xlsxToWorkbookData(await blob.arrayBuffer());
+      return { imported: rulesOf(imported), round: rulesOf(round) };
+    },
+    { buf: bytes, resKey: CF_RESOURCE },
+  );
+
+  const expected = [
+    { subType: 'rank', operator: null, value: 3, isBottom: false, isPercent: false },
+    { subType: 'average', operator: 'greaterThan', value: null, isBottom: null, isPercent: null },
+    { subType: 'average', operator: 'lessThan', value: null, isBottom: null, isPercent: null },
+    { subType: 'timePeriod', operator: 'lastWeek', value: null, isBottom: null, isPercent: null },
+    { subType: 'text', operator: 'containsText', value: 'item', isBottom: null, isPercent: null },
+    {
+      subType: 'text',
+      operator: 'containsBlanks',
+      value: null,
+      isBottom: null,
+      isPercent: null,
+    },
+  ];
+  // Order is grouped by sheet-ref insertion; compare as sets to stay robust.
+  expect([...out.imported].sort(byKey)).toEqual([...expected].sort(byKey));
+  expect([...out.round].sort(byKey)).toEqual([...expected].sort(byKey));
+});
+
+// Stable sort key for order-independent rule comparison.
+function byKey(a: { subType: string; operator: string | null; value: unknown }, b: typeof a) {
+  return `${a.subType}:${a.operator}:${JSON.stringify(a.value)}`.localeCompare(
+    `${b.subType}:${b.operator}:${JSON.stringify(b.value)}`,
+  );
+}
+
 /**
  * Render-on-import: a rule that round-trips in the resource is not enough — it
  * must actually MATCH + PAINT when the file opens. The CF number-rule evaluator
@@ -158,6 +253,67 @@ test('imported conditional formatting paints on open without interaction', async
     .toBe('#ff0000');
 
   // The non-matching cell A1 (row 0, col 0, value 50) composes no CF style.
+  const a1 = await page.evaluate(() => {
+    const s = window.__composeCfStyle__?.(0, 0);
+    return s?.style?.bg?.rgb ?? null;
+  });
+  expect(a1).toBeNull();
+});
+
+/**
+ * Render-on-import for the precomputing rule types (rank / average / text):
+ * these scan the whole range before deciding a cell, a different evaluator path
+ * than the per-cell `number` rule above. A top-3 rank over A1:A8 (10..80) must
+ * paint A8 (=80, in the top 3) and leave A1 (=10) blank — immediately on open.
+ */
+test('imported rank conditional formatting paints on open', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('S');
+  for (let r = 1; r <= 8; r++) ws.getCell(`A${r}`).value = r * 10;
+  ws.addConditionalFormatting({
+    ref: 'A1:A8',
+    rules: [
+      {
+        type: 'top10',
+        rank: 3,
+        percent: false,
+        bottom: false,
+        priority: 1,
+        style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF00FF00' } } },
+      },
+    ],
+  });
+  const bytes = Array.from(new Uint8Array((await wb.xlsx.writeBuffer()) as ArrayBuffer));
+
+  await page.goto('/');
+  await waitForUniver(page);
+
+  const fixture = '/tmp/casual-sheets-cf-rank.xlsx';
+  const fs = await import('node:fs');
+  fs.writeFileSync(fixture, Buffer.from(bytes));
+
+  await page.getByTestId('menubar-file').click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByTestId('menu-item-open').click(),
+  ]);
+  await chooser.setFiles(fixture);
+
+  // A8 (row 7, col 0) = 80 is in the top 3 → green fill, no interaction.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const s = window.__composeCfStyle__?.(7, 0);
+          return (s?.style?.bg?.rgb ?? null) as string | null;
+        }),
+      { timeout: 10_000, message: 'A8 should compose the top-3 rank fill on open' },
+    )
+    .toBe('#00ff00');
+
+  // A1 (=10) is not in the top 3 → no CF style.
   const a1 = await page.evaluate(() => {
     const s = window.__composeCfStyle__?.(0, 0);
     return s?.style?.bg?.rgb ?? null;

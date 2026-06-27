@@ -14,10 +14,22 @@ import type { IRange, IWorkbookData } from '@univerjs/core';
  * file authored in real Excel keeps its highlight rules when opened here, and our
  * save round-trip preserves them.
  *
- * Scope: **highlight-cell** rules — `cellIs` (numeric comparisons) and
- * `expression` (formula) — with the rule's fill / font style. Visual rule types
- * (colorScale, dataBar, iconSet) and text/timePeriod operators are not mapped
- * yet; unmapped rules are skipped, never corrupted.
+ * Scope: **highlight-cell** rules — mapped to Univer's IHighlightCell subtypes:
+ *   - `number`   ← ExcelJS `cellIs` (numeric comparisons)
+ *   - `formula`  ← ExcelJS `expression`
+ *   - `rank`     ← ExcelJS `top10` (top/bottom N, optionally percent)
+ *   - `average`  ← ExcelJS `aboveAverage` (above / below the range mean)
+ *   - `timePeriod` ← ExcelJS `timePeriod` (today / last7Days / thisMonth / …)
+ *   - `text`     ← ExcelJS `containsText` (operators: containsText, plus the
+ *                  no-value blanks/errors operators)
+ * each with the rule's fill / font style.
+ *
+ * Deliberately NOT mapped (ExcelJS itself can't round-trip them, so they'd be
+ * silently lost rather than preserved — see the bridge tests): the text
+ * `beginsWith` / `endsWith` / `notContainsText` operators (ExcelJS drops their
+ * search text), `duplicateValues` / `uniqueValues` (ExcelJS drops the rule
+ * entirely), and the visual rule types `colorScale` / `dataBar` / `iconSet`.
+ * Unmapped rules are skipped, never corrupted.
  */
 
 export const CONDITIONAL_FORMATTING_RESOURCE = 'SHEET_CONDITIONAL_FORMATTING_PLUGIN';
@@ -35,6 +47,32 @@ const NUMBER_OPERATORS = new Set([
   'notEqual',
 ]);
 
+// ExcelJS `containsText` operators we preserve. `containsText` carries a search
+// string (recovered from its formula); the rest are value-less predicates.
+// `beginsWith` / `endsWith` / `notContainsText` are intentionally absent —
+// ExcelJS drops their search text on round-trip, leaving a meaningless rule.
+const TEXT_VALUE_OPERATOR = 'containsText';
+const TEXT_VALUELESS_OPERATORS = new Set([
+  'containsBlanks',
+  'notContainsBlanks',
+  'containsErrors',
+  'notContainsErrors',
+]);
+
+// ExcelJS `timePeriod` values map verbatim to Univer's CFTimePeriodOperator.
+const TIME_PERIODS = new Set([
+  'today',
+  'yesterday',
+  'tomorrow',
+  'last7Days',
+  'thisMonth',
+  'lastMonth',
+  'nextMonth',
+  'thisWeek',
+  'lastWeek',
+  'nextWeek',
+]);
+
 interface CfStyle {
   bg?: { rgb: string };
   cl?: { rgb: string };
@@ -43,18 +81,35 @@ interface CfStyle {
   st?: { s: number };
 }
 
+// `rule` mirrors Univer's IHighlightCell subtypes. A discriminated union keeps
+// each subtype's required fields honest both when synthesising from xlsx and
+// when reading back off a snapshot for export.
+type SynthRule =
+  | {
+      type: 'highlightCell';
+      subType: 'number';
+      operator: string;
+      value: number | [number, number];
+      style: CfStyle;
+    }
+  | { type: 'highlightCell'; subType: 'formula'; value: string; style: CfStyle }
+  | { type: 'highlightCell'; subType: 'text'; operator: string; value?: string; style: CfStyle }
+  | {
+      type: 'highlightCell';
+      subType: 'rank';
+      isBottom: boolean;
+      isPercent: boolean;
+      value: number;
+      style: CfStyle;
+    }
+  | { type: 'highlightCell'; subType: 'average'; operator: string; style: CfStyle }
+  | { type: 'highlightCell'; subType: 'timePeriod'; operator: string; style: CfStyle };
+
 interface SynthCfRule {
   cfId: string;
   ranges: IRange[];
   stopIfTrue: boolean;
-  // `rule` mirrors Univer's IHighlightCell (number/formula subtypes only here).
-  rule: {
-    type: 'highlightCell';
-    subType: 'number' | 'formula';
-    operator?: string;
-    value?: number | [number, number] | string;
-    style: CfStyle;
-  };
+  rule: SynthRule;
 }
 
 function lettersToCol(letters: string): number {
@@ -134,6 +189,106 @@ function cfStyleToDxf(style: CfStyle): Record<string, unknown> {
   return out;
 }
 
+/** Recover a `containsText` rule's search string from its formula. ExcelJS drops
+ *  the `text` attribute on read, leaving only the formula it (and Excel) emit:
+ *  `NOT(ISERROR(SEARCH("term",A1)))`. Pull the first SEARCH("…") literal,
+ *  un-escaping Excel's doubled quotes. Returns undefined when no match. */
+function containsTextValue(formulae: unknown[]): string | undefined {
+  const f = typeof formulae[0] === 'string' ? formulae[0] : '';
+  const m = /SEARCH\("((?:[^"]|"")*)"/.exec(f);
+  return m ? m[1].replace(/""/g, '"') : undefined;
+}
+
+/** Map one ExcelJS conditional-formatting rule to a Univer highlight-cell rule,
+ *  or null if its type/operator isn't one we preserve (see the module header). */
+function excelRuleToSynthRule(raw: unknown): SynthRule | null {
+  const r = raw as {
+    type?: string;
+    operator?: string;
+    timePeriod?: string;
+    rank?: number;
+    percent?: boolean;
+    bottom?: boolean;
+    aboveAverage?: boolean;
+    text?: string;
+    formulae?: unknown[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    style?: any;
+  };
+  const style = dxfToCfStyle(r.style);
+  const formulae = Array.isArray(r.formulae) ? r.formulae : [];
+
+  if (r.type === 'cellIs' && typeof r.operator === 'string' && NUMBER_OPERATORS.has(r.operator)) {
+    const n0 = Number(formulae[0]);
+    if (Number.isNaN(n0)) return null; // non-numeric cellIs — not a number rule
+    const between = r.operator === 'between' || r.operator === 'notBetween';
+    const n1 = Number(formulae[1]);
+    if (between && Number.isNaN(n1)) return null;
+    return {
+      type: 'highlightCell',
+      subType: 'number',
+      operator: r.operator,
+      value: between ? [n0, n1] : n0,
+      style,
+    };
+  }
+
+  if (r.type === 'expression' && typeof formulae[0] === 'string') {
+    return { type: 'highlightCell', subType: 'formula', value: formulae[0], style };
+  }
+
+  if (r.type === 'top10') {
+    const value = Number(r.rank);
+    if (Number.isNaN(value)) return null;
+    return {
+      type: 'highlightCell',
+      subType: 'rank',
+      isBottom: r.bottom === true,
+      isPercent: r.percent === true,
+      value,
+      style,
+    };
+  }
+
+  if (r.type === 'aboveAverage') {
+    // ExcelJS omits the attribute when above-average (its default), so only an
+    // explicit `false` means below-average.
+    return {
+      type: 'highlightCell',
+      subType: 'average',
+      operator: r.aboveAverage === false ? 'lessThan' : 'greaterThan',
+      style,
+    };
+  }
+
+  if (
+    r.type === 'timePeriod' &&
+    typeof r.timePeriod === 'string' &&
+    TIME_PERIODS.has(r.timePeriod)
+  ) {
+    return { type: 'highlightCell', subType: 'timePeriod', operator: r.timePeriod, style };
+  }
+
+  // ExcelJS folds containsText / blanks / errors under type `containsText`,
+  // discriminated by `operator`. (beginsWith / endsWith / notContainsText keep
+  // their own type and lose their text — we don't map those.)
+  if (r.type === 'containsText' && typeof r.operator === 'string') {
+    if (r.operator === TEXT_VALUE_OPERATOR) {
+      // A loaded xlsx drops the `text` attribute (recover from the formula); an
+      // in-memory ExcelJS rule has `text` but no formula yet. Prefer whichever
+      // is present.
+      const value = typeof r.text === 'string' ? r.text : containsTextValue(formulae);
+      if (value === undefined) return null; // couldn't recover the search text
+      return { type: 'highlightCell', subType: 'text', operator: r.operator, value, style };
+    }
+    if (TEXT_VALUELESS_OPERATORS.has(r.operator)) {
+      return { type: 'highlightCell', subType: 'text', operator: r.operator, style };
+    }
+  }
+
+  return null;
+}
+
 /** Lift every worksheet's conditional formatting into the synthesised plugin shape. */
 export function readConditionalFormattingFromXlsx(
   wb: ExcelJS.Workbook,
@@ -158,47 +313,9 @@ export function readConditionalFormattingFromXlsx(
       if (ranges.length === 0) continue;
 
       for (const raw of cfRules) {
-        const r = raw as {
-          type?: string;
-          operator?: string;
-          formulae?: unknown[];
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          style?: any;
-        };
-        const style = dxfToCfStyle(r.style);
-        const formulae = Array.isArray(r.formulae) ? r.formulae : [];
-        if (
-          r.type === 'cellIs' &&
-          typeof r.operator === 'string' &&
-          NUMBER_OPERATORS.has(r.operator)
-        ) {
-          const n0 = Number(formulae[0]);
-          if (Number.isNaN(n0)) continue; // non-numeric cellIs — not a number rule
-          const between = r.operator === 'between' || r.operator === 'notBetween';
-          const n1 = Number(formulae[1]);
-          if (between && Number.isNaN(n1)) continue;
-          rules.push({
-            cfId: `cf-${seq++}`,
-            ranges,
-            stopIfTrue: false,
-            rule: {
-              type: 'highlightCell',
-              subType: 'number',
-              operator: r.operator,
-              value: between ? [n0, n1] : n0,
-              style,
-            },
-          });
-        } else if (r.type === 'expression' && typeof formulae[0] === 'string') {
-          rules.push({
-            cfId: `cf-${seq++}`,
-            ranges,
-            stopIfTrue: false,
-            rule: { type: 'highlightCell', subType: 'formula', value: formulae[0], style },
-          });
-        }
-        // Other rule types (colorScale / dataBar / iconSet / text / timePeriod)
-        // are intentionally skipped until they're mapped.
+        const rule = excelRuleToSynthRule(raw);
+        if (rule) rules.push({ cfId: `cf-${seq++}`, ranges, stopIfTrue: false, rule });
+        // Unmapped rule types (see the module header) are skipped, not corrupted.
       }
     }
     if (rules.length > 0) out[sheetIdForExcel(ws.id)] = rules;
@@ -237,12 +354,7 @@ export function readConditionalFormattingFromSnapshot(
       const bucket: SynthCfRule[] = [];
       for (const item of value) {
         const obj = item as SynthCfRule;
-        if (
-          obj &&
-          Array.isArray(obj.ranges) &&
-          obj.rule?.type === 'highlightCell' &&
-          (obj.rule.subType === 'number' || obj.rule.subType === 'formula')
-        ) {
+        if (obj && Array.isArray(obj.ranges) && isExportableSynthRule(obj.rule)) {
           bucket.push(obj);
         }
       }
@@ -251,6 +363,80 @@ export function readConditionalFormattingFromSnapshot(
     return out;
   } catch {
     return {};
+  }
+}
+
+/** Validate a synthesised rule we can faithfully export (guards foreign /
+ *  partially-mapped payloads read off a snapshot). */
+function isExportableSynthRule(rule: SynthCfRule['rule'] | undefined): rule is SynthRule {
+  if (!rule || rule.type !== 'highlightCell') return false;
+  switch (rule.subType) {
+    case 'number':
+      return typeof rule.operator === 'string' && rule.value !== undefined;
+    case 'formula':
+      return typeof rule.value === 'string';
+    case 'rank':
+      return typeof rule.value === 'number' && !Number.isNaN(rule.value);
+    case 'average':
+      return typeof rule.operator === 'string';
+    case 'timePeriod':
+      return typeof rule.operator === 'string' && TIME_PERIODS.has(rule.operator);
+    case 'text':
+      return rule.operator === TEXT_VALUE_OPERATOR
+        ? typeof rule.value === 'string'
+        : TEXT_VALUELESS_OPERATORS.has(rule.operator);
+    default:
+      return false;
+  }
+}
+
+/** Turn one synthesised highlight-cell rule into the ExcelJS shape that
+ *  round-trips back to the same rule. Returns null for shapes ExcelJS can't
+ *  faithfully write. */
+function synthRuleToExcel(
+  rule: SynthRule,
+  priority: number,
+  style: Record<string, unknown>,
+): Record<string, unknown> | null {
+  switch (rule.subType) {
+    case 'number': {
+      const formulae = Array.isArray(rule.value) ? rule.value.map(String) : [String(rule.value)];
+      return { type: 'cellIs', operator: rule.operator, formulae, priority, style };
+    }
+    case 'formula':
+      return { type: 'expression', formulae: [String(rule.value)], priority, style };
+    case 'rank':
+      return {
+        type: 'top10',
+        rank: rule.value,
+        percent: rule.isPercent,
+        bottom: rule.isBottom,
+        priority,
+        style,
+      };
+    case 'average':
+      // Univer's average operator is greater/less-than the mean; ExcelJS models
+      // it as the boolean `aboveAverage`.
+      return {
+        type: 'aboveAverage',
+        aboveAverage: rule.operator === 'greaterThan' || rule.operator === 'greaterThanOrEqual',
+        priority,
+        style,
+      };
+    case 'timePeriod':
+      return { type: 'timePeriod', timePeriod: rule.operator, priority, style };
+    case 'text':
+      // ExcelJS folds these under `containsText`, building the formula from
+      // `text` for the value operator; the rest are value-less.
+      return {
+        type: 'containsText',
+        operator: rule.operator,
+        ...(rule.operator === TEXT_VALUE_OPERATOR ? { text: rule.value ?? '' } : {}),
+        priority,
+        style,
+      };
+    default:
+      return null;
   }
 }
 
@@ -264,26 +450,9 @@ export function applyConditionalFormattingToXlsxWorksheet(
   rules.forEach((entry, i) => {
     const ref = entry.ranges.map(iRangeToStr).join(' ');
     if (!ref) return;
+    if (!isExportableSynthRule(entry.rule)) return;
     const style = cfStyleToDxf(entry.rule.style);
-    let exceljsRule: Record<string, unknown> | null = null;
-    if (entry.rule.subType === 'number') {
-      const v = entry.rule.value;
-      const formulae = Array.isArray(v) ? v.map(String) : [String(v)];
-      exceljsRule = {
-        type: 'cellIs',
-        operator: entry.rule.operator,
-        formulae,
-        priority: i + 1,
-        style,
-      };
-    } else if (entry.rule.subType === 'formula') {
-      exceljsRule = {
-        type: 'expression',
-        formulae: [String(entry.rule.value)],
-        priority: i + 1,
-        style,
-      };
-    }
+    const exceljsRule = synthRuleToExcel(entry.rule, i + 1, style);
     if (!exceljsRule) return;
     try {
       ws.addConditionalFormatting({ ref, rules: [exceljsRule] });
