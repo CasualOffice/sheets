@@ -7,6 +7,11 @@ import {
 } from './pivot-passthrough';
 import { applyDataBarsToZip, type DataBarEntry } from './databar-passthrough';
 import { applyDxfCfRulesToZip, type DxfCfRule } from './cf-dxf-passthrough';
+import {
+  applyDrawingsToZip,
+  captureDrawingsFromBuffer,
+  type DrawingPassthroughPayload,
+} from './drawing-passthrough';
 
 /**
  * Sidecar resource that carries raw OOXML parts ExcelJS silently drops.
@@ -36,6 +41,9 @@ export type XlsxPassthroughPayload = {
   /** duplicate/unique CF blocks (+ their dxf styles) to splice in — keyed by
    *  sheet name; see cf-dxf-passthrough.ts */
   dxfCfRules?: Record<string, DxfCfRule[]>;
+  /** embedded images / shapes (xl/media + xl/drawings) — Univer has no drawing
+   *  model so they'd be dropped on save; see drawing-passthrough.ts */
+  drawings?: DrawingPassthroughPayload;
 };
 
 const VBA_REL_TYPE = 'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
@@ -74,9 +82,10 @@ export async function capturePassthroughFromBuffer(
   // single zip read but the second open is ~tens of ms even for big
   // files and the symmetry with VBA is more important.
   const pivots = await capturePivotsFromBuffer(buffer);
+  const drawings = await captureDrawingsFromBuffer(buffer);
 
-  if (!vba && !pivots) return undefined;
-  return { vba, pivots };
+  if (!vba && !pivots && !drawings) return undefined;
+  return { vba, pivots, drawings };
 }
 
 export function mergePassthroughIntoResources(
@@ -117,7 +126,8 @@ export async function applyPassthroughToXlsxBuffer(
 ): Promise<ArrayBuffer> {
   const hasDataBars = payload?.dataBars && Object.keys(payload.dataBars).length > 0;
   const hasDxfCf = payload?.dxfCfRules && Object.keys(payload.dxfCfRules).length > 0;
-  if (!payload?.vba && !payload?.pivots && !hasDataBars && !hasDxfCf) {
+  const hasDrawings = payload?.drawings && Object.keys(payload.drawings.parts).length > 0;
+  if (!payload?.vba && !payload?.pivots && !hasDataBars && !hasDxfCf && !hasDrawings) {
     if (excelJsBuffer instanceof ArrayBuffer) return excelJsBuffer;
     return excelJsBuffer.buffer.slice(
       excelJsBuffer.byteOffset,
@@ -131,6 +141,7 @@ export async function applyPassthroughToXlsxBuffer(
   if (payload.pivots) await applyPivotsToZip(zip, payload.pivots);
   if (payload.dataBars) await applyDataBarsToZip(zip, payload.dataBars);
   if (payload.dxfCfRules) await applyDxfCfRulesToZip(zip, payload.dxfCfRules);
+  if (payload.drawings) await applyDrawingsToZip(zip, payload.drawings);
 
   return zip.generateAsync({ type: 'arraybuffer' });
 }
