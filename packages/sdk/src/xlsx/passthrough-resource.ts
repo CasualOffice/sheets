@@ -17,6 +17,11 @@ import {
   captureExternalLinksFromBuffer,
   type ExternalLinkPassthroughPayload,
 } from './external-link-passthrough';
+import {
+  applyThreadedCommentsToZip,
+  captureThreadedCommentsFromBuffer,
+  type ThreadedCommentPassthroughPayload,
+} from './threaded-comment-passthrough';
 
 /**
  * Sidecar resource that carries raw OOXML parts ExcelJS silently drops.
@@ -52,6 +57,10 @@ export type XlsxPassthroughPayload = {
   /** external-workbook links (xl/externalLinks) — ExcelJS drops them, breaking
    *  `[N]Sheet!A1` formulas; see external-link-passthrough.ts */
   externalLinks?: ExternalLinkPassthroughPayload;
+  /** threaded comments + persons (xl/threadedComments + xl/persons) — authors,
+   *  replies, timestamps the legacy-note bridge can't carry; see
+   *  threaded-comment-passthrough.ts */
+  threadedComments?: ThreadedCommentPassthroughPayload;
 };
 
 const VBA_REL_TYPE = 'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
@@ -92,9 +101,10 @@ export async function capturePassthroughFromBuffer(
   const pivots = await capturePivotsFromBuffer(buffer);
   const drawings = await captureDrawingsFromBuffer(buffer);
   const externalLinks = await captureExternalLinksFromBuffer(buffer);
+  const threadedComments = await captureThreadedCommentsFromBuffer(buffer);
 
-  if (!vba && !pivots && !drawings && !externalLinks) return undefined;
-  return { vba, pivots, drawings, externalLinks };
+  if (!vba && !pivots && !drawings && !externalLinks && !threadedComments) return undefined;
+  return { vba, pivots, drawings, externalLinks, threadedComments };
 }
 
 export function mergePassthroughIntoResources(
@@ -138,13 +148,16 @@ export async function applyPassthroughToXlsxBuffer(
   const hasDrawings = payload?.drawings && Object.keys(payload.drawings.parts).length > 0;
   const hasExternalLinks =
     payload?.externalLinks && Object.keys(payload.externalLinks.parts).length > 0;
+  const hasThreadedComments =
+    payload?.threadedComments && Object.keys(payload.threadedComments.parts).length > 0;
   if (
     !payload?.vba &&
     !payload?.pivots &&
     !hasDataBars &&
     !hasDxfCf &&
     !hasDrawings &&
-    !hasExternalLinks
+    !hasExternalLinks &&
+    !hasThreadedComments
   ) {
     if (excelJsBuffer instanceof ArrayBuffer) return excelJsBuffer;
     return excelJsBuffer.buffer.slice(
@@ -161,6 +174,7 @@ export async function applyPassthroughToXlsxBuffer(
   if (payload.dxfCfRules) await applyDxfCfRulesToZip(zip, payload.dxfCfRules);
   if (payload.drawings) await applyDrawingsToZip(zip, payload.drawings);
   if (payload.externalLinks) await applyExternalLinksToZip(zip, payload.externalLinks);
+  if (payload.threadedComments) await applyThreadedCommentsToZip(zip, payload.threadedComments);
 
   return zip.generateAsync({ type: 'arraybuffer' });
 }
