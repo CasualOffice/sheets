@@ -453,6 +453,7 @@ export function MenuBar() {
   const [showPasteSpecial, setShowPasteSpecial] = useState(false);
   const [showNameManager, setShowNameManager] = useState(false);
   const [showGoalSeek, setShowGoalSeek] = useState(false);
+  const [iterativeCalc, setIterativeCalc] = useState(false);
   const [showGoToSpecial, setShowGoToSpecial] = useState(false);
   const [showRemoveDuplicates, setShowRemoveDuplicates] = useState(false);
   const [showTextToColumns, setShowTextToColumns] = useState(false);
@@ -2262,6 +2263,23 @@ export function MenuBar() {
           label: 'Goal Seek…',
           icon: 'analytics',
           onClick: () => setShowGoalSeek(true),
+        },
+        {
+          kind: 'item',
+          id: 'iterative-calc',
+          label: iterativeCalc ? '✓ Iterative calculation' : 'Iterative calculation',
+          icon: 'sync',
+          onClick: () => {
+            if (!api) return;
+            const next = !iterativeCalc;
+            setIterativeCalc(next);
+            // Excel's "Enable iterative calculation": >1 cycle count lets
+            // circular references converge instead of erroring. 100 matches
+            // Excel's default max iterations; 1 disables iteration.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (api as any).getFormula?.()?.setMaxIteration?.(next ? 100 : 1);
+            forceRecalculate(api);
+          },
         },
         {
           kind: 'submenu',
