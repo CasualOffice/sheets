@@ -95,6 +95,57 @@ if (typeof window !== 'undefined' && isDesktop() && !document.getElementById('__
   (document.head || document.documentElement).appendChild(style);
 }
 
+/** Bridge-rendered "open where?" prompt (Univer's UI isn't reachable from this
+ *  bootstrap). Resolves the chosen target + whether to remember it as the
+ *  default, or null if dismissed. */
+function askOpenWhere(path: string): Promise<{ where: 'same' | 'new'; remember: boolean } | null> {
+  return new Promise((resolve) => {
+    const name = path.split(/[\\/]/).pop() ?? path;
+    const esc = (s: string) =>
+      s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const backdrop = document.createElement('div');
+    backdrop.setAttribute(
+      'style',
+      'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);font:14px system-ui,-apple-system,sans-serif;',
+    );
+    backdrop.innerHTML = `
+      <div role="dialog" aria-modal="true" style="background:#fff;color:#111;max-width:380px;width:90%;border-radius:12px;padding:22px 22px 16px;box-shadow:0 12px 40px rgba(0,0,0,.3);">
+        <h2 style="margin:0 0 6px;font-size:17px;">Open &ldquo;${esc(name)}&rdquo;</h2>
+        <p style="margin:0 0 4px;color:#666;">Open it in this window or a new window?</p>
+        <label style="display:flex;align-items:center;gap:8px;margin:16px 0;color:#666;cursor:pointer;">
+          <input type="checkbox" data-act="remember" /> Remember my choice
+        </label>
+        <div style="display:flex;gap:8px;">
+          <button data-act="same" style="flex:1;padding:9px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer;">This window</button>
+          <button data-act="new" style="flex:1;padding:9px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;">New window</button>
+        </div>
+        <button data-act="cancel" style="margin-top:10px;width:100%;background:none;border:0;color:#888;cursor:pointer;padding:6px;">Cancel</button>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const remember = () =>
+      (backdrop.querySelector('[data-act=remember]') as HTMLInputElement | null)?.checked ?? false;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') finish(null);
+    };
+    const finish = (result: { where: 'same' | 'new'; remember: boolean } | null) => {
+      window.removeEventListener('keydown', onKey);
+      backdrop.remove();
+      resolve(result);
+    };
+    window.addEventListener('keydown', onKey);
+    backdrop.addEventListener('mousedown', (e) => {
+      if (e.target === backdrop) finish(null);
+    });
+    backdrop
+      .querySelector('[data-act=same]')!
+      .addEventListener('click', () => finish({ where: 'same', remember: remember() }));
+    backdrop
+      .querySelector('[data-act=new]')!
+      .addEventListener('click', () => finish({ where: 'new', remember: remember() }));
+    backdrop.querySelector('[data-act=cancel]')!.addEventListener('click', () => finish(null));
+  });
+}
+
 if (typeof window !== 'undefined' && isDesktop()) {
   const url = new URL(window.location.href);
   console.log('[deskApp] bootstrap', { isDesktop: true, search: window.location.search });
@@ -115,6 +166,7 @@ if (typeof window !== 'undefined' && isDesktop()) {
         saveAs(name: string, bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
         setDirty?(dirty: boolean): void;
         currentEditSeq?(): number;
+        openViaMenu?(): Promise<void>;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         getProfile?: () => Promise<any>;
         writeRecovery?(bytes: ArrayBuffer): Promise<void>;
@@ -234,6 +286,51 @@ if (typeof window !== 'undefined' && isDesktop()) {
         // save can detect a change that landed during the write.
         if (dirty) editSeq++;
         setWindowDirty(dirty);
+      },
+      // File → Open from the editor menu (desktop). Uses the NATIVE dialog so
+      // the picked file has a real path (the browser picker doesn't), then
+      // honours open_window_preference: 'same' navigates this window, 'new'
+      // spawns another, 'ask' prompts (with a remember checkbox that updates
+      // the setting). A .docx picked here always opens in a new window — this
+      // window hosts the spreadsheet editor.
+      async openViaMenu(): Promise<void> {
+        const path = (await inv('pick_open_document').catch(() => null)) as string | null;
+        if (!path) return; // user cancelled the dialog
+        const ext = path.split('.').pop()?.toLowerCase() ?? '';
+        const kind = ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'tab'].includes(ext) ? 'sheets' : 'docx';
+        let settings: { open_window_preference?: 'ask' | 'same' | 'new' } = {};
+        try {
+          settings = (await inv('get_settings')) as typeof settings;
+        } catch {
+          /* fall through to 'ask' */
+        }
+        const pref = settings.open_window_preference ?? 'ask';
+        let where: 'same' | 'new';
+        if (kind !== 'sheets') {
+          where = 'new';
+        } else if (pref === 'same' || pref === 'new') {
+          where = pref;
+        } else {
+          const choice = await askOpenWhere(path);
+          if (!choice) return; // dismissed
+          where = choice.where;
+          if (choice.remember) {
+            await inv('save_settings', {
+              settings: { ...settings, open_window_preference: where },
+            }).catch(() => undefined);
+          }
+        }
+        if (where === 'new') {
+          await inv('open_document_window', { kind, filePath: path }).catch((e) =>
+            console.error('[deskApp] open in new window failed', e),
+          );
+        } else {
+          // Same window: navigate this window to the picked file; the bootstrap
+          // re-reads ?file= on load and binds the new path.
+          const u = new URL(window.location.href);
+          u.searchParams.set('file', path);
+          window.location.href = u.toString();
+        }
       },
       // Current edit counter. The save caller reads this at the instant it
       // serializes the workbook (synchronously, before the async encode +
@@ -653,6 +750,11 @@ declare global {
        *  `save(bytes, baselineSeq)` so an edit between serialize and write
        *  keeps the window dirty. Top-level desktop bridge only. */
       currentEditSeq?(): number;
+      /** File → Open from the editor menu (desktop): native open dialog +
+       *  "this window or a new window?" prompt, honouring open_window_preference.
+       *  The bridge performs the open itself (new window, or navigating this
+       *  one). Top-level desktop bridge only. */
+      openViaMenu?(): Promise<void>;
       /** Raw launcher theme preference: 'system' | 'light' | 'dark'. */
       themeMode?: 'system' | 'light' | 'dark';
       /** Resolved theme ('system' collapsed to 'light'/'dark'). */

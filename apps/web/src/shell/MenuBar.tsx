@@ -1002,6 +1002,15 @@ export function MenuBar() {
     if (bridge?.isDesktop) bridge.filePath = null;
   };
   const handleOpen = async () => {
+    // Desktop: route File → Open through the shell's native dialog + "this
+    // window or a new window?" prompt (mirrors the launcher). The bridge does
+    // the open itself — new window, or navigating this one — so the in-window
+    // browser-picker flow below is web-only.
+    const deskBridge = typeof window !== 'undefined' ? window.__deskApp__ : undefined;
+    if (deskBridge?.isDesktop && deskBridge.openViaMenu) {
+      await deskBridge.openViaMenu();
+      return;
+    }
     let openedFile: File | null = null;
     try {
       const file = await pickXlsxFile();
