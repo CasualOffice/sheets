@@ -1,0 +1,25 @@
+diff --git a/lib/xlsx/xform/sheet/worksheet-xform.js b/lib/xlsx/xform/sheet/worksheet-xform.js
+index b38930042cbb05dccd01c46a9adacb7a9fc59dba..71d997cd0054c5032caf62fa206703a19f0145f6 100644
+--- a/lib/xlsx/xform/sheet/worksheet-xform.js
++++ b/lib/xlsx/xform/sheet/worksheet-xform.js
+@@ -449,10 +449,18 @@ class WorkSheetXform extends BaseXform {
+     // options.merges.reconcile(model.mergeCells, model.rows);
+     const rels = (model.relationships || []).reduce((h, rel) => {
+       h[rel.Id] = rel;
+-      if (rel.Type === RelType.Comments) {
++      if (rel.Type === RelType.Comments && options.comments[rel.Target]) {
++        // Guard: some workbooks reference a comments part that isn't present in
++        // the parsed comments map; the unguarded `.comments` threw and the whole
++        // file failed to open (Casual Office desktop#47).
+         model.comments = options.comments[rel.Target].comments;
+       }
+-      if (rel.Type === RelType.VmlDrawing && model.comments && model.comments.length) {
++      if (
++        rel.Type === RelType.VmlDrawing &&
++        model.comments &&
++        model.comments.length &&
++        options.vmlDrawings[rel.Target]
++      ) {
+         const vmlComment = options.vmlDrawings[rel.Target].comments;
+         model.comments.forEach((comment, index) => {
+           comment.note = Object.assign({}, comment.note, vmlComment[index]);

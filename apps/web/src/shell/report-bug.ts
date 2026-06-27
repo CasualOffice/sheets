@@ -4,13 +4,15 @@
  * lives at `.github/ISSUE_TEMPLATE/bug.yml`; GitHub maps query params to
  * matching form fields by `id`.
  */
+import { openExternal } from './openExternal';
+
 export function openBugReport(): void {
   const url = new URL('https://github.com/CasualOffice/sheets/issues/new');
   url.searchParams.set('template', 'bug.yml');
   url.searchParams.set('labels', 'bug');
   url.searchParams.set('url', location.href);
   url.searchParams.set('env', describeEnv());
-  window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  openExternal(url.toString());
 }
 
 function describeEnv(): string {

@@ -32,6 +32,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { BorderStyleTypes, BorderType } from '@univerjs/core';
+import { openExternal } from './openExternal';
 import type { FUniver } from '@univerjs/core/facade';
 import type { CasualSheetsAPI } from '../sheets/api';
 import { ensurePluginByName } from '../univer';
@@ -1105,7 +1106,7 @@ const MENUS: MenuDef[] = [
         id: 'github',
         label: 'View on GitHub',
         icon: 'open_in_new',
-        run: () => window.open('https://github.com/CasualOffice/sheets', '_blank'),
+        run: () => openExternal('https://github.com/CasualOffice/sheets'),
       },
     ],
   },

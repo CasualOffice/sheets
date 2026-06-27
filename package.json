@@ -99,6 +99,9 @@
       "@univerjs/thread-comment-ui": "link:vendor/univer-revamp/packages/thread-comment-ui",
       "@univerjs/ui": "link:vendor/univer-revamp/packages/ui",
       "@univerjs/watermark": "link:vendor/univer-revamp/packages/watermark"
+    },
+    "patchedDependencies": {
+      "exceljs@4.4.0": "patches/exceljs@4.4.0.patch"
     }
   }
 }
