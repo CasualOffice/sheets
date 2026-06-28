@@ -20,11 +20,12 @@ import { Dialog } from './Dialog';
 import { colorSort, distinctColors, type SortRow } from './color-sort';
 
 /**
- * Sort by cell colour (Excel's Data → Sort → Sort On: Cell Color). The
- * selection is sorted so rows whose key-column cell carries the chosen
- * background colour move to the top (or bottom); the rest keep their order.
- * Maths lives in `color-sort.ts`; this reads the colours via `getBackgrounds()`
- * and the cells via `getCellDatas()`, then writes back with one `setValues`.
+ * Sort by colour (Excel's Data → Sort → Sort On: Cell Color / Font Color).
+ * The selection is sorted so rows whose key-column cell carries the chosen
+ * background — or font — colour move to the top (or bottom); the rest keep
+ * their order. Maths lives in `color-sort.ts`; this reads cell colours via
+ * `getBackgrounds()` and font colours from `getCellStyles()`, the cells via
+ * `getCellDatas()`, then writes back with one `setValues`.
  */
 
 type Props = {
@@ -50,9 +51,15 @@ const stringifyHeader = (v: unknown): string => {
   return String(v);
 };
 
-// Univer reports unfilled cells as white; surface that as "No fill".
-const DEFAULTISH = new Set(['#ffffff', '#fff', 'rgb(255,255,255)', '']);
-const colorLabel = (c: string): string => (DEFAULTISH.has(c.toLowerCase()) ? 'No fill' : c);
+type SortOn = 'cell' | 'font';
+
+// Univer reports unfilled cells as white and unset fonts as black/empty.
+const NO_FILL = new Set(['#ffffff', '#fff', 'rgb(255,255,255)', '']);
+const AUTO_FONT = new Set(['#000000', '#000', 'rgb(0,0,0)', '']);
+const colorLabel = (c: string, on: SortOn): string => {
+  if (on === 'cell') return NO_FILL.has(c.toLowerCase()) ? 'No fill' : c;
+  return AUTO_FONT.has(c.toLowerCase()) ? 'Automatic' : c;
+};
 
 export function ColorSortDialog({ api, onClose }: Props) {
   const wb = api.getActiveWorkbook();
@@ -63,15 +70,22 @@ export function ColorSortDialog({ api, onClose }: Props) {
   const width: number = range?.getWidth?.() ?? 0;
   const startCol: number = range?.getColumn?.() ?? 0;
   const firstRow: unknown[] = useMemo(() => (range ? (range.getValues()?.[0] ?? []) : []), [range]);
-  // Full background matrix of the selection, read once on open.
+  // Full colour matrices of the selection, read once on open. Backgrounds via
+  // getBackgrounds(); font colours derived from the resolved cell styles.
   const backgrounds: string[][] = useMemo(
     () => (range?.getBackgrounds?.() as string[][] | undefined) ?? [],
     [range],
   );
+  const fontColors: string[][] = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const styles = (range?.getCellStyles?.() as any[][] | undefined) ?? [];
+    return styles.map((row) => row.map((s) => s?.color?.rgb ?? ''));
+  }, [range]);
 
   const [hasHeaders, setHasHeaders] = useState(true);
   const [keyColumn, setKeyColumn] = useState(0);
   const [onTop, setOnTop] = useState(true);
+  const [sortOn, setSortOn] = useState<SortOn>('cell');
   const [target, setTarget] = useState<string | null>(null);
 
   const columnLabel = (i: number): string => {
@@ -83,10 +97,10 @@ export function ColorSortDialog({ api, onClose }: Props) {
     return `Column ${letter}`;
   };
 
-  // The key column's colour per row, then the distinct swatches.
+  // The key column's colour per row (cell or font), then the distinct swatches.
   const colColors = useMemo(
-    () => backgrounds.map((row) => row[keyColumn] ?? ''),
-    [backgrounds, keyColumn],
+    () => (sortOn === 'cell' ? backgrounds : fontColors).map((row) => row[keyColumn] ?? ''),
+    [backgrounds, fontColors, sortOn, keyColumn],
   );
   const swatches = useMemo(() => distinctColors(colColors, hasHeaders), [colColors, hasHeaders]);
 
@@ -142,6 +156,21 @@ export function ColorSortDialog({ api, onClose }: Props) {
         </label>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span>Sort on</span>
+          <select
+            data-testid="color-sort-on"
+            value={sortOn}
+            onChange={(e) => {
+              setSortOn(e.target.value as SortOn);
+              setTarget(null);
+            }}
+          >
+            <option value="cell">Cell colour</option>
+            <option value="font">Font colour</option>
+          </select>
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span>Sort by column</span>
           <select
             data-testid="color-sort-column"
@@ -175,7 +204,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
                     key={c || `c${i}`}
                     type="button"
                     data-testid={`color-sort-swatch-${i}`}
-                    title={colorLabel(c)}
+                    title={colorLabel(c, sortOn)}
                     aria-pressed={selected}
                     onClick={() => setTarget(c)}
                     style={{
@@ -201,7 +230,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
                         background: c || 'transparent',
                       }}
                     />
-                    <span>{colorLabel(c)}</span>
+                    <span>{colorLabel(c, sortOn)}</span>
                   </button>
                 );
               })
