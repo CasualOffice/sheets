@@ -1137,7 +1137,7 @@ export async function workbookDataToOds(data: IWorkbookData): Promise<Blob> {
  */
 export async function workbookDataToDelimited(
   data: IWorkbookData,
-  format: 'csv' | 'tsv',
+  format: 'csv' | 'tsv' | 'psv',
 ): Promise<Blob> {
   const firstId = data.sheetOrder[0];
   const wsd = data.sheets[firstId];
@@ -1158,7 +1158,7 @@ export async function workbookDataToDelimited(
     }
   }
 
-  const sep = format === 'tsv' ? '\t' : ',';
+  const sep = format === 'tsv' ? '\t' : format === 'psv' ? '|' : ',';
   const lines: string[] = [];
   for (let r = 0; r <= maxRow; r++) {
     const row = cellData[r];

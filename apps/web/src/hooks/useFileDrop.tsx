@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useLoading } from '../loading-context';
-import { loadSpreadsheetFile } from '../shell/file-actions';
+import { loadSpreadsheetFile, toast } from '../shell/file-actions';
 
-const SUPPORTED_EXTENSIONS = ['xlsx', 'ods', 'csv', 'tsv', 'tab'];
+const SUPPORTED_EXTENSIONS = ['xlsx', 'ods', 'csv', 'tsv', 'tab', 'psv'];
 
 /**
  * Returns whether the user is currently dragging files over the window. The
@@ -25,8 +25,7 @@ export function useFileDrop(): boolean {
 
   useEffect(() => {
     let depth = 0;
-    const isFileDrag = (e: DragEvent) =>
-      Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
 
     const onEnter = (e: DragEvent) => {
       if (!isFileDrag(e)) return;
@@ -52,9 +51,13 @@ export function useFileDrop(): boolean {
       setDragging(false);
       const file = pickSupportedFile(e.dataTransfer?.files);
       if (!file) {
-        window.alert(
-          `Drop a spreadsheet file (${SUPPORTED_EXTENSIONS.map((x) => `.${x}`).join(', ')}).`,
-        );
+        // Styled in-app message instead of a native window.alert (jarring in
+        // the desktop shell, unstyled everywhere).
+        if (api)
+          toast(
+            api,
+            `Drop a spreadsheet file (${SUPPORTED_EXTENSIONS.map((x) => `.${x}`).join(', ')}).`,
+          );
         return;
       }
       loading.set({ fileName: file.name, sizeBytes: file.size, phase: 'reading' });

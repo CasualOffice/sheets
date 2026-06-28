@@ -38,10 +38,19 @@ if (typeof window !== 'undefined' && isDesktop()) {
     const el = document.createElement('div');
     el.id = '__deskapp_err__';
     el.setAttribute('role', 'alert');
+    // Theme-aware so the banner doesn't flash a light-pink box in a dark
+    // spreadsheet window. Univer toggles `html.univer-dark`; the launcher also
+    // passes ?theme=dark.
+    const dark =
+      document.documentElement.classList.contains('univer-dark') ||
+      new URLSearchParams(window.location.search).get('theme') === 'dark';
+    const c = dark
+      ? { bg: '#3a1d1d', fg: '#fca5a5', border: '#7f2727' }
+      : { bg: '#fef2f2', fg: '#991b1b', border: '#fecaca' };
     el.style.cssText =
       'position:fixed;top:12px;right:12px;max-width:320px;z-index:99999;' +
       'display:flex;gap:10px;align-items:flex-start;' +
-      'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;' +
+      `background:${c.bg};color:${c.fg};border:1px solid ${c.border};border-radius:8px;` +
       'box-shadow:0 4px 14px rgba(0,0,0,0.12);padding:10px 12px;' +
       "font:13px/1.4 -apple-system,system-ui,'Segoe UI',sans-serif;";
     const text = document.createElement('div');
@@ -312,7 +321,9 @@ if (typeof window !== 'undefined' && isDesktop()) {
         const path = (await inv('pick_open_document').catch(() => null)) as string | null;
         if (!path) return; // user cancelled the dialog
         const ext = path.split('.').pop()?.toLowerCase() ?? '';
-        const kind = ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'tab'].includes(ext) ? 'sheets' : 'docx';
+        const kind = ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'tab', 'psv'].includes(ext)
+          ? 'sheets'
+          : 'docx';
         let settings: { open_window_preference?: 'ask' | 'same' | 'new' } = {};
         try {
           settings = (await inv('get_settings')) as typeof settings;
@@ -564,7 +575,7 @@ if (typeof window !== 'undefined' && isDesktop()) {
             if (event?.payload?.type !== 'drop') return;
             for (const p of event.payload.paths ?? []) {
               const ext = p.split('.').pop()?.toLowerCase() ?? '';
-              const kind = ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'tab'].includes(ext)
+              const kind = ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'tab', 'psv'].includes(ext)
                 ? 'sheets'
                 : ['docx', 'txt', 'md', 'markdown'].includes(ext)
                   ? 'docx'

@@ -23,6 +23,7 @@ import {
   pickXlsxFile,
   saveAsCsv,
   saveAsOds,
+  saveAsPsv,
   saveAsTsv,
   saveAsXlsx,
 } from './file-actions';
@@ -1150,6 +1151,8 @@ export function MenuBar() {
           return saveAsCsv(api, name);
         case 'tsv':
           return saveAsTsv(api, name);
+        case 'psv':
+          return saveAsPsv(api, name);
         case 'xlsx':
         default:
           return saveAsXlsx(api, name, {
@@ -1168,7 +1171,7 @@ export function MenuBar() {
     try {
       await runSave();
       const ext = (workbook.meta.sourceFormat || 'xlsx').toLowerCase();
-      const displayName = /\.(xlsx|ods|csv|tsv)$/i.test(name) ? name : `${name}.${ext}`;
+      const displayName = /\.(xlsx|ods|csv|tsv|psv)$/i.test(name) ? name : `${name}.${ext}`;
       toast.success(`Saved ${displayName}`);
       // Clears `hasUserEdited` so the logout dirty-check stays quiet
       // for users who saved and walked away (UX_AUDIT.md §2.14). The
@@ -1221,7 +1224,7 @@ export function MenuBar() {
   };
 
   const exportAs = async (
-    format: 'xlsx' | 'ods' | 'csv' | 'tsv',
+    format: 'xlsx' | 'ods' | 'csv' | 'tsv' | 'psv',
     runner: () => Promise<unknown>,
   ) => {
     if (!api) return;
@@ -1276,6 +1279,8 @@ export function MenuBar() {
     exportAs('csv', () => saveAsCsv(api!, workbook.meta.name || 'workbook'));
   const handleExportTsv = () =>
     exportAs('tsv', () => saveAsTsv(api!, workbook.meta.name || 'workbook'));
+  const handleExportPsv = () =>
+    exportAs('psv', () => saveAsPsv(api!, workbook.meta.name || 'workbook'));
 
   const handleExportPdf = async () => {
     if (!api) return;
@@ -1446,6 +1451,13 @@ export function MenuBar() {
               label: '.tsv (tab-separated)',
               icon: 'description',
               onClick: handleExportTsv,
+            },
+            {
+              kind: 'item',
+              id: 'save-as-psv',
+              label: '.psv (pipe-separated)',
+              icon: 'description',
+              onClick: handleExportPsv,
             },
           ],
         },

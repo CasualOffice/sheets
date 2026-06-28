@@ -298,7 +298,7 @@ async function renderChartImagesForExport(
  * tests, in headless seed paths, etc.) — feedback is nice-to-have, not load-
  * bearing.
  */
-function toast(api: FUniver, content: string): void {
+export function toast(api: FUniver, content: string): void {
   // Dev-only record so e2e specs can verify the call without depending on
   // Sonner's lazily-mounted toast portal (which made the assertion flaky
   // on cold CI runners). Production builds tree-shake `import.meta.env.DEV`
@@ -406,6 +406,16 @@ export async function saveAsTsv(api: FUniver, filename = 'workbook.tsv') {
   toast(api, formatSaveMessage(result, finalName));
 }
 
+export async function saveAsPsv(api: FUniver, filename = 'workbook.psv') {
+  const wb = api.getActiveWorkbook();
+  if (!wb) return;
+  const snapshot = timeIt('snapshot-save', () => wb.save() as IWorkbookData);
+  const blob = await workbookDataToDelimited(snapshot, 'psv');
+  const finalName = ensureExt(filename, 'psv');
+  const result = await deliverBlob(blob, finalName, 'psv');
+  toast(api, formatSaveMessage(result, finalName));
+}
+
 /** Branch on the `SaveResult` discriminator: success surfaces a
  *  toast and bumps the tracked etag (server modes only); conflict
  *  surfaces via the caller's `onConflict` hook (default: a warning
@@ -468,7 +478,7 @@ function ensureExt(name: string, ext: string): string {
 async function deliverBlob(
   blob: Blob,
   filename: string,
-  sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv',
+  sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv' | 'psv',
   serverFileId: string | null = null,
   serverEtag: string | null = null,
   forcePrompt = false,
@@ -522,7 +532,7 @@ function readDeskEditSeq(): number | undefined {
 async function deliverViaDesktopBridge(
   blob: Blob,
   filename: string,
-  sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv',
+  sourceFormat: 'xlsx' | 'ods' | 'csv' | 'tsv' | 'psv',
   forcePrompt = false,
   baselineSeq?: number,
 ): Promise<SaveResult | null> {
