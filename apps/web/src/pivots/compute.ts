@@ -289,7 +289,7 @@ function computeMatrix(source: SourceMatrix, model: PivotModel): PivotComputeRes
   const seenTuples = new Map<string, string[]>();
   for (const rec of filteredRecords) {
     const t = tupleOf(rec);
-    seenTuples.set(t.join(' '), t);
+    seenTuples.set(t.join('\u0000'), t);
   }
   let tuples = [...seenTuples.values()].sort((a, b) => {
     for (let i = 0; i < a.length; i += 1) {
@@ -332,7 +332,7 @@ function computeMatrix(source: SourceMatrix, model: PivotModel): PivotComputeRes
     const row: PivotCell[] = [level === 0 ? labelHeader : ''];
     let prevPrefix: string | null = null;
     for (const t of tuples) {
-      const prefix = t.slice(0, level + 1).join(' ');
+      const prefix = t.slice(0, level + 1).join('\u0000');
       const show = prefix !== prevPrefix;
       prevPrefix = prefix;
       const label = t[level] === '' ? '(blank)' : t[level];
