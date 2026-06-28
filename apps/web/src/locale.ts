@@ -38,6 +38,13 @@ import UniverSheetsConditionalFormattingUIEnUS from '@univerjs/sheets-conditiona
 import UniverDataValidationEnUS from '@univerjs/data-validation/locale/en-US';
 import UniverSheetsDataValidationEnUS from '@univerjs/sheets-data-validation/locale/en-US';
 import UniverSheetsDataValidationUIEnUS from '@univerjs/sheets-data-validation-ui/locale/en-US';
+// Same base-vs-UI split as data-validation: these `-ui` packages ship only the
+// panel chrome, while error toasts + generated labels (filter range errors,
+// table name/column prefixes + validation, hyperlink ref errors) live in the
+// base packages' `*.` namespaces. Without the base locales they render raw keys.
+import UniverSheetsFilterEnUS from '@univerjs/sheets-filter/locale/en-US';
+import UniverSheetsHyperLinkEnUS from '@univerjs/sheets-hyper-link/locale/en-US';
+import UniverSheetsTableEnUS from '@univerjs/sheets-table/locale/en-US';
 import UniverSheetsHyperLinkUIEnUS from '@univerjs/sheets-hyper-link-ui/locale/en-US';
 import UniverSheetsNoteUIEnUS from '@univerjs/sheets-note-ui/locale/en-US';
 import UniverSheetsTableUIEnUS from '@univerjs/sheets-table-ui/locale/en-US';
@@ -64,6 +71,9 @@ const enUS = Tools.deepMerge(
   UniverDataValidationEnUS,
   UniverSheetsDataValidationEnUS,
   UniverSheetsDataValidationUIEnUS,
+  UniverSheetsFilterEnUS,
+  UniverSheetsHyperLinkEnUS,
+  UniverSheetsTableEnUS,
   UniverSheetsHyperLinkUIEnUS,
   UniverSheetsNoteUIEnUS,
   UniverSheetsTableUIEnUS,
