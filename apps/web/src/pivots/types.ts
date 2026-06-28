@@ -15,12 +15,7 @@
  *     which point the field count may shift.
  */
 
-export type PivotAggregation =
-  | 'sum'
-  | 'count'
-  | 'average'
-  | 'min'
-  | 'max';
+export type PivotAggregation = 'sum' | 'count' | 'average' | 'min' | 'max' | 'distinctCount';
 
 export const PIVOT_AGG_LABELS: Record<PivotAggregation, string> = {
   sum: 'Sum',
@@ -28,6 +23,7 @@ export const PIVOT_AGG_LABELS: Record<PivotAggregation, string> = {
   average: 'Average',
   min: 'Min',
   max: 'Max',
+  distinctCount: 'Distinct Count',
 };
 
 /** Pivot field reference — column index within the source range. */
