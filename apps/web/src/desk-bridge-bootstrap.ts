@@ -188,6 +188,7 @@ if (typeof window !== 'undefined' && isDesktop()) {
         loadDocument(p?: string): Promise<ArrayBuffer>;
         save(bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
         saveAs(name: string, bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
+        rename?(newName: string): Promise<string | null>;
         setDirty?(dirty: boolean): void;
         currentEditSeq?(): number;
         openViaMenu?(): Promise<void>;
@@ -472,6 +473,23 @@ if (typeof window !== 'undefined' && isDesktop()) {
         await updateWindowTitleFromPath(newPath);
         return newPath;
       },
+      // Rename the bound file on disk (same folder, new name) and re-bind so
+      // subsequent saves overwrite the renamed file. Throws on collision /
+      // failure so the caller can surface it. No-op (null) for untitled docs —
+      // the caller should fall back to a Save As there.
+      async rename(newName: string): Promise<string | null> {
+        if (!filePath) return null;
+        let newPath: string;
+        try {
+          newPath = (await inv('rename_document', { path: filePath, newName })) as string;
+        } catch (err) {
+          console.error('[deskApp] rename failed for', filePath, err);
+          throw err;
+        }
+        filePath = newPath;
+        await updateWindowTitleFromPath(newPath);
+        return newPath;
+      },
       // Profile exposed to the editor so it can show a local-user chip
       // in place of the collab Share button.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -632,13 +650,32 @@ if (typeof window !== 'undefined' && isDesktop()) {
           : 'dark';
       };
 
-      const reapply = () => {
-        const resolved = resolve(themeMode);
+      // The in-editor theme toggle persists to this key (apps/web/src/theme.ts).
+      // We honour it so a per-window light/dark choice survives a restart —
+      // `authoritative` (the user changed the launcher Settings theme) is the
+      // only case where the launcher overrides it. Without this, the bridge
+      // re-published the launcher theme on every open and the editor's own
+      // toggle reverted on restart.
+      const STORAGE_KEY = 'casual:theme';
+      const reapply = (authoritative: boolean) => {
+        const launcherResolved = resolve(themeMode);
+        let effective = launcherResolved;
+        try {
+          const stored = window.localStorage.getItem(STORAGE_KEY);
+          const hasExplicit = stored === 'light' || stored === 'dark';
+          effective =
+            authoritative || !hasExplicit ? launcherResolved : (stored as 'light' | 'dark');
+          // Persist so the next launch reads the same value; never overwrite an
+          // explicit editor toggle on a passive (initial / OS-flip) reapply.
+          if (authoritative || !hasExplicit) window.localStorage.setItem(STORAGE_KEY, effective);
+        } catch {
+          /* localStorage may be unavailable; fall back to launcher resolved */
+        }
         themeBridge.themeMode = themeMode;
-        themeBridge.theme = resolved;
+        themeBridge.theme = effective;
         try {
           window.dispatchEvent(
-            new CustomEvent('deskapp:theme', { detail: { mode: themeMode, resolved } }),
+            new CustomEvent('deskapp:theme', { detail: { mode: themeMode, resolved: effective } }),
           );
         } catch {
           /* CustomEvent unsupported — best-effort */
@@ -646,18 +683,20 @@ if (typeof window !== 'undefined' && isDesktop()) {
       };
       // Initial publish so the provider can read `window.__deskApp__.theme`
       // synchronously at module init and the event fires for late listeners.
-      reapply();
+      reapply(false);
 
       // OS scheme changes only matter while we're tracking `system`.
       if (mq) {
         const onMq = () => {
-          if (themeMode === 'system') reapply();
+          if (themeMode === 'system') reapply(false);
         };
         if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onMq);
         else if (typeof mq.addListener === 'function') mq.addListener(onMq);
       }
 
-      // Live launcher theme changes arrive over the Tauri event bus.
+      // Live launcher theme changes arrive over the Tauri event bus — the user
+      // changed it in launcher Settings, so it's authoritative and overrides
+      // any per-window toggle.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tauriEvent = (window as any).__TAURI__?.event;
       if (tauriEvent?.listen) {
@@ -666,7 +705,7 @@ if (typeof window !== 'undefined' && isDesktop()) {
             const next = e?.payload?.theme;
             if (next === 'system' || next === 'light' || next === 'dark') {
               themeMode = next;
-              reapply();
+              reapply(true);
             }
           })
           .catch(() => undefined);
@@ -741,8 +780,15 @@ if (typeof window !== 'undefined' && isDesktop()) {
         // settle. Reveal the window now that the overlay is painted; the shell
         // also reveals it on page-load as a fallback.
         try {
+          // `.show()` returns a Promise; a sync try/catch won't catch an async
+          // rejection (e.g. the window:show ACL denying it), which then surfaces
+          // as an unhandled rejection (and pops the error banner). Swallow it —
+          // the shell also reveals the window on page-load, so this is best-effort.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (window as any).__TAURI__?.window?.getCurrentWindow?.()?.show?.();
+          void (window as any).__TAURI__?.window
+            ?.getCurrentWindow?.()
+            ?.show?.()
+            ?.catch?.(() => {});
         } catch {
           /* not in the desktop shell — no-op */
         }
@@ -826,6 +872,10 @@ declare global {
       loadDocument(p?: string): Promise<ArrayBuffer>;
       save(bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
       saveAs(name: string, bytes: ArrayBuffer, baselineSeq?: number): Promise<string | null>;
+      /** Rename the bound file on disk (same folder) and re-bind filePath.
+       *  Resolves to the new path, or null for an untitled doc. Rejects on a
+       *  name collision / fs error. Top-level desktop bridge only. */
+      rename?(newName: string): Promise<string | null>;
       /** Editor → bridge dirty signal for the Rust close-guard. Driven by
        *  App.tsx's command-bus mutation hook; cleared on save. */
       setDirty?(dirty: boolean): void;

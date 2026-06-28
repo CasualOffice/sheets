@@ -416,7 +416,21 @@ export function App() {
   const renameWorkbook = useCallback((name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setMeta((prev) => (prev.name === trimmed ? prev : { ...prev, name: trimmed }));
+    let prevName: string | undefined;
+    setMeta((prev) => {
+      prevName = prev.name;
+      return prev.name === trimmed ? prev : { ...prev, name: trimmed };
+    });
+    // Desktop: rename the actual file on disk so the change persists and Ctrl+S
+    // overwrites the renamed file (not the old path). Optimistic — revert the
+    // display name if the on-disk rename fails (e.g. a name collision).
+    const bridge = typeof window !== 'undefined' ? window.__deskApp__ : undefined;
+    if (bridge?.isDesktop && bridge.filePath && bridge.rename) {
+      void bridge.rename(trimmed).catch((err) => {
+        console.error('[deskApp] rename failed', err);
+        if (prevName !== undefined) setMeta((prev) => ({ ...prev, name: prevName as string }));
+      });
+    }
   }, []);
 
   const wbValue: WorkbookCtxValue = useMemo(

@@ -49,6 +49,19 @@ const enUS = Tools.deepMerge(
   UniverSheetsZenEditorEnUS,
   UniverDocsUIEnUS,
   UniverUIEnUS,
+  // Explicit fallback for the sheets-numfmt-ui "number stored as text" toast
+  // (title + message). These were observed rendering as raw keys
+  // (`sheets-numfmt-ui.info.error` / `.forceStringInfo`) in the production
+  // build despite the bundle being merged above; pinning them here guarantees
+  // they resolve. deepMerge applies later args last, so this wins.
+  {
+    'sheets-numfmt-ui': {
+      info: {
+        error: 'Error',
+        forceStringInfo: 'Number stored as text',
+      },
+    },
+  },
 );
 
 export const LOCALES = {
