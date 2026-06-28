@@ -47,12 +47,13 @@ export type PivotFieldRef = { column: number; grouping?: DateGrouping };
  *  raw aggregate; 'pctOfGrandTotal' = each cell as a % of the field's overall
  *  grand total; 'pctOfColumnTotal' = each cell as a % of its column's total
  *  (in a cross-tab; identical to grand total in the row-only layout). */
-export type PivotShowAs = 'normal' | 'pctOfGrandTotal' | 'pctOfColumnTotal';
+export type PivotShowAs = 'normal' | 'pctOfGrandTotal' | 'pctOfColumnTotal' | 'pctOfRowTotal';
 
 export const PIVOT_SHOW_AS_LABELS: Record<PivotShowAs, string> = {
   normal: 'Normal',
   pctOfGrandTotal: '% of Grand Total',
   pctOfColumnTotal: '% of Column Total',
+  pctOfRowTotal: '% of Row Total',
 };
 
 export type PivotValueField = {
