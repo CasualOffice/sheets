@@ -60,6 +60,7 @@ import { GoalSeekDialog } from './GoalSeekDialog';
 import { GoToSpecialDialog } from './GoToSpecialDialog';
 import { RemoveDuplicatesDialog } from './RemoveDuplicatesDialog';
 import { CustomListSortDialog } from './CustomListSortDialog';
+import { ColorSortDialog } from './ColorSortDialog';
 import { TextToColumnsDialog } from './TextToColumnsDialog';
 import { SubtotalsDialog } from './SubtotalsDialog';
 import { AdvancedFilterDialog } from './AdvancedFilterDialog';
@@ -478,6 +479,7 @@ export function MenuBar() {
   const [showGoToSpecial, setShowGoToSpecial] = useState(false);
   const [showRemoveDuplicates, setShowRemoveDuplicates] = useState(false);
   const [showCustomListSort, setShowCustomListSort] = useState(false);
+  const [showColorSort, setShowColorSort] = useState(false);
   const [showTextToColumns, setShowTextToColumns] = useState(false);
   const [showSubtotals, setShowSubtotals] = useState(false);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
@@ -2266,6 +2268,13 @@ export function MenuBar() {
         },
         {
           kind: 'item',
+          id: 'sort-by-color',
+          label: 'Sort by colour…',
+          icon: 'palette',
+          onClick: () => setShowColorSort(true),
+        },
+        {
+          kind: 'item',
           id: 'data-validation',
           label: 'Data validation…',
           icon: 'rule',
@@ -2739,6 +2748,9 @@ export function MenuBar() {
       )}
       {showCustomListSort && api && (
         <CustomListSortDialog api={api} onClose={() => setShowCustomListSort(false)} />
+      )}
+      {showColorSort && api && (
+        <ColorSortDialog api={api} onClose={() => setShowColorSort(false)} />
       )}
       {showTextToColumns && api && (
         <TextToColumnsDialog api={api} onClose={() => setShowTextToColumns(false)} />
