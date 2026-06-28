@@ -79,6 +79,47 @@ export function nextStep(expr: string): FormulaStep | null {
       return { sub: expr.slice(start, i + 1), start, end: i + 1 };
     }
   }
+  // No parens left — step the next bare cell reference (Excel underlines each
+  // reference before the final arithmetic). When none remain it's literals +
+  // operators, so the caller does the final whole-expression evaluation.
+  return findReference(expr);
+}
+
+const SHEET_PREFIX = `(?:(?:'[^']+'|[A-Za-z_][A-Za-z0-9_.]*)!)?`;
+const CELL = `\\$?[A-Za-z]{1,3}\\$?[0-9]+`;
+const REFERENCE = new RegExp(`^${SHEET_PREFIX}${CELL}(?::${CELL})?`);
+// A reference can't be glued to a preceding identifier/number char — that
+// guards against matching the "E5" inside scientific notation like `1E5`.
+const BOUNDARY = /[-+*/^&=<>(,%\s:]/;
+
+/**
+ * Find the leftmost bare cell/range reference (optionally sheet-qualified) in a
+ * parenthesis-free expression, skipping string literals and respecting token
+ * boundaries so `1E5` (scientific notation) isn't misread as a reference.
+ */
+export function findReference(expr: string): FormulaStep | null {
+  let inString = false;
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i];
+    if (inString) {
+      if (c === '"') {
+        if (expr[i + 1] === '"') {
+          i++;
+          continue;
+        }
+        inString = false;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      continue;
+    }
+    const atBoundary = i === 0 || BOUNDARY.test(expr[i - 1]);
+    if (!atBoundary) continue;
+    const m = REFERENCE.exec(expr.slice(i));
+    if (m) return { sub: m[0], start: i, end: i + m[0].length };
+  }
   return null;
 }
 

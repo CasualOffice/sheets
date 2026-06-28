@@ -17,7 +17,13 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { formatValue, nextStep, stripEquals, substitute } from './formula-evaluate.js';
+import {
+  findReference,
+  formatValue,
+  nextStep,
+  stripEquals,
+  substitute,
+} from './formula-evaluate.js';
 
 test('nextStep finds the innermost-leftmost function call', () => {
   const s = nextStep('SUM(A1:A2)+SQRT(D7)');
@@ -35,9 +41,34 @@ test('nextStep handles a bare grouping paren (no function name)', () => {
   assert.deepEqual(s, { sub: '(1+2)', start: 0, end: 5 });
 });
 
-test('nextStep returns null when no parentheses remain', () => {
+test('nextStep returns null when no parens and no references remain', () => {
   assert.equal(nextStep('3+4*2'), null);
-  assert.equal(nextStep('A1+B1'), null);
+  assert.equal(nextStep('"text"&"more"'), null);
+});
+
+test('nextStep steps bare references once parens are gone', () => {
+  // Excel underlines each reference before the final arithmetic.
+  assert.deepEqual(nextStep('A1+B1'), { sub: 'A1', start: 0, end: 2 });
+});
+
+test('findReference finds the leftmost reference, range, and sheet-qualified', () => {
+  assert.deepEqual(findReference('A1+B1'), { sub: 'A1', start: 0, end: 2 });
+  assert.equal(findReference('10+B2*2')?.sub, 'B2');
+  assert.equal(findReference('SUMRESULT+A1:B2')?.sub, 'A1:B2');
+  assert.equal(findReference('Sheet2!C3+1')?.sub, 'Sheet2!C3');
+  assert.equal(findReference("'My Sheet'!C3")?.sub, "'My Sheet'!C3");
+  assert.equal(findReference('$A$1+1')?.sub, '$A$1');
+});
+
+test('findReference ignores scientific notation (1E5) and plain numbers', () => {
+  assert.equal(findReference('1E5+2'), null); // E5 is an exponent, not a ref
+  assert.equal(findReference('3+4*2'), null);
+  assert.equal(findReference('2.5e3'), null);
+});
+
+test('findReference skips references inside string literals', () => {
+  assert.equal(findReference('"A1 is here"&7'), null);
+  assert.equal(findReference('"see A1"&B2')?.sub, 'B2');
 });
 
 test('nextStep ignores parens inside string literals', () => {

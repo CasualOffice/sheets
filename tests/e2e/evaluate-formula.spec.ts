@@ -59,6 +59,34 @@ test('steps through a nested formula and leaves the cell intact', async ({ page 
   expect(await cellFormula(page, 'C1')).toBe('=SUM(A1:A2)+SQRT(D7)');
 });
 
+test('steps bare references individually before the final arithmetic', async ({ page }) => {
+  await page.goto('/');
+  await waitForUniver(page);
+  await page.evaluate(() => {
+    const api = window.__univerAPI!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+    ws.getRange('A1').setValue({ v: 10 });
+    ws.getRange('B1').setValue({ v: 20 });
+    ws.getRange('C1').setValue({ f: '=A1+B1*2' });
+    ws.getRange('C1').activate();
+  });
+
+  await page.getByTestId('menubar-data').click();
+  await page.getByTestId('menu-item-evaluate-formula').click();
+  const expr = page.getByTestId('evaluate-formula-expr');
+  await expect(expr).toHaveText('A1+B1*2');
+
+  await page.getByTestId('evaluate-formula-evaluate').click();
+  await expect(expr).toHaveText('10+B1*2'); // A1 stepped
+
+  await page.getByTestId('evaluate-formula-evaluate').click();
+  await expect(expr).toHaveText('10+20*2'); // B1 stepped
+
+  await page.getByTestId('evaluate-formula-evaluate').click();
+  await expect(expr).toHaveText('50'); // 10+20*2 final
+});
+
 test('shows a message when the active cell has no formula', async ({ page }) => {
   await page.goto('/');
   await waitForUniver(page);
