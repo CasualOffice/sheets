@@ -2316,6 +2316,62 @@ button {
   white-space: nowrap;
 }
 
+/* Watch Window — pinned cells' live value/formula. Shared `.side-panel` chrome. */
+.watch-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+.watch-panel__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.watch-panel__actions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.watch-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.watch-panel__table th,
+.watch-panel__table td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-panel__table th {
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-semibold);
+}
+.watch-panel__formula {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-text-secondary);
+}
+.watch-panel__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.watch-panel__remove:hover {
+  background: var(--color-danger-soft, #fde7e7);
+  color: var(--color-danger, #c4321a);
+}
+
 /* Chart overlay — the ECharts container floats over the grid, anchored
    to cells. Selection adds a subtle accent frame and 8 resize handles
    (4 corners + 4 mid-edges) so the chart can be moved and resized like
