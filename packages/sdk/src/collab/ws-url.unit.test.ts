@@ -1,4 +1,20 @@
 /**
+ * Copyright 2026 Casual Office
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
  * Unit coverage for attachCollab's URL composition — the one bit of our own
  * logic that doesn't require a live WebSocket. The provider/bridge wiring is
  * exercised end-to-end by the reference host's `tests/e2e/coedit-*.spec.ts`
