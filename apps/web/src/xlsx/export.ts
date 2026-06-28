@@ -27,6 +27,7 @@ import { writePivotsIntoSnapshot } from '../pivots/resources';
 import { writeSparklinesIntoSnapshot } from '../sparklines/resources';
 import { writeWatchesIntoSnapshot } from '../shell/watch-resources';
 import type { Watch } from '../shell/watch-model';
+import { injectNativePivots } from './pivot-native-export';
 
 /**
  * Public entry point for xlsx export. The core converter now lives in the SDK
@@ -123,13 +124,16 @@ export async function workbookDataToXlsx(
   }
   // The SDK exporter handles the generic xlsx-native bits it can derive on its
   // own (hyperlink cells, outline gutter, floating chart images).
-  return timeItAsync('export-xlsx', () =>
+  const blob = await timeItAsync('export-xlsx', () =>
     sdkWorkbookDataToXlsx(baked, {
       hyperlinks: extras.hyperlinks,
       outline: extras.outline,
       chartImages: extras.chartImages,
     }),
   );
+  // Opt-in (off by default): also emit native xl/pivotTables for in-app pivots
+  // so Excel re-opens them as real PivotTables. No-op + safe fallback when off.
+  return injectNativePivots(blob, baked, extras.pivots);
 }
 
 // Re-export the constant from its dedicated module so existing imports

@@ -55,3 +55,7 @@ export * from './page-setup-resource';
 export * from './data-validation-resource';
 export * from './tables-resource';
 export * from './passthrough-resource';
+// Native pivot generation (in-app pivots → real xl/pivotTables) + the
+// injection helper, so app hosts can compose native pivots into an export.
+export { generateNativePivot, type NativePivotInput, type PivotAgg } from './pivot-export';
+export { applyPivotsToZip, type PivotPassthroughPayload } from './pivot-passthrough';
