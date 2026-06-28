@@ -20,7 +20,7 @@ import { useUniverAPI } from '../use-univer';
 import { useUI } from '../use-ui';
 import { Icon } from '../shell/Icon';
 import { usePivots } from './pivots-context';
-import { applyPivot } from './apply';
+import { applyPivot, refreshPivot } from './apply';
 import { findPivotAtCell } from './drill-down';
 import {
   PIVOT_AGG_LABELS,
@@ -183,6 +183,15 @@ export function PivotFieldsPanel() {
     allowedValues: source.distinct(col),
   });
 
+  // Re-read the source and recompute the selected pivot. Excel refreshes
+  // on demand (we deliberately don't live-update on every source edit), so
+  // this is how an edited source propagates into the pivot.
+  const refreshSelected = () => {
+    if (!api || !model) return;
+    const extent = refreshPivot(api, model);
+    pivots.update(model.id, { lastOutputExtent: extent ?? model.lastOutputExtent });
+  };
+
   // A field (from the list or another zone) was dropped on a zone.
   const onZoneDrop = (zone: ZoneId, raw: string) => {
     if (!model || !raw) return;
@@ -200,6 +209,18 @@ export function PivotFieldsPanel() {
       <header className="side-panel__header">
         <Icon name="pivot_table_chart" size="sm" />
         <h2 className="side-panel__title">PivotTable Fields</h2>
+        {model && (
+          <button
+            type="button"
+            className="side-panel__close"
+            aria-label="Refresh this PivotTable"
+            title="Refresh — re-read the source data"
+            data-testid="pivot-fields-refresh"
+            onClick={refreshSelected}
+          >
+            <Icon name="autorenew" size="sm" />
+          </button>
+        )}
         <button
           type="button"
           className="side-panel__close"
