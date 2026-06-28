@@ -43,14 +43,16 @@ export const PIVOT_DATE_GROUP_LABELS: Record<DateGrouping, string> = {
 export type PivotFieldRef = { column: number; grouping?: DateGrouping };
 
 /** Pivot value field — a column to aggregate + the aggregation. */
-/** How a value field is displayed. 'normal' = the raw aggregate;
- *  'pctOfGrandTotal' = each cell as a percentage of that value column's grand
- *  total (Excel's "Show Values As → % of Grand Total"). */
-export type PivotShowAs = 'normal' | 'pctOfGrandTotal';
+/** How a value field is displayed (Excel's "Show Values As"). 'normal' = the
+ *  raw aggregate; 'pctOfGrandTotal' = each cell as a % of the field's overall
+ *  grand total; 'pctOfColumnTotal' = each cell as a % of its column's total
+ *  (in a cross-tab; identical to grand total in the row-only layout). */
+export type PivotShowAs = 'normal' | 'pctOfGrandTotal' | 'pctOfColumnTotal';
 
 export const PIVOT_SHOW_AS_LABELS: Record<PivotShowAs, string> = {
   normal: 'Normal',
   pctOfGrandTotal: '% of Grand Total',
+  pctOfColumnTotal: '% of Column Total',
 };
 
 export type PivotValueField = {
