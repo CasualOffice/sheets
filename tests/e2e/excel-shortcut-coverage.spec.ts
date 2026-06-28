@@ -79,13 +79,12 @@ async function dispatchShortcut(
 // ─────────────────────────────────────────────────────────────────────────
 
 test.describe('Frequently used', () => {
-  test('Ctrl+G — opens Go To Special', async ({ page }) => {
-    // Excel's Ctrl+G is Go To, whose dialog carries the "Special" options.
-    // The Name Box already covers reference/named-range jumps, so Ctrl+G opens
-    // Go To Special here (see MenuBar keydown + go-to-special).
+  test('Ctrl+G — Go To: focuses the Name Box (F5 opens Go To Special)', async ({ page }) => {
+    // Ctrl+G focuses the Name Box for a reference/named-range jump; Go To
+    // Special lives on F5 + the Edit menu.
     await setup(page);
     await page.keyboard.press('Control+g');
-    await expect(page.getByTestId('go-to-special-dialog')).toBeVisible();
+    await expect(page.getByTestId('name-box')).toBeFocused();
   });
 
   test('Ctrl+P — opens print/page-setup dialog', async ({ page }) => {

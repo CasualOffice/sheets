@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { Icon } from './Icon';
 import { openExternal } from './openExternal';
@@ -525,12 +525,11 @@ export function MenuBar() {
           e.preventDefault();
           void handlersRef.current.open();
         } else if (k === 'g' && !e.shiftKey) {
-          // Ctrl+G — Excel's Go To. The Name Box already covers
-          // reference/named-range jumps (the lightweight half of Go To),
-          // so the shortcut now opens Go To Special — the part Excel users
-          // reach for here (select all constants / formulas / blanks / …).
+          // Ctrl+G — Go To: focus the Name Box and select its contents so the
+          // user can type a reference / named range. (Go To *Special* — select
+          // all constants/formulas/blanks/… — is on F5 and the Edit menu.)
           e.preventDefault();
-          setShowGoToSpecial(true);
+          document.dispatchEvent(new CustomEvent('casual-focus-name-box'));
         } else if (k === 'f' && !e.shiftKey) {
           // Skip when focus is in a plain text input — browsers expect
           // Ctrl+F to do in-page find there. The find dialog is for the
@@ -2806,6 +2805,23 @@ function MenuItemButton({
     const rect = btnRef.current?.getBoundingClientRect();
     if (rect) setPos({ top: rect.bottom + 2, left: rect.left });
   }, [isOpen]);
+
+  // Bottom-anchor a tall menu so it stays inside the viewport (the menu has no
+  // scroll — that would clip the fly-out submenus — so instead we shift it up
+  // when it would overflow the bottom edge). Without this, the lower items of a
+  // long menu (e.g. Data) render below the viewport and can't be clicked.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const pop = popRef.current;
+    if (!pop) return;
+    const h = pop.offsetHeight;
+    const margin = 8;
+    setPos((cur) => {
+      if (cur.top + h <= window.innerHeight - margin) return cur;
+      const top = Math.max(margin, window.innerHeight - h - margin);
+      return top === cur.top ? cur : { ...cur, top };
+    });
+  }, [isOpen, pos.top]);
 
   useEffect(() => {
     if (!isOpen) return;

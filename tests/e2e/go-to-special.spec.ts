@@ -50,14 +50,13 @@ test('Edit → Go To Special selects formula cells', async ({ page }) => {
   expect(await activeCell(page)).toEqual({ row: 1, col: 2 });
 });
 
-test('Ctrl+G opens the dialog and Constants moves the active cell off a formula', async ({
-  page,
-}) => {
+test('F5 opens the dialog and Constants moves the active cell off a formula', async ({ page }) => {
   await page.goto('/');
   await waitForUniver(page);
   await seed(page);
 
-  // Start the active cell on the formula, then Ctrl+G → Constants.
+  // Start the active cell on the formula, then F5 → Constants. (F5 is the Go To
+  // Special shortcut; Ctrl+G focuses the Name Box for reference jumps.)
   await page.evaluate(() => {
     const api = window.__univerAPI!;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,7 +64,7 @@ test('Ctrl+G opens the dialog and Constants moves the active cell off a formula'
     ws.getRange('C2').activate();
   });
 
-  await page.keyboard.press('Control+g');
+  await page.keyboard.press('F5');
   await expect(page.getByTestId('go-to-special-dialog')).toBeVisible();
   await page.getByTestId('go-to-special-constants').check();
   await page.getByTestId('go-to-special-ok').click();
