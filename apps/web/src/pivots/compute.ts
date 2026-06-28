@@ -235,7 +235,9 @@ function applyShowAsPercent(
   if (grid.length < 2) return;
   const lastRow = grid.length - 1;
   values.forEach((v, vi) => {
-    if (v.showAs !== 'pctOfGrandTotal') return;
+    // In the row-only layout a value column's "column total" is its grand
+    // total, so both percentage modes share the same denominator.
+    if (v.showAs !== 'pctOfGrandTotal' && v.showAs !== 'pctOfColumnTotal') return;
     const col = valueColStart + vi;
     const denom = Number(grid[lastRow][col]);
     for (let r = 1; r < grid.length; r++) {
@@ -436,15 +438,19 @@ function applyMatrixShowAsPercent(
   const lastRow = grid.length - 1;
   if (lastRow < headerRows) return;
   values.forEach((v, vi) => {
-    if (v.showAs !== 'pctOfGrandTotal') return;
-    const gtCol = colMeta.findIndex((m) => m.kind === 'grand-total' && m.valueIndex === vi);
-    if (gtCol < 0) return;
-    const denom = Number(grid[lastRow][gtCol]);
+    const mode = v.showAs;
+    if (mode !== 'pctOfGrandTotal' && mode !== 'pctOfColumnTotal') return;
     const cols = colMeta
       .map((m, i) => (m.kind !== 'label' && m.valueIndex === vi ? i : -1))
       .filter((i) => i >= 0);
+    // % of Grand Total → one denominator (the field's bottom-right total).
+    // % of Column Total → a per-column denominator (each column's bottom total,
+    // read from the unmodified bottom row — only touched once, last).
+    const gtCol = colMeta.findIndex((m) => m.kind === 'grand-total' && m.valueIndex === vi);
+    const grandDenom = gtCol >= 0 ? Number(grid[lastRow][gtCol]) : 0;
     for (let r = headerRows; r < grid.length; r++) {
       for (const c of cols) {
+        const denom = mode === 'pctOfColumnTotal' ? Number(grid[lastRow][c]) : grandDenom;
         const n = Number(grid[r][c]);
         grid[r][c] = denom && Number.isFinite(n) ? `${((n / denom) * 100).toFixed(1)}%` : '0.0%';
       }
