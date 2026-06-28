@@ -68,6 +68,7 @@ import { ShowFormulasLayer } from './shell/ShowFormulasLayer';
 import { PivotsProvider } from './pivots/pivots-context';
 import { SparklinesProvider } from './sparklines/sparklines-context';
 import { SparklineLayer } from './sparklines/SparklineLayer';
+import { TracePrecedentsLayer } from './shell/TracePrecedentsLayer';
 import { useAutosave } from './autosave/useAutosave';
 import { AutosaveRestoreBanner } from './autosave/AutosaveRestoreBanner';
 import { useDesktopRecoveryWriter } from './recovery/desktop-recovery';
@@ -740,6 +741,7 @@ export function App() {
                                     <ChartLayer />
                                     <SparklineLayer />
                                     <ShowFormulasLayer />
+                                    <TracePrecedentsLayer />
                                   </PersonalAuthGate>
                                 </OutlineProvider>
                               </SparklinesProvider>

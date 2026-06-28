@@ -98,6 +98,17 @@ const BOUNDARY = /[-+*/^&=<>(,%\s:]/;
  * boundaries so `1E5` (scientific notation) isn't misread as a reference.
  */
 export function findReference(expr: string): FormulaStep | null {
+  return extractReferences(expr)[0] ?? null;
+}
+
+/**
+ * Extract every cell/range reference in a formula expression, left to right.
+ * Skips string literals and respects token boundaries (so `1E5` isn't a ref).
+ * Used by formula auditing (trace precedents) — `findReference` is just the
+ * first result.
+ */
+export function extractReferences(expr: string): FormulaStep[] {
+  const out: FormulaStep[] = [];
   let inString = false;
   for (let i = 0; i < expr.length; i++) {
     const c = expr[i];
@@ -118,9 +129,12 @@ export function findReference(expr: string): FormulaStep | null {
     const atBoundary = i === 0 || BOUNDARY.test(expr[i - 1]);
     if (!atBoundary) continue;
     const m = REFERENCE.exec(expr.slice(i));
-    if (m) return { sub: m[0], start: i, end: i + m[0].length };
+    if (m) {
+      out.push({ sub: m[0], start: i, end: i + m[0].length });
+      i += m[0].length - 1; // skip past this reference
+    }
   }
-  return null;
+  return out;
 }
 
 /** Format an engine value for substitution back into the expression. */

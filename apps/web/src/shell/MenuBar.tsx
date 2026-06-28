@@ -2493,6 +2493,27 @@ export function MenuBar() {
           icon: 'visibility',
           onClick: ui.toggleWatchPanel,
         },
+        {
+          kind: 'item',
+          id: 'trace-precedents',
+          label: 'Trace Precedents',
+          icon: 'arrow_outward',
+          onClick: () => document.dispatchEvent(new CustomEvent('casual-trace-precedents')),
+        },
+        {
+          kind: 'item',
+          id: 'trace-dependents',
+          label: 'Trace Dependents',
+          icon: 'arrow_downward',
+          onClick: () => document.dispatchEvent(new CustomEvent('casual-trace-dependents')),
+        },
+        {
+          kind: 'item',
+          id: 'trace-clear',
+          label: 'Remove Arrows',
+          icon: 'close',
+          onClick: () => document.dispatchEvent(new CustomEvent('casual-trace-clear')),
+        },
       ],
     },
     help: {
