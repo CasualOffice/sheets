@@ -14,14 +14,26 @@
  * limitations under the License.
  */
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
+import { useWorkbook } from '../use-workbook';
 import { addWatches, removeWatch, type Watch } from './watch-model';
+import { readWatchesFromSnapshot } from './watch-resources';
 
 /**
- * Session-scoped store for the Watch Window. Watches live in memory for the
- * session (not persisted to the workbook yet — a follow-up); the panel reads
- * each watched cell's live value/formula from Univer.
+ * Store for the Watch Window. Mirrored into
+ * `IWorkbookData.resources['__casual_sheets_watches__']` at xlsx export and
+ * re-hydrated when the active workbook changes (same pattern as pivots/charts;
+ * autosave's `wb.save()` snapshot doesn't carry it). The panel reads each
+ * watched cell's live value/formula from Univer.
  */
 type WatchCtxValue = {
   watches: Watch[];
@@ -39,8 +51,21 @@ export function useWatches(): WatchCtxValue {
 }
 
 export function WatchProvider({ children }: { children: ReactNode }) {
-  const [watches, setWatches] = useState<Watch[]>([]);
+  const { meta, snapshotRef } = useWorkbook();
+  const [watches, setWatches] = useState<Watch[]>(() =>
+    snapshotRef.current ? readWatchesFromSnapshot(snapshotRef.current) : [],
+  );
   const seqRef = useState(() => ({ n: 0 }))[0];
+
+  // Re-hydrate from the snapshot when the active workbook changes (open / swap).
+  const lastRevisionRef = useRef(meta.revision);
+  useEffect(() => {
+    if (lastRevisionRef.current === meta.revision) return;
+    lastRevisionRef.current = meta.revision;
+    setWatches(snapshotRef.current ? readWatchesFromSnapshot(snapshotRef.current) : []);
+    // snapshotRef is a stable ref object — safe to exclude.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta.revision]);
 
   const add = useCallback(
     (cells: Array<Omit<Watch, 'id'>>) => {

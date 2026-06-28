@@ -25,6 +25,8 @@ import { writeOutlineIntoSnapshot } from '../outline/resources';
 import { writeChartsIntoSnapshot } from '../charts/resources';
 import { writePivotsIntoSnapshot } from '../pivots/resources';
 import { writeSparklinesIntoSnapshot } from '../sparklines/resources';
+import { writeWatchesIntoSnapshot } from '../shell/watch-resources';
+import type { Watch } from '../shell/watch-model';
 
 /**
  * Public entry point for xlsx export. The core converter now lives in the SDK
@@ -80,6 +82,10 @@ export type ExportExtras = {
    *  foreign xlsx readers (Excel renders the underlying source cells
    *  but not the mini-chart overlay). */
   sparklines?: SparklineModel[];
+  /** Watch Window cells stashed under `__casual_sheets_watches__`. Same
+   *  pattern as pivots/charts — survives our round-trip; foreign readers
+   *  ignore the resource. */
+  watches?: Watch[];
 };
 
 /**
@@ -111,6 +117,9 @@ export async function workbookDataToXlsx(
   }
   if (extras.sparklines && extras.sparklines.length > 0) {
     writeSparklinesIntoSnapshot(baked, extras.sparklines);
+  }
+  if (extras.watches && extras.watches.length > 0) {
+    writeWatchesIntoSnapshot(baked, extras.watches);
   }
   // The SDK exporter handles the generic xlsx-native bits it can derive on its
   // own (hyperlink cells, outline gutter, floating chart images).

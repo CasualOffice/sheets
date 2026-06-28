@@ -181,6 +181,8 @@ export type SaveOptions = {
   sparklines?: import('../sparklines/types').SparklineModel[];
   /** Pivot models to fold into the xlsx — see ExportExtras.pivots. */
   pivots?: PivotModel[];
+  /** Watch Window cells to fold into the xlsx — see ExportExtras.watches. */
+  watches?: import('./watch-model').Watch[];
   /** Server-backed file id when the workbook was opened from a
    *  PersonalFileSource / WopiFileSource. Save then does an in-place
    *  PUT (with If-Match etag) instead of creating a duplicate. */
@@ -234,6 +236,7 @@ export async function saveAsXlsx(
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
     ...(chartImages.length > 0 ? { chartImages } : {}),
     ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
+    ...(options.watches && options.watches.length > 0 ? { watches: options.watches } : {}),
     ...(options.sparklines && options.sparklines.length > 0
       ? { sparklines: options.sparklines }
       : {}),
@@ -281,6 +284,7 @@ export async function exportCurrentWorkbookAsXlsxBlob(
     ...(options.charts && options.charts.length > 0 ? { charts: options.charts } : {}),
     ...(chartImages.length > 0 ? { chartImages } : {}),
     ...(options.pivots && options.pivots.length > 0 ? { pivots: options.pivots } : {}),
+    ...(options.watches && options.watches.length > 0 ? { watches: options.watches } : {}),
     ...(options.sparklines && options.sparklines.length > 0
       ? { sparklines: options.sparklines }
       : {}),
