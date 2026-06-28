@@ -20,10 +20,13 @@ import { test } from 'node:test';
 import {
   addFieldToZone,
   axisOf,
+  filterAllowedCount,
   hasValues,
   moveWithinZone,
   placedColumns,
   removeFieldFromZone,
+  setFilterValues,
+  toggleFilterValue,
   updateRowGrouping,
   updateValueField,
 } from './fields-model.js';
@@ -134,4 +137,52 @@ test('hasValues guards the last value field', () => {
   const empty = removeFieldFromZone(baseModel(), 'values', 0);
   assert.equal(hasValues(empty), false);
   assert.equal(hasValues(baseModel()), true);
+});
+
+const ALL = ['East', 'North', 'South', 'West'];
+
+function withFilter(): PivotModel {
+  // Filter on column 2 seeded with all values allowed (slice-1 default).
+  return addFieldToZone(baseModel(), 2, 'filters', { allowedValues: ALL });
+}
+
+test('toggleFilterValue unchecks a value and keeps canonical order', () => {
+  const m = toggleFilterValue(withFilter(), 0, 'North', false, ALL);
+  assert.deepEqual(m.filters?.[0].allowedValues, ['East', 'South', 'West']);
+});
+
+test('toggleFilterValue seeds from all values when the stored list is empty', () => {
+  // An empty allowedValues means "all pass"; the first uncheck must seed
+  // from ALL, not drop everything.
+  let m = setFilterValues(withFilter(), 0, []);
+  m = toggleFilterValue(m, 0, 'West', false, ALL);
+  assert.deepEqual(m.filters?.[0].allowedValues, ['East', 'North', 'South']);
+});
+
+test('toggleFilterValue re-checks a value back in', () => {
+  let m = toggleFilterValue(withFilter(), 0, 'North', false, ALL);
+  m = toggleFilterValue(m, 0, 'North', true, ALL);
+  assert.deepEqual(m.filters?.[0].allowedValues, ALL);
+});
+
+test('toggleFilterValue is immutable + a no-op for a bad index', () => {
+  const orig = withFilter();
+  const before = JSON.stringify(orig);
+  const same = toggleFilterValue(orig, 9, 'North', false, ALL);
+  assert.equal(same, orig);
+  assert.equal(JSON.stringify(orig), before);
+});
+
+test('setFilterValues replaces the allowed set (Select all / Clear)', () => {
+  const cleared = setFilterValues(withFilter(), 0, []);
+  assert.deepEqual(cleared.filters?.[0].allowedValues, []);
+  const all = setFilterValues(cleared, 0, ALL);
+  assert.deepEqual(all.filters?.[0].allowedValues, ALL);
+});
+
+test('filterAllowedCount treats an empty list as "all"', () => {
+  const m = setFilterValues(withFilter(), 0, []);
+  assert.equal(filterAllowedCount(m, 0, ALL.length), 4, 'empty = all');
+  const narrowed = toggleFilterValue(m, 0, 'North', false, ALL);
+  assert.equal(filterAllowedCount(narrowed, 0, ALL.length), 3);
 });

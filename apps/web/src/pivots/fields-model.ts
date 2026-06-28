@@ -167,3 +167,55 @@ export function axisOf(model: PivotModel, column: number): Exclude<ZoneId, 'valu
   }
   return null;
 }
+
+/**
+ * Check/uncheck a single value on a report filter (Filters zone). The
+ * allowedValues list is the set of values that pass; compute keeps only
+ * records whose value is in it (an empty list excludes everything, same
+ * as Excel showing nothing when you deselect all). `allValues` is the
+ * filter field's full distinct set — needed so the first uncheck can
+ * seed the list from "all selected" rather than an empty array, and so
+ * the result preserves the canonical (sorted) order.
+ */
+export function toggleFilterValue(
+  model: PivotModel,
+  filterIndex: number,
+  value: string,
+  checked: boolean,
+  allValues: string[],
+): PivotModel {
+  const filters = (model.filters ?? []).map((f) => ({ ...f, allowedValues: [...f.allowedValues] }));
+  const f = filters[filterIndex];
+  if (!f) return model;
+  // A filter stored with the complete set (or an empty list, the slice-1
+  // "all pass" convention) starts from every value; toggling narrows it.
+  const current = new Set(f.allowedValues.length ? f.allowedValues : allValues);
+  if (checked) current.add(value);
+  else current.delete(value);
+  f.allowedValues = allValues.filter((v) => current.has(v));
+  return { ...model, filters };
+}
+
+/** Set a filter's allowed set wholesale (Select all / Clear). */
+export function setFilterValues(
+  model: PivotModel,
+  filterIndex: number,
+  values: string[],
+): PivotModel {
+  const filters = (model.filters ?? []).map((f) => ({ ...f, allowedValues: [...f.allowedValues] }));
+  if (!filters[filterIndex]) return model;
+  filters[filterIndex].allowedValues = [...values];
+  return { ...model, filters };
+}
+
+/** Count of allowed values for a filter, treating an empty stored list as
+ *  "all" (the slice-1 convention) so the chip can show "M of M". */
+export function filterAllowedCount(
+  model: PivotModel,
+  filterIndex: number,
+  allCount: number,
+): number {
+  const f = (model.filters ?? [])[filterIndex];
+  if (!f) return allCount;
+  return f.allowedValues.length ? f.allowedValues.length : allCount;
+}

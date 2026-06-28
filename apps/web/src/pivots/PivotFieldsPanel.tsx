@@ -34,10 +34,13 @@ import {
   ZONE_LABELS,
   addFieldToZone,
   axisOf,
+  filterAllowedCount,
   hasValues,
   moveWithinZone,
   placedColumns,
   removeFieldFromZone,
+  setFilterValues,
+  toggleFilterValue,
   updateRowGrouping,
   updateValueField,
   type ZoneId,
@@ -49,10 +52,12 @@ import {
  * the pivot live as the user reconfigures it, so you don't have to delete
  * and re-insert to change the layout.
  *
- * Slice 1 uses click-to-assign (each field's "+" opens the four-zone menu,
- * mirroring Excel's right-click "Add to Row Labels / …" affordance) plus
- * per-chip remove / reorder and Values agg + Show-Values-As editing.
- * Drag-and-drop and report-filter value selection layer on next.
+ * Field assignment uses click-to-assign (each field's "+" opens the
+ * four-zone menu, mirroring Excel's right-click "Add to Row Labels / …"
+ * affordance) plus per-chip remove / reorder, Values agg + Show-Values-As
+ * editing, Rows date-grouping, and a per-value checklist on report filters
+ * (Filters zone) that actually narrows the source records. Drag-and-drop
+ * between zones is the remaining slice.
  */
 
 type SourceView = {
@@ -107,6 +112,8 @@ export function PivotFieldsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Field-list "+" menu — which source column's zone picker is open.
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  // Filters zone — which report filter's value checklist is expanded.
+  const [expandedFilter, setExpandedFilter] = useState<number | null>(null);
 
   // Keep a valid selection: default to the most-recently-inserted pivot,
   // and recover if the selected pivot was deleted.
@@ -267,17 +274,75 @@ export function PivotFieldsPanel() {
               <Zone
                 zone="filters"
                 model={model}
-                renderChip={(col, i) => (
-                  <Chip
-                    key={`f-${i}`}
-                    label={source.headers[col] ?? `Column ${col + 1}`}
-                    zone="filters"
-                    index={i}
-                    count={(model.filters ?? []).length}
-                    onRemove={() => commit(removeFieldFromZone(model, 'filters', i))}
-                    onMove={(dir) => commit(moveWithinZone(model, 'filters', i, i + dir))}
-                  />
-                )}
+                renderChip={(col, i) => {
+                  const all = source.distinct(col);
+                  const allowed = filterAllowedCount(model, i, all.length);
+                  const stored = model.filters?.[i]?.allowedValues ?? [];
+                  // Empty stored list = "all pass" (slice-1 convention).
+                  const isAllowed = (v: string) =>
+                    stored.length === 0 ? true : stored.includes(v);
+                  const expanded = expandedFilter === i;
+                  return (
+                    <Chip
+                      key={`f-${i}`}
+                      label={source.headers[col] ?? `Column ${col + 1}`}
+                      zone="filters"
+                      index={i}
+                      count={(model.filters ?? []).length}
+                      onRemove={() => commit(removeFieldFromZone(model, 'filters', i))}
+                      onMove={(dir) => commit(moveWithinZone(model, 'filters', i, i + dir))}
+                    >
+                      <button
+                        type="button"
+                        className="pivot-fields-panel__filter-toggle"
+                        data-testid={`pivot-fields-filter-toggle-${i}`}
+                        aria-expanded={expanded}
+                        onClick={() => setExpandedFilter(expanded ? null : i)}
+                      >
+                        <Icon name={expanded ? 'expand_less' : 'expand_more'} size="sm" />
+                        <span>
+                          {allowed} of {all.length} selected
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div
+                          className="pivot-fields-panel__filter-values"
+                          data-testid={`pivot-fields-filter-values-${i}`}
+                        >
+                          <div className="pivot-fields-panel__filter-bulk">
+                            <button
+                              type="button"
+                              data-testid={`pivot-fields-filter-all-${i}`}
+                              onClick={() => commit(setFilterValues(model, i, all))}
+                            >
+                              Select all
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`pivot-fields-filter-clear-${i}`}
+                              onClick={() => commit(setFilterValues(model, i, []))}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                          {all.map((v) => (
+                            <label key={v} className="pivot-fields-panel__filter-value">
+                              <input
+                                type="checkbox"
+                                data-testid={`pivot-fields-filter-${i}-${v || 'blank'}`}
+                                checked={isAllowed(v)}
+                                onChange={(e) =>
+                                  commit(toggleFilterValue(model, i, v, e.target.checked, all))
+                                }
+                              />
+                              <span>{v === '' ? '(blank)' : v}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </Chip>
+                  );
+                }}
               />
               <Zone
                 zone="cols"

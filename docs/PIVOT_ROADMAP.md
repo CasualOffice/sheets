@@ -95,11 +95,16 @@ wiring is e2e-tested (`pivot-fields-panel.spec.ts`). Auto-opens on insert. Also
 fixed a latent bug: `resources.ts` `VALID_AGGS` omitted `distinctCount`,
 silently dropping a saved Distinct-Count pivot on reload.
 
-**Slice 2 (next).** HTML5 drag-and-drop between zones (layered on the same
-`fields-model` ops); report-filter value selection (the Filters zone currently
-places/removes a field but stores all-values-allowed — no per-value checklist
-yet); auto-follow the active selection (select a cell inside a pivot → the pane
-switches to it via `findPivotAtCell`).
+**Slice 2 — report-filter value selection (shipped).** The Filters zone now
+carries a per-value checklist (expand a filter chip → check/uncheck values,
+Select-all / Clear) that actually narrows the source records and re-applies the
+pivot live. Toggle maths is pure + unit-tested (`toggleFilterValue` /
+`setFilterValues` in `fields-model.ts`); wiring is e2e-tested
+(`pivot-fields-report-filter.spec.ts`).
+
+**Slice 3 (next).** HTML5 drag-and-drop between zones (layered on the same
+`fields-model` ops); auto-follow the active selection (select a cell inside a
+pivot → the pane switches to it via `findPivotAtCell`).
 
 **Live, refreshable pivot object.** Today a pivot is materialised cells + a
 model resource; "refresh" re-runs compute. A true live object (auto-refresh on
