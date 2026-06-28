@@ -83,6 +83,7 @@ import {
 import { InsertChartDialog } from '../charts/InsertChartDialog';
 import { nextChartName } from '../charts/naming';
 import { usePivots } from '../pivots/pivots-context';
+import { useWatches } from './watch-context';
 import { InsertPivotDialog } from '../pivots/InsertPivotDialog';
 import { applyPivot, refreshPivot } from '../pivots/apply';
 import { newPivotId } from '../pivots/types';
@@ -431,6 +432,7 @@ export function MenuBar() {
   const selectionRangesRef = useRef<SheetRange[]>([]);
   const syntheticSelectionRef = useRef(false);
   const pivots = usePivots();
+  const watches = useWatches();
 
   // Toolbar's Insert > Chart / Pivot buttons live in a sibling component;
   // they can't reach this dialog state directly, so we dispatch DOM
@@ -1180,6 +1182,7 @@ export function MenuBar() {
             outline: outline.state,
             charts: charts.charts,
             pivots: pivots.pivots,
+            watches: watches.watches,
             sparklines: sparklinesCtx.sparklines,
             serverFileId,
             serverEtag,
@@ -1276,6 +1279,7 @@ export function MenuBar() {
         outline: outline.state,
         charts: charts.charts,
         pivots: pivots.pivots,
+        watches: watches.watches,
         sparklines: sparklinesCtx.sparklines,
         // Save As / Export → always open the native picker so the user
         // chooses where it lands (never silently overwrite the bound file).
