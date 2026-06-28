@@ -30,6 +30,10 @@ export type SheetPageSetupV1 = {
   fitToHeight?: number;
   scale?: number;
   printArea?: string;
+  /** Print titles — rows/columns repeated on every printed page. ExcelJS A1
+   *  range strings, e.g. row titles "1:1" / "1:2", column titles "A:A". */
+  printTitlesRow?: string;
+  printTitlesColumn?: string;
   margins?: {
     top?: number;
     bottom?: number;
@@ -104,13 +108,22 @@ export function readPageSetupFromXlsx(
       if (typeof ps.fitToWidth === 'number' && ps.fitToWidth !== PAGE_SETUP_DEFAULTS.fitToWidth) {
         entry.fitToWidth = ps.fitToWidth as number;
       }
-      if (typeof ps.fitToHeight === 'number' && ps.fitToHeight !== PAGE_SETUP_DEFAULTS.fitToHeight) {
+      if (
+        typeof ps.fitToHeight === 'number' &&
+        ps.fitToHeight !== PAGE_SETUP_DEFAULTS.fitToHeight
+      ) {
         entry.fitToHeight = ps.fitToHeight as number;
       }
       if (typeof ps.scale === 'number' && ps.scale !== PAGE_SETUP_DEFAULTS.scale) {
         entry.scale = ps.scale as number;
       }
       if (typeof ps.printArea === 'string') entry.printArea = ps.printArea as string;
+      if (typeof ps.printTitlesRow === 'string' && ps.printTitlesRow) {
+        entry.printTitlesRow = ps.printTitlesRow as string;
+      }
+      if (typeof ps.printTitlesColumn === 'string' && ps.printTitlesColumn) {
+        entry.printTitlesColumn = ps.printTitlesColumn as string;
+      }
       const margins = ps.margins as Record<string, unknown> | undefined;
       if (margins && typeof margins === 'object') {
         const m: SheetPageSetupV1['margins'] = {};
@@ -156,9 +169,7 @@ export function mergePageSetupIntoResources(
 
 /** Read the page-setup resource off a snapshot. Tolerant of older /
  *  missing / malformed payloads. */
-export function readPageSetupFromSnapshot(
-  data: IWorkbookData,
-): Record<string, SheetPageSetupV1> {
+export function readPageSetupFromSnapshot(data: IWorkbookData): Record<string, SheetPageSetupV1> {
   const entry = data.resources?.find((r) => r.name === PAGE_SETUP_RESOURCE);
   if (!entry?.data) return {};
   try {
@@ -185,6 +196,10 @@ export function applyPageSetupToXlsxWorksheet(
   if (typeof entry.fitToHeight === 'number') ws.pageSetup.fitToHeight = entry.fitToHeight;
   if (typeof entry.scale === 'number') ws.pageSetup.scale = entry.scale;
   if (typeof entry.printArea === 'string') ws.pageSetup.printArea = entry.printArea;
+  if (typeof entry.printTitlesRow === 'string') ws.pageSetup.printTitlesRow = entry.printTitlesRow;
+  if (typeof entry.printTitlesColumn === 'string') {
+    ws.pageSetup.printTitlesColumn = entry.printTitlesColumn;
+  }
   if (entry.margins) {
     ws.pageSetup.margins = { ...(ws.pageSetup.margins ?? {}), ...entry.margins };
   }
