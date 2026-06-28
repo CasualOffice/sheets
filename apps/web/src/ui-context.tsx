@@ -33,6 +33,10 @@ export type UICtxValue = {
    *  / Rows / Values zones and re-apply it live (Excel's field pane). */
   pivotPanelVisible: boolean;
   togglePivotPanel: () => void;
+  /** Watch Window — pin cells so their value/formula stay visible while you
+   *  scroll or switch sheets (Excel's Formulas → Watch Window). */
+  watchPanelVisible: boolean;
+  toggleWatchPanel: () => void;
   /** Comments task pane — our React panel that indexes thread comments on
    *  the active sheet (replaces Univer's bespoke comment sidebar so it
    *  shares the shared `.side-panel` shell + motion). */

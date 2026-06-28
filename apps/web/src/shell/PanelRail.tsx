@@ -59,6 +59,13 @@ export function PanelRail() {
         onClick={ui.togglePivotPanel}
       />
       <RailButton
+        id="watch"
+        label={ui.watchPanelVisible ? 'Hide Watch Window' : 'Watch Window'}
+        icon="visibility"
+        pressed={ui.watchPanelVisible}
+        onClick={ui.toggleWatchPanel}
+      />
+      <RailButton
         id="outline"
         label={ui.outlinePanelVisible ? 'Hide Outline' : 'Outline'}
         icon="format_list_bulleted"

@@ -56,6 +56,7 @@ export function PanelMutex() {
     ui.tablesPanelVisible ||
     ui.chartsPanelVisible ||
     ui.pivotPanelVisible ||
+    ui.watchPanelVisible ||
     ui.outlinePanelVisible ||
     ui.historyPanelVisible;
   useEffect(() => {

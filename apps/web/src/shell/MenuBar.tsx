@@ -2486,6 +2486,13 @@ export function MenuBar() {
           icon: 'troubleshoot',
           onClick: () => setShowEvaluateFormula(true),
         },
+        {
+          kind: 'item',
+          id: 'watch-window',
+          label: ui.watchPanelVisible ? 'Hide Watch Window' : 'Watch Window',
+          icon: 'visibility',
+          onClick: ui.toggleWatchPanel,
+        },
       ],
     },
     help: {
