@@ -65,7 +65,9 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
   // P2 — optional column field → cross-tab / matrix layout. -1 means
   // "no column field" (classic row-only layout). When set, the value
   // field fans out across one column per distinct value of this field.
-  const [colField, setColField] = useState<number>(-1);
+  // Column fields → cross-tab / matrix layout, nestable (outer first). The first
+  // entry defaults to -1 (None = classic row layout); additional levels nest.
+  const [colFieldList, setColFieldList] = useState<number[]>([-1]);
   // One or more value fields. Each produces its own column in the output
   // (compute.ts already fans out multiple values). Defaults to a single
   // Sum-of-column-1 to match the prior single-value behaviour.
@@ -170,12 +172,16 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
     if (subRowField >= 0 && subRowField !== rowField) {
       rowFieldColumns.push(subRowField);
     }
-    // Compose the column-field list. A column field must differ from the
-    // row fields — using the same column on both axes produces a
-    // degenerate matrix (every off-diagonal cell empty), so we drop it.
+    // Compose the (possibly nested) column-field list, outer first. Drop None
+    // (-1), any column also used on the row axis (degenerate matrix), and
+    // duplicates (a column can't nest under itself).
+    const colSeen = new Set<number>();
     const colFieldColumns: number[] = [];
-    if (colField >= 0 && !rowFieldColumns.includes(colField)) {
-      colFieldColumns.push(colField);
+    for (const c of colFieldList) {
+      if (c >= 0 && !rowFieldColumns.includes(c) && !colSeen.has(c)) {
+        colSeen.add(c);
+        colFieldColumns.push(c);
+      }
     }
     onConfirm({
       source,
@@ -310,23 +316,65 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
               ))}
             </select>
           </label>
-          <label className="insert-pivot__field">
-            <span className="insert-pivot__field-label">Column field</span>
-            <select
-              className="insert-pivot__select"
-              data-testid="insert-pivot-col-field"
-              value={colField}
-              onChange={(e) => setColField(Number(e.target.value))}
-              disabled={headers.length === 0}
-            >
-              <option value={-1}>— None —</option>
-              {headers.map((h, i) => (
-                <option key={i} value={i}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="insert-pivot__field" style={{ gridColumn: '1 / -1' }}>
+            <span className="insert-pivot__field-label">Column fields</span>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {colFieldList.map((cf, i) => {
+                // First select keeps the original testid (+ a None option) for
+                // back-compat; nested levels are indexed and header-only.
+                const sfx = i === 0 ? '' : `-${i}`;
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <select
+                      className="insert-pivot__select"
+                      data-testid={`insert-pivot-col-field${sfx}`}
+                      value={cf}
+                      disabled={headers.length === 0}
+                      onChange={(e) =>
+                        setColFieldList((cur) =>
+                          cur.map((x, j) => (j === i ? Number(e.target.value) : x)),
+                        )
+                      }
+                    >
+                      {i === 0 && <option value={-1}>— None —</option>}
+                      {headers.map((h, hi) => (
+                        <option key={hi} value={hi}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                    {colFieldList.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        aria-label="Remove column field"
+                        data-testid={`insert-pivot-col-remove-${i}`}
+                        onClick={() => setColFieldList((cur) => cur.filter((_, j) => j !== i))}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {colFieldList.length < 3 && colFieldList[0] >= 0 && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  data-testid="insert-pivot-col-add"
+                  disabled={headers.length === 0}
+                  onClick={() =>
+                    setColFieldList((cur) => {
+                      const next = headers.findIndex((_, hi) => !cur.includes(hi));
+                      return [...cur, next >= 0 ? next : 0];
+                    })
+                  }
+                >
+                  + Add column field (nest)
+                </button>
+              )}
+            </div>
+          </div>
           <div className="insert-pivot__field" style={{ gridColumn: '1 / -1' }}>
             <span className="insert-pivot__field-label">Value fields</span>
             <div style={{ display: 'grid', gap: 6 }}>
