@@ -122,10 +122,14 @@ Show-Values-As, Rows date-grouping, working report filters, and auto-follow.
 What remains for full Excel parity is the **live, refreshable pivot object**
 below (a larger, separate effort).
 
-**Live, refreshable pivot object.** Today a pivot is materialised cells + a
-model resource; "refresh" re-runs compute. A true live object (auto-refresh on
-source change, Excel-native `xl/pivotTables` on export) is a larger effort and
-overlaps the raw-OOXML pivot passthrough already in the xlsx bridge.
+**Live, refreshable pivot object → designed in
+[`PIVOT_LIVE_OBJECT.md`](./PIVOT_LIVE_OBJECT.md).** Today an in-app pivot is
+materialised cells + a model resource; it exports as flat values, so Excel
+doesn't see a PivotTable (imported native pivots already round-trip via
+`pivot-passthrough.ts`). The design pass covers synthesising `xl/pivotTables` +
+`xl/pivotCaches` from `PivotModel` (reusing the passthrough's injection
+machinery) plus the refresh lifecycle — and notably decides _against_
+auto-refresh-on-edit, since Excel refreshes on demand / on open, not live.
 
 ## Deferred (Excel parity, lower demand)
 
