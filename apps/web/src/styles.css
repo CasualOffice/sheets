@@ -2351,6 +2351,12 @@ button {
   color: var(--color-text-secondary);
   font-weight: var(--weight-semibold);
 }
+.watch-panel__row {
+  cursor: pointer;
+}
+.watch-panel__row:hover td {
+  background: var(--color-hover);
+}
 .watch-panel__formula {
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--color-text-secondary);

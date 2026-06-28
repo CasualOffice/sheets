@@ -97,6 +97,20 @@ export function WatchPanel() {
     add(cellsInRect(rect).map(({ row, col }) => ({ sheetId, sheetName, row, col })));
   };
 
+  // Double-click a watch → jump to that cell (Excel's Watch Window behaviour),
+  // switching sheets if it lives on another one.
+  const navigate = (w: Watch) => {
+    const wb = api?.getActiveWorkbook();
+    const sheet = sheetById(api, w.sheetId);
+    if (!wb || !sheet) return;
+    try {
+      wb.setActiveSheet?.(sheet);
+      sheet.getRange?.(w.row, w.col)?.activate?.();
+    } catch {
+      /* sheet removed since the watch was added */
+    }
+  };
+
   const empty = watches.length === 0;
 
   return (
@@ -160,7 +174,13 @@ export function WatchPanel() {
             </thead>
             <tbody>
               {rows.map((w) => (
-                <tr key={w.id} data-testid={`watch-row-${w.id}`}>
+                <tr
+                  key={w.id}
+                  data-testid={`watch-row-${w.id}`}
+                  className="watch-panel__row"
+                  title="Double-click to go to this cell"
+                  onDoubleClick={() => navigate(w)}
+                >
                   <td title={w.sheetName}>{w.sheetName}</td>
                   <td>{cellA1(w.row, w.col)}</td>
                   <td data-testid={`watch-value-${cellA1(w.row, w.col)}`}>{w.value}</td>
