@@ -102,9 +102,17 @@ pivot live. Toggle maths is pure + unit-tested (`toggleFilterValue` /
 `setFilterValues` in `fields-model.ts`); wiring is e2e-tested
 (`pivot-fields-report-filter.spec.ts`).
 
-**Slice 3 (next).** HTML5 drag-and-drop between zones (layered on the same
-`fields-model` ops); auto-follow the active selection (select a cell inside a
-pivot → the pane switches to it via `findPivotAtCell`).
+**Slice 3a — auto-follow the active selection (shipped).** Clicking into a
+pivot's output switches the pane to that pivot (via `findPivotAtCell`),
+Excel-style; clicking away leaves it on the last one. e2e:
+`pivot-fields-autofollow.spec.ts`.
+
+**Slice 3b (next) — drag-and-drop between zones.** Layered on the same
+`fields-model` ops (the drop reducer is just `addFieldToZone` /
+`moveWithinZone`). Click-to-assign stays as the reliable / accessible path;
+DnD is the polish layer. Note: HTML5 DnD is flaky to e2e in Playwright, so the
+plan is unit-tested drop logic + a tolerant drag spec rather than relying on a
+brittle native-drag test.
 
 **Live, refreshable pivot object.** Today a pivot is materialised cells + a
 model resource; "refresh" re-runs compute. A true live object (auto-refresh on

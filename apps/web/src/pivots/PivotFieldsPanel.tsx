@@ -21,6 +21,7 @@ import { useUI } from '../use-ui';
 import { Icon } from '../shell/Icon';
 import { usePivots } from './pivots-context';
 import { applyPivot } from './apply';
+import { findPivotAtCell } from './drill-down';
 import {
   PIVOT_AGG_LABELS,
   PIVOT_DATE_GROUP_LABELS,
@@ -56,8 +57,9 @@ import {
  * four-zone menu, mirroring Excel's right-click "Add to Row Labels / …"
  * affordance) plus per-chip remove / reorder, Values agg + Show-Values-As
  * editing, Rows date-grouping, and a per-value checklist on report filters
- * (Filters zone) that actually narrows the source records. Drag-and-drop
- * between zones is the remaining slice.
+ * (Filters zone) that actually narrows the source records. The pane also
+ * auto-follows the active selection — clicking into a pivot switches to it.
+ * Drag-and-drop between zones is the remaining slice.
  */
 
 type SourceView = {
@@ -132,6 +134,28 @@ export function PivotFieldsPanel() {
     [pivots.pivots, selectedId],
   );
   const source = useMemo(() => readSource(api, model), [api, model]);
+
+  // Auto-follow the active selection: clicking into a pivot's output
+  // switches the pane to that pivot (Excel's Field List behaviour). We
+  // only switch when the cursor lands inside a pivot — clicking away
+  // leaves the pane on the last one, matching Excel.
+  useEffect(() => {
+    if (!api) return;
+    const sync = () => {
+      const wb = api.getActiveWorkbook();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sheet = wb?.getActiveSheet() as any;
+      const range = sheet?.getSelection?.()?.getActiveRange?.();
+      const sheetId = sheet?.getSheetId?.();
+      if (!range || sheetId == null) return;
+      const hit = findPivotAtCell(pivots.pivots, sheetId, range.getRow(), range.getColumn());
+      if (hit) setSelectedId((cur) => (cur === hit.id ? cur : hit.id));
+    };
+    const disp = api.addEvent(api.Event.CommandExecuted, (e) => {
+      if ((e as { id?: string }).id === 'sheet.operation.set-selections') sync();
+    });
+    return () => disp.dispose();
+  }, [api, pivots.pivots]);
 
   // Re-apply the edited model to the sheet and persist it on the store.
   const commit = (next: PivotModel) => {
