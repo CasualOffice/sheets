@@ -47,6 +47,22 @@ test('Trace Precedents draws an arrow from each precedent; Remove Arrows clears'
   await expect(page.getByTestId('trace-arrow')).toHaveCount(0);
 });
 
+test('editing a cell clears the tracer arrows', async ({ page }) => {
+  await activate(page, 'C1');
+  await page.getByTestId('menubar-data').click();
+  await page.getByTestId('menu-item-trace-precedents').click();
+  await expect(page.getByTestId('trace-arrow')).toHaveCount(2);
+
+  // Any cell edit removes the arrows (Excel behaviour).
+  await page.evaluate(() => {
+    const api = window.__univerAPI!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+    ws.getRange('A1').setValue({ v: 999 });
+  });
+  await expect(page.getByTestId('trace-arrow')).toHaveCount(0);
+});
+
 test('Trace Dependents draws an arrow to each dependent', async ({ page }) => {
   // A1 is referenced by C1 (=A1+A2) → one dependent.
   await activate(page, 'A1');
