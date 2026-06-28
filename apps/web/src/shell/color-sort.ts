@@ -35,45 +35,51 @@ export interface SortCell {
 }
 export type SortRow = Array<SortCell | null>;
 
-export interface ColorSortInput {
+export interface ColorMultiSortInput {
   /** Full cell data of the selection, row-major. */
   rows: SortRow[];
-  /** Background colour of the key-column cell for each row (same length/order
-   *  as `rows`, header included). */
+  /** Key-column colour per row (same length/order as `rows`, header included). */
   colors: string[];
-  /** Treat the first row as a header (kept in place, never moved). */
+  /** Treat the first row as a header (kept in place). */
   hasHeaders: boolean;
-  /** The colour to bring to the top/bottom (compared exactly as read). */
-  targetColor: string;
-  /** True = matching rows rise to the top; false = sink to the bottom. */
-  onTop: boolean;
+  /** Colour priority, top-to-bottom. Rows whose colour isn't listed sort
+   *  after the listed ones, keeping their original order. */
+  order: string[];
 }
 
 /**
- * Stable-partition the data rows by whether their key colour matches the
- * target. Returns a new matrix (cells cloned) of the same dimensions; the
- * header (if any) stays first.
+ * Multi-level colour sort — Excel's Sort dialog with several colour levels
+ * ("red on top, then yellow, then green"). Ranks each data row by where its
+ * key colour appears in `order`; unlisted colours fall to the end. Stable;
+ * returns a new matrix with cells cloned (the `getCellDatas`/`setValues`
+ * aliasing guard). The single-colour case is just `order = [colour]`.
  */
-export function colorSort(input: ColorSortInput): { rows: SortRow[] } {
-  const { rows, colors, hasHeaders, targetColor, onTop } = input;
+export function colorMultiSort(input: ColorMultiSortInput): { rows: SortRow[] } {
+  const { rows, colors, hasHeaders, order } = input;
   const headerCount = hasHeaders ? 1 : 0;
   const header = rows.slice(0, headerCount);
   const data = rows.slice(headerCount);
   const dataColors = colors.slice(headerCount);
 
-  const matching: SortRow[] = [];
-  const rest: SortRow[] = [];
-  data.forEach((row, i) => {
-    (dataColors[i] === targetColor ? matching : rest).push(row);
+  const rank = new Map<string, number>();
+  order.forEach((c, i) => {
+    if (!rank.has(c)) rank.set(c, i);
   });
 
-  const ordered = onTop ? [...matching, ...rest] : [...rest, ...matching];
+  const decorated = data.map((row, i) => ({
+    row,
+    i,
+    r: rank.has(dataColors[i]) ? (rank.get(dataColors[i]) as number) : Number.POSITIVE_INFINITY,
+  }));
+  decorated.sort((a, b) => {
+    if (a.r === b.r) return a.i - b.i; // stable within a colour (incl. both unlisted)
+    if (a.r === Number.POSITIVE_INFINITY) return 1;
+    if (b.r === Number.POSITIVE_INFINITY) return -1;
+    return a.r - b.r;
+  });
 
-  // Clone every cell: `getCellDatas()` returns live model refs that
-  // `setValues` mutates mid-write, so a reordered array of the originals
-  // corrupts. Fresh cell objects keep the reorder safe.
   const cloneRow = (row: SortRow): SortRow => row.map((c) => (c == null ? null : { ...c }));
-  return { rows: [...header, ...ordered].map(cloneRow) };
+  return { rows: [...header, ...decorated.map((d) => d.row)].map(cloneRow) };
 }
 
 /** Distinct colours present in a key column, in first-appearance order — the

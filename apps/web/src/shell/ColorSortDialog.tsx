@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
 import { Dialog } from './Dialog';
-import { colorSort, distinctColors, type SortRow } from './color-sort';
+import { colorMultiSort, distinctColors, type SortRow } from './color-sort';
 
 /**
  * Sort by colour (Excel's Data → Sort → Sort On: Cell Color / Font Color).
@@ -84,9 +84,13 @@ export function ColorSortDialog({ api, onClose }: Props) {
 
   const [hasHeaders, setHasHeaders] = useState(true);
   const [keyColumn, setKeyColumn] = useState(0);
-  const [onTop, setOnTop] = useState(true);
   const [sortOn, setSortOn] = useState<SortOn>('cell');
-  const [target, setTarget] = useState<string | null>(null);
+  // Colour priority, top-to-bottom (click order). Multiple colours → a
+  // multi-level sort; one colour → that colour on top.
+  const [order, setOrder] = useState<string[]>([]);
+  const resetOrder = () => setOrder([]);
+  const toggleColor = (c: string) =>
+    setOrder((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
 
   const columnLabel = (i: number): string => {
     const letter = colToLetters(startCol + i);
@@ -105,9 +109,9 @@ export function ColorSortDialog({ api, onClose }: Props) {
   const swatches = useMemo(() => distinctColors(colColors, hasHeaders), [colColors, hasHeaders]);
 
   const apply = () => {
-    if (!range || target == null) return;
+    if (!range || order.length === 0) return;
     const rows = range.getCellDatas() as SortRow[];
-    const out = colorSort({ rows, colors: colColors, hasHeaders, targetColor: target, onTop });
+    const out = colorMultiSort({ rows, colors: colColors, hasHeaders, order });
     range.setValues(out.rows as never);
     onClose();
   };
@@ -132,7 +136,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
             className="btn-primary"
             data-testid="color-sort-ok"
             onClick={apply}
-            disabled={width === 0 || target == null}
+            disabled={width === 0 || order.length === 0}
           >
             Sort
           </button>
@@ -149,7 +153,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
             checked={hasHeaders}
             onChange={(e) => {
               setHasHeaders(e.target.checked);
-              setTarget(null);
+              resetOrder();
             }}
           />
           My data has headers
@@ -162,7 +166,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
             value={sortOn}
             onChange={(e) => {
               setSortOn(e.target.value as SortOn);
-              setTarget(null);
+              resetOrder();
             }}
           >
             <option value="cell">Cell colour</option>
@@ -177,7 +181,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
             value={keyColumn}
             onChange={(e) => {
               setKeyColumn(Number(e.target.value));
-              setTarget(null);
+              resetOrder();
             }}
           >
             {Array.from({ length: width }, (_, i) => (
@@ -198,7 +202,8 @@ export function ColorSortDialog({ api, onClose }: Props) {
               <span style={{ color: 'var(--color-text-secondary)' }}>No cells in selection</span>
             ) : (
               swatches.map((c, i) => {
-                const selected = c === target;
+                const sel = order.indexOf(c);
+                const selected = sel >= 0;
                 return (
                   <button
                     key={c || `c${i}`}
@@ -206,7 +211,7 @@ export function ColorSortDialog({ api, onClose }: Props) {
                     data-testid={`color-sort-swatch-${i}`}
                     title={colorLabel(c, sortOn)}
                     aria-pressed={selected}
-                    onClick={() => setTarget(c)}
+                    onClick={() => toggleColor(c)}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -231,24 +236,28 @@ export function ColorSortDialog({ api, onClose }: Props) {
                       }}
                     />
                     <span>{colorLabel(c, sortOn)}</span>
+                    {selected && (
+                      <span
+                        data-testid={`color-sort-rank-${i}`}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: 'var(--color-accent, #107c41)',
+                        }}
+                      >
+                        {sel + 1}
+                      </span>
+                    )}
                   </button>
                 );
               })
             )}
           </div>
+          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: 0 }}>
+            Click colours in the order you want them — first goes on top. Unpicked colours stay
+            below, in their current order.
+          </p>
         </div>
-
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span>Position</span>
-          <select
-            data-testid="color-sort-position"
-            value={onTop ? 'top' : 'bottom'}
-            onChange={(e) => setOnTop(e.target.value === 'top')}
-          >
-            <option value="top">On top</option>
-            <option value="bottom">On bottom</option>
-          </select>
-        </label>
       </div>
     </Dialog>
   );

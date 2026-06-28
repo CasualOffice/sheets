@@ -17,7 +17,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { colorSort, distinctColors, type SortRow } from './color-sort.js';
+import { colorMultiSort, distinctColors, type SortRow } from './color-sort.js';
 
 const RED = '#ff0000';
 const WHITE = '#ffffff';
@@ -28,67 +28,55 @@ function rows(keys: string[]): SortRow[] {
 }
 const payloadsOf = (rs: SortRow[]) => rs.map((r) => (r[1] as { v: string }).v);
 
-test('brings matching-colour rows to the top, stable for the rest', () => {
-  const out = colorSort({
-    rows: rows(['a', 'b', 'c', 'd']),
-    colors: [WHITE, RED, WHITE, RED],
-    hasHeaders: false,
-    targetColor: RED,
-    onTop: true,
-  });
-  // Red rows (b=p1, d=p3) first in order, then the rest (a=p0, c=p2).
-  assert.deepEqual(payloadsOf(out.rows), ['p1', 'p3', 'p0', 'p2']);
-});
-
-test('on bottom sinks matching rows, rest stays on top', () => {
-  const out = colorSort({
-    rows: rows(['a', 'b', 'c', 'd']),
-    colors: [WHITE, RED, WHITE, RED],
-    hasHeaders: false,
-    targetColor: RED,
-    onTop: false,
-  });
-  assert.deepEqual(payloadsOf(out.rows), ['p0', 'p2', 'p1', 'p3']);
-});
-
-test('keeps the header row in place and aligns colours past it', () => {
-  const data: SortRow[] = [[{ v: 'H' }, { v: 'h' }], ...rows(['a', 'b', 'c'])];
-  const out = colorSort({
-    rows: data,
-    colors: [WHITE, WHITE, RED, WHITE], // header + 3 data rows
-    hasHeaders: true,
-    targetColor: RED,
-    onTop: true,
-  });
-  assert.equal((out.rows[0][0] as { v: string }).v, 'H');
-  // data was [a(p0,white), b(p1,red), c(p2,white)] → red first: b, a, c.
-  assert.deepEqual(payloadsOf(out.rows.slice(1)), ['p1', 'p0', 'p2']);
-});
-
-test('is immutable + clones cells (output not aliased to input)', () => {
-  const input = rows(['a', 'b']);
-  const out = colorSort({
-    rows: input,
-    colors: [RED, WHITE],
-    hasHeaders: false,
-    targetColor: RED,
-    onTop: true,
-  });
-  assert.notEqual(out.rows[0][0], input[0][0], 'cells are fresh objects');
-});
-
-test('no matching colour → order unchanged', () => {
-  const out = colorSort({
-    rows: rows(['a', 'b']),
-    colors: [WHITE, WHITE],
-    hasHeaders: false,
-    targetColor: RED,
-    onTop: true,
-  });
-  assert.deepEqual(payloadsOf(out.rows), ['p0', 'p1']);
-});
-
 test('distinctColors returns first-appearance order, skipping the header', () => {
   assert.deepEqual(distinctColors([WHITE, WHITE, RED, RED, WHITE], true), [WHITE, RED]);
   assert.deepEqual(distinctColors([RED, WHITE, RED], false), [RED, WHITE]);
+});
+
+const GREEN = '#00ff00';
+
+test('colorMultiSort orders rows by the colour priority list', () => {
+  // rows a..e coloured: green, red, white, red, green.
+  const out = colorMultiSort({
+    rows: rows(['a', 'b', 'c', 'd', 'e']),
+    colors: [GREEN, RED, WHITE, RED, GREEN],
+    hasHeaders: false,
+    order: [RED, GREEN], // red first, then green; white (unlisted) last
+  });
+  // red (b=p1, d=p3), green (a=p0, e=p4), then white (c=p2).
+  assert.deepEqual(payloadsOf(out.rows), ['p1', 'p3', 'p0', 'p4', 'p2']);
+});
+
+test('colorMultiSort keeps unlisted colours after, in original order', () => {
+  const out = colorMultiSort({
+    rows: rows(['a', 'b', 'c']),
+    colors: [WHITE, RED, GREEN],
+    hasHeaders: false,
+    order: [RED], // only red prioritised; white + green stay in place after
+  });
+  assert.deepEqual(payloadsOf(out.rows), ['p1', 'p0', 'p2']);
+});
+
+test('colorMultiSort is stable for same-colour rows and clones cells', () => {
+  const input = rows(['a', 'b', 'c']);
+  const out = colorMultiSort({
+    rows: input,
+    colors: [RED, RED, RED],
+    hasHeaders: false,
+    order: [RED],
+  });
+  assert.deepEqual(payloadsOf(out.rows), ['p0', 'p1', 'p2']);
+  assert.notEqual(out.rows[0][0], input[0][0], 'cells are fresh objects');
+});
+
+test('colorMultiSort keeps the header row in place', () => {
+  const data: SortRow[] = [[{ v: 'H' }, { v: 'h' }], ...rows(['a', 'b'])];
+  const out = colorMultiSort({
+    rows: data,
+    colors: [WHITE, WHITE, RED], // header + 2 data rows
+    hasHeaders: true,
+    order: [RED],
+  });
+  assert.equal((out.rows[0][0] as { v: string }).v, 'H');
+  assert.deepEqual(payloadsOf(out.rows.slice(1)), ['p1', 'p0']);
 });

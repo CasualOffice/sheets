@@ -21,6 +21,38 @@ async function readCol(page: Page, col: string, n: number) {
   );
 }
 
+test('multi-level: click colours in priority order (green, then red)', async ({ page }) => {
+  await page.goto('/');
+  await waitForUniver(page);
+  await page.evaluate(() => {
+    const api = window.__univerAPI!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws: any = api.getActiveWorkbook()!.getActiveSheet();
+    // A1..A5 = a..e; colours red, (none), green, red, green.
+    ['a', 'b', 'c', 'd', 'e'].forEach((v, i) => ws.getRange('A' + (i + 1)).setValue({ v }));
+    ws.getRange('A1').setBackgroundColor('#ff0000');
+    ws.getRange('A3').setBackgroundColor('#00ff00');
+    ws.getRange('A4').setBackgroundColor('#ff0000');
+    ws.getRange('A5').setBackgroundColor('#00ff00');
+    ws.getRange('A1:A5').activate();
+  });
+
+  await page.getByTestId('menubar-data').click();
+  await page.getByTestId('menu-item-sort-by-color').click();
+  await page.getByTestId('color-sort-headers').uncheck();
+  // Distinct colours (first appearance): red=0, No-fill=1, green=2.
+  // Click green then red → priority [green, red].
+  await page.getByTestId('color-sort-swatch-2').click();
+  await page.getByTestId('color-sort-swatch-0').click();
+  await expect(page.getByTestId('color-sort-rank-2')).toHaveText('1'); // green is priority 1
+  await expect(page.getByTestId('color-sort-rank-0')).toHaveText('2'); // red is priority 2
+  await page.getByTestId('color-sort-ok').click();
+  await expect(page.getByTestId('color-sort-dialog')).toBeHidden();
+
+  // green (c, e), then red (a, d), then no-fill (b).
+  expect(await readCol(page, 'A', 5)).toEqual(['c', 'e', 'a', 'd', 'b']);
+});
+
 test('brings cell-coloured rows to the top, carrying the whole row', async ({ page }) => {
   await page.goto('/');
   await waitForUniver(page);
