@@ -106,24 +106,26 @@ export function computeDrillDown(
   // key under that column. Drilling the label column or the right-hand
   // grand-total block applies no column constraint. Non-matrix pivots
   // leave colMeta undefined → no column narrowing (legacy behaviour).
-  const colFieldCol = pivot.cols?.[0]?.column;
-  let colKey: string | null = null;
-  if (colMeta && colFieldCol != null) {
+  const colFields = (pivot.cols ?? []).map((c) => c.column);
+  // For a nested matrix the clicked value column maps to a tuple of column-key
+  // values (one per column field); narrowing matches every field.
+  let colKeys: string[] | null = null;
+  if (colMeta && colFields.length > 0) {
     const offsetCol = col - pivot.target.column;
     const cm = colMeta[offsetCol];
     // A click on the label column is not drillable in a matrix.
     if (cm?.kind === 'label') return null;
-    if (cm?.kind === 'value') colKey = cm.colKey;
+    if (cm?.kind === 'value') colKeys = cm.colKeys;
   }
   const matchesCol = (rec: PivotCell[]): boolean => {
-    if (colKey == null || colFieldCol == null) return true;
-    const v = rec[colFieldCol];
-    return (v == null ? '' : String(v)) === colKey;
+    if (colKeys == null) return true;
+    return colFields.every((c, i) => (rec[c] == null ? '' : String(rec[c])) === colKeys![i]);
   };
   const colLabel = (): string => {
-    if (colKey == null || colFieldCol == null) return '';
-    const fieldName = source.headers[colFieldCol] ?? 'value';
-    return ` · ${fieldName} = "${colKey || '(blank)'}"`;
+    if (colKeys == null) return '';
+    return colFields
+      .map((c, i) => ` · ${source.headers[c] ?? 'value'} = "${colKeys![i] || '(blank)'}"`)
+      .join('');
   };
 
   switch (meta.kind) {

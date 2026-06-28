@@ -78,7 +78,7 @@ export type PivotRowMeta =
  */
 export type PivotColMeta =
   | { kind: 'label' }
-  | { kind: 'value'; colKey: string; valueIndex: number }
+  | { kind: 'value'; colKeys: string[]; valueIndex: number }
   | { kind: 'grand-total'; valueIndex: number };
 
 export type PivotComputeResult = {
@@ -274,86 +274,97 @@ function computeMatrix(source: SourceMatrix, model: PivotModel): PivotComputeRes
   const filteredRecords =
     filters.length > 0 ? source.records.filter(passesFilters) : source.records;
 
-  const colFieldCol = model.cols[0].column;
+  const colFields = model.cols.map((c) => c.column);
   const rowFieldCols = model.rows.map((r) => r.column);
   const hasRowField = rowFieldCols.length > 0;
   const values = model.values;
   const multiValue = values.length > 1;
 
-  // Distinct column-field keys, sorted Excel-default (numeric-aware
-  // ascending). Computed from the filtered records so a filter that
-  // removes every record for a column key drops that column entirely
-  // (matches Excel — empty columns don't appear).
-  const colKeys = [...new Set(filteredRecords.map((r) => keyOf(r[colFieldCol])))].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true }),
-  );
+  const tupleOf = (rec: PivotCell[]): string[] => colFields.map((c) => keyOf(rec[c]));
 
-  // ---- Header rows -------------------------------------------------
-  // Single value field → one header row: [label, ...colKeys, Grand T].
-  // Multiple value fields → two header rows: the column-key spanning
-  // the value-field sub-headers beneath it. The spanning row repeats
-  // the key in its first sub-cell and blanks the rest (Univer has no
-  // cell-merge in a plain setRangeValues write; the label still reads
-  // left-to-right and round-trips through xlsx).
+  // Distinct column-key TUPLES present in the data (one entry per column field,
+  // outer-first), sorted level-by-level (numeric-aware). A single column field
+  // reduces to 1-element tuples → identical output to the pre-nesting path. A
+  // filter that empties a tuple drops that column (Excel — no empty columns).
+  const seenTuples = new Map<string, string[]>();
+  for (const rec of filteredRecords) {
+    const t = tupleOf(rec);
+    seenTuples.set(t.join(' '), t);
+  }
+  let tuples = [...seenTuples.values()].sort((a, b) => {
+    for (let i = 0; i < a.length; i += 1) {
+      const c = a[i].localeCompare(b[i], undefined, { numeric: true });
+      if (c !== 0) return c;
+    }
+    return 0;
+  });
+  // A high-cardinality nest can explode the column count (and the single
+  // setValues write). Truncate + flag; the dialog also caps the depth.
+  const TUPLE_CAP = 2048;
+  const tuplesCapped = tuples.length > TUPLE_CAP;
+  if (tuplesCapped) tuples = tuples.slice(0, TUPLE_CAP);
+
   const labelHeader = hasRowField ? (source.headers[rowFieldCols[0]] ?? '') : '';
+  const valueLabel = (vi: number): string =>
+    `${PIVOT_AGG_LABELS[values[vi].agg]} of ${source.headers[values[vi].column] ?? ''}`;
 
+  // colMeta — label, then one entry per (tuple, value) value cell, then the
+  // grand-total block (one per value field). Drill-down decodes `colKeys`.
   const colMeta: PivotColMeta[] = [{ kind: 'label' }];
-  for (const key of colKeys) {
+  for (const t of tuples) {
     for (let vi = 0; vi < values.length; vi += 1) {
-      colMeta.push({ kind: 'value', colKey: key, valueIndex: vi });
+      colMeta.push({ kind: 'value', colKeys: t, valueIndex: vi });
     }
   }
   for (let vi = 0; vi < values.length; vi += 1) {
     colMeta.push({ kind: 'grand-total', valueIndex: vi });
   }
 
-  const valueLabel = (vi: number): string =>
-    `${PIVOT_AGG_LABELS[values[vi].agg]} of ${source.headers[values[vi].column] ?? ''}`;
-
   const grid: PivotGrid = [];
   const rowMeta: PivotRowMeta[] = [];
 
-  if (multiValue) {
-    // Top header row: column-key spans.
-    const top: PivotCell[] = [labelHeader];
-    for (const key of colKeys) {
-      top.push(key === '' ? '(blank)' : key);
-      for (let i = 1; i < values.length; i += 1) top.push('');
+  // ---- Header rows -------------------------------------------------
+  // One spanning row per column-field level (outer first), then — when there
+  // are multiple value fields — a value-field sub-header row. A key is shown at
+  // the start of its span and blanked across the rest (Univer has no cell merge
+  // in setValues; labels still read left-to-right and round-trip through xlsx).
+  for (let level = 0; level < colFields.length; level += 1) {
+    const row: PivotCell[] = [level === 0 ? labelHeader : ''];
+    let prevPrefix: string | null = null;
+    for (const t of tuples) {
+      const prefix = t.slice(0, level + 1).join(' ');
+      const show = prefix !== prevPrefix;
+      prevPrefix = prefix;
+      const label = t[level] === '' ? '(blank)' : t[level];
+      for (let vi = 0; vi < values.length; vi += 1) {
+        row.push(show && vi === 0 ? label : '');
+      }
     }
-    top.push('Grand Total');
-    for (let i = 1; i < values.length; i += 1) top.push('');
-    grid.push(top);
+    // Grand-total block — "Grand Total" on the first level row, blank below.
+    for (let vi = 0; vi < values.length; vi += 1) {
+      row.push(level === 0 && vi === 0 ? 'Grand Total' : '');
+    }
+    grid.push(row);
     rowMeta.push({ kind: 'header' });
-    // Sub-header row: value-field labels under each key + grand total.
+  }
+  if (multiValue) {
     const sub: PivotCell[] = [''];
-    for (let c = 0; c < colKeys.length; c += 1) {
+    for (let i = 0; i < tuples.length; i += 1) {
       for (let vi = 0; vi < values.length; vi += 1) sub.push(valueLabel(vi));
     }
     for (let vi = 0; vi < values.length; vi += 1) sub.push(valueLabel(vi));
     grid.push(sub);
     rowMeta.push({ kind: 'header' });
-  } else {
-    const header: PivotCell[] = [labelHeader];
-    for (const key of colKeys) header.push(key === '' ? '(blank)' : key);
-    header.push('Grand Total');
-    grid.push(header);
-    rowMeta.push({ kind: 'header' });
   }
-
-  // colMeta is only meaningful with a single header row. For the
-  // multi-value two-row header the second header row shares the same
-  // column structure, so the same colMeta still index-aligns to the
-  // VALUE rows below — which is all drill-down needs.
+  const headerRowCount = colFields.length + (multiValue ? 1 : 0);
 
   // ---- Value rows --------------------------------------------------
-  // Compute one row of value cells for a given record subset: for each
-  // column key, slice the subset to records matching that key, then
-  // aggregate each value field; finish with the across-all grand-total
-  // block.
+  // For each column tuple, slice the subset to records matching every column
+  // field, aggregate each value; finish with the across-all grand-total block.
   const valueCellsFor = (records: PivotCell[][]): PivotCell[] => {
     const cells: PivotCell[] = [];
-    for (const key of colKeys) {
-      const slice = records.filter((rec) => keyOf(rec[colFieldCol]) === key);
+    for (const t of tuples) {
+      const slice = records.filter((rec) => colFields.every((c, i) => keyOf(rec[c]) === t[i]));
       for (const v of values) {
         cells.push(
           aggregate(
@@ -363,8 +374,6 @@ function computeMatrix(source: SourceMatrix, model: PivotModel): PivotComputeRes
         );
       }
     }
-    // Grand-total block — aggregate across every column key (i.e. the
-    // whole row subset, ignoring the column split).
     for (const v of values) {
       cells.push(
         aggregate(
@@ -410,7 +419,7 @@ function computeMatrix(source: SourceMatrix, model: PivotModel): PivotComputeRes
   // "Show Values As → % of Grand Total" for the cross-tab layout: every value
   // cell of a flagged field becomes its share of that field's overall grand
   // total (the bottom-right cell — last row's grand-total column for the field).
-  applyMatrixShowAsPercent(grid, colMeta, values, multiValue ? 2 : 1);
+  applyMatrixShowAsPercent(grid, colMeta, values, headerRowCount);
 
   return { grid, rowMeta, colMeta };
 }
