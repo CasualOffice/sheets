@@ -142,11 +142,19 @@ export function TracePrecedentsLayer() {
     };
   }, [api]);
 
-  // Clear arrows when the active sheet changes (they'd point at the wrong grid).
+  // Clear arrows when the active sheet changes (they'd point at the wrong grid)
+  // or when a cell value is edited (Excel removes tracer arrows on edit, since
+  // the dependency graph may have changed).
   useEffect(() => {
     if (!api) return;
-    const disp = api.addEvent(api.Event.ActiveSheetChanged, () => setTrace(null));
-    return () => disp.dispose();
+    const sheetDisp = api.addEvent(api.Event.ActiveSheetChanged, () => setTrace(null));
+    const cmdDisp = api.addEvent(api.Event.CommandExecuted, (e) => {
+      if ((e as { id?: string }).id === 'sheet.mutation.set-range-values') setTrace(null);
+    });
+    return () => {
+      sheetDisp.dispose();
+      cmdDisp.dispose();
+    };
   }, [api]);
 
   // rAF: resolve pixel geometry, tracking scroll / zoom (same approach as the
