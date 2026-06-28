@@ -28,16 +28,12 @@ test('the DV panel offers "Time" as a validation type', async ({ page }) => {
   await typeSelect.click();
 
   // "Time" is now a registered validator → it appears as an option. The type
-  // selector renders options as radio items; this dev harness shows the raw
-  // i18n key (the title resolves to "Time" once locales are bundled), so we
-  // assert on the validator's title key — proof the Time validator registered.
-  const timeOption = page.getByRole('menuitemradio', {
-    name: 'sheets-data-validation.time.title',
-    exact: true,
-  });
+  // selector renders options as radio items, labelled by the resolved i18n
+  // title ("Time").
+  const timeOption = page.getByRole('menuitemradio', { name: 'Time', exact: true });
   await expect(timeOption).toBeVisible();
   await timeOption.click();
 
-  // Selecting it sticks: the Type selector now reflects the Time type.
-  await expect(typeSelect).toContainText('sheets-data-validation.time.title');
+  // Selecting it sticks: the Type selector now reads "Time".
+  await expect(typeSelect).toContainText('Time');
 });

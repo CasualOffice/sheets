@@ -15,6 +15,7 @@
     "@casualoffice/sheets": "workspace:*",
     "@schnsrw/design-system": "^0.1.0",
     "@univerjs/core": "0.25.0",
+    "@univerjs/data-validation": "0.25.0",
     "@univerjs/design": "0.25.0",
     "@univerjs/docs": "0.25.0",
     "@univerjs/docs-ui": "0.25.0",

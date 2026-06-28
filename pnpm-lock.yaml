@@ -201,6 +201,9 @@ importers:
       '@univerjs/core':
         specifier: link:../../vendor/univer-revamp/packages/core
         version: link:../../vendor/univer-revamp/packages/core
+      '@univerjs/data-validation':
+        specifier: link:../../vendor/univer-revamp/packages/data-validation
+        version: link:../../vendor/univer-revamp/packages/data-validation
       '@univerjs/design':
         specifier: link:../../vendor/univer-revamp/packages/design
         version: link:../../vendor/univer-revamp/packages/design

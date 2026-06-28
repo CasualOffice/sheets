@@ -29,6 +29,14 @@ import UniverFindReplaceEnUS from '@univerjs/find-replace/locale/en-US';
 // its own `locale/` (the import broke the prod Rollup build). UniverFindReplaceEnUS now
 // covers both.
 import UniverSheetsConditionalFormattingUIEnUS from '@univerjs/sheets-conditional-formatting-ui/locale/en-US';
+// The data-validation *UI* package only ships the panel chrome strings
+// (`sheets-data-validation-ui.*`). The validator titles, operator names,
+// rule names and error messages live in the base `@univerjs/data-validation`
+// (`data-validation.*`) and `@univerjs/sheets-data-validation`
+// (`sheets-data-validation.*`) packages — without these the DV panel's Type /
+// Operator selectors and the cell error messages render raw i18n keys.
+import UniverDataValidationEnUS from '@univerjs/data-validation/locale/en-US';
+import UniverSheetsDataValidationEnUS from '@univerjs/sheets-data-validation/locale/en-US';
 import UniverSheetsDataValidationUIEnUS from '@univerjs/sheets-data-validation-ui/locale/en-US';
 import UniverSheetsHyperLinkUIEnUS from '@univerjs/sheets-hyper-link-ui/locale/en-US';
 import UniverSheetsNoteUIEnUS from '@univerjs/sheets-note-ui/locale/en-US';
@@ -53,6 +61,8 @@ const enUS = Tools.deepMerge(
   UniverSheetsNumfmtUIEnUS,
   UniverFindReplaceEnUS,
   UniverSheetsConditionalFormattingUIEnUS,
+  UniverDataValidationEnUS,
+  UniverSheetsDataValidationEnUS,
   UniverSheetsDataValidationUIEnUS,
   UniverSheetsHyperLinkUIEnUS,
   UniverSheetsNoteUIEnUS,
