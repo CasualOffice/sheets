@@ -37,6 +37,7 @@ import { ToastContainer } from './shell/toast/ToastContainer';
 import { ChartsProvider } from './charts/charts-context';
 import { ChartLayer } from './charts/ChartLayer';
 import { ChartsPanel } from './shell/ChartsPanel';
+import { PivotFieldsPanel } from './pivots/PivotFieldsPanel';
 import { CommentsPanel } from './shell/CommentsPanel';
 import { VersionHistoryPanel } from './shell/VersionHistoryPanel';
 import { PanelRail } from './shell/PanelRail';
@@ -141,6 +142,7 @@ export function App() {
   const [tablesPanelVisible, setTablesPanelVisible] = useState(false);
   const [outlinePanelVisible, setOutlinePanelVisible] = useState(false);
   const [chartsPanelVisible, setChartsPanelVisible] = useState(false);
+  const [pivotPanelVisible, setPivotPanelVisible] = useState(false);
   const [commentsPanelVisible, setCommentsPanelVisible] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const [shareRoomOpen, setShareRoomOpen] = useState(false);
@@ -515,6 +517,7 @@ export function App() {
           if (next) {
             setOutlinePanelVisible(false);
             setChartsPanelVisible(false);
+            setPivotPanelVisible(false);
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
           }
@@ -527,6 +530,7 @@ export function App() {
           if (next) {
             setTablesPanelVisible(false);
             setChartsPanelVisible(false);
+            setPivotPanelVisible(false);
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
           }
@@ -539,6 +543,20 @@ export function App() {
           if (next) {
             setTablesPanelVisible(false);
             setOutlinePanelVisible(false);
+            setPivotPanelVisible(false);
+            setCommentsPanelVisible(false);
+            setHistoryPanelVisible(false);
+          }
+          return next;
+        }),
+      pivotPanelVisible,
+      togglePivotPanel: () =>
+        setPivotPanelVisible((v) => {
+          const next = !v;
+          if (next) {
+            setTablesPanelVisible(false);
+            setOutlinePanelVisible(false);
+            setChartsPanelVisible(false);
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
           }
@@ -552,6 +570,7 @@ export function App() {
             setTablesPanelVisible(false);
             setOutlinePanelVisible(false);
             setChartsPanelVisible(false);
+            setPivotPanelVisible(false);
             setHistoryPanelVisible(false);
           }
           return next;
@@ -564,6 +583,7 @@ export function App() {
             setTablesPanelVisible(false);
             setOutlinePanelVisible(false);
             setChartsPanelVisible(false);
+            setPivotPanelVisible(false);
             setCommentsPanelVisible(false);
           }
           return next;
@@ -572,6 +592,7 @@ export function App() {
         setTablesPanelVisible(false);
         setOutlinePanelVisible(false);
         setChartsPanelVisible(false);
+        setPivotPanelVisible(false);
         setCommentsPanelVisible(false);
         setHistoryPanelVisible(false);
       },
@@ -585,6 +606,7 @@ export function App() {
       tablesPanelVisible,
       outlinePanelVisible,
       chartsPanelVisible,
+      pivotPanelVisible,
       commentsPanelVisible,
       historyPanelVisible,
       showFormulas,
@@ -645,6 +667,7 @@ export function App() {
                                               {tablesPanelVisible && <TablesPanel />}
                                               {outlinePanelVisible && <OutlinePanel />}
                                               {chartsPanelVisible && <ChartsPanel />}
+                                              {pivotPanelVisible && <PivotFieldsPanel />}
                                               {commentsPanelVisible && <CommentsPanel />}
                                               {historyPanelVisible && <VersionHistoryPanel />}
                                               <PanelRail />

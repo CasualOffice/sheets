@@ -36,6 +36,13 @@ export function PanelRail() {
         onClick={ui.toggleChartsPanel}
       />
       <RailButton
+        id="pivot"
+        label={ui.pivotPanelVisible ? 'Hide PivotTable Fields' : 'PivotTable Fields'}
+        icon="pivot_table_chart"
+        pressed={ui.pivotPanelVisible}
+        onClick={ui.togglePivotPanel}
+      />
+      <RailButton
         id="outline"
         label={ui.outlinePanelVisible ? 'Hide Outline' : 'Outline'}
         icon="format_list_bulleted"

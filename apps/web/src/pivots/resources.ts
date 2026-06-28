@@ -14,7 +14,16 @@ import {
  * through collab via the snapshot-load path.
  */
 
-const VALID_AGGS: PivotAggregation[] = ['sum', 'count', 'average', 'min', 'max'];
+const VALID_AGGS: PivotAggregation[] = [
+  'sum',
+  'count',
+  'average',
+  'min',
+  'max',
+  // Distinct Count (#212) — was missing here, so a saved Distinct-Count
+  // pivot failed validation and was silently dropped on reload.
+  'distinctCount',
+];
 
 function isValidPivot(p: unknown): p is PivotModel {
   if (!p || typeof p !== 'object') return false;
@@ -30,7 +39,8 @@ function isValidPivot(p: unknown): p is PivotModel {
   if (!tgt || typeof tgt.row !== 'number' || typeof tgt.column !== 'number') return false;
   if (!Array.isArray(r.rows) || !Array.isArray(r.cols) || !Array.isArray(r.values)) return false;
   for (const f of r.rows as unknown[]) {
-    if (!f || typeof f !== 'object' || typeof (f as { column?: unknown }).column !== 'number') return false;
+    if (!f || typeof f !== 'object' || typeof (f as { column?: unknown }).column !== 'number')
+      return false;
   }
   for (const v of r.values as unknown[]) {
     if (!v || typeof v !== 'object') return false;

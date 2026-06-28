@@ -39,15 +39,14 @@ export function PanelMutex() {
   const anyReactPanelOpen =
     ui.tablesPanelVisible ||
     ui.chartsPanelVisible ||
+    ui.pivotPanelVisible ||
     ui.outlinePanelVisible ||
     ui.historyPanelVisible;
   useEffect(() => {
     if (!api || !anyReactPanelOpen) return;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const injector = (api as any)._injector as
-        | { get: (token: unknown) => unknown }
-        | undefined;
+      const injector = (api as any)._injector as { get: (token: unknown) => unknown } | undefined;
       if (!injector) return;
       const sidebarService = injector.get(ISidebarService) as
         | { close: () => void; visible: boolean }
@@ -67,9 +66,7 @@ export function PanelMutex() {
     let sub: { unsubscribe: () => void } | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const injector = (api as any)._injector as
-        | { get: (token: unknown) => unknown }
-        | undefined;
+      const injector = (api as any)._injector as { get: (token: unknown) => unknown } | undefined;
       if (!injector) return;
       const sidebarService = injector.get(ISidebarService) as
         | {

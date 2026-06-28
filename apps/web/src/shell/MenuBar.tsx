@@ -1857,6 +1857,13 @@ export function MenuBar() {
         },
         {
           kind: 'item',
+          id: 'pivot-fields-panel',
+          label: ui.pivotPanelVisible ? 'Hide PivotTable Fields' : 'PivotTable Fields',
+          icon: 'pivot_table_chart',
+          onClick: ui.togglePivotPanel,
+        },
+        {
+          kind: 'item',
           id: 'history-panel',
           label: ui.historyPanelVisible ? 'Hide History panel' : 'History panel',
           icon: 'history',
@@ -2625,6 +2632,9 @@ export function MenuBar() {
             // clear the previous output before writing the new one.
             pivots.insert(extent ? { ...model, lastOutputExtent: extent } : model);
             setShowInsertPivot(false);
+            // Excel opens the PivotTable Fields list right after insert so
+            // you can refine the layout without hunting for the pane.
+            if (!ui.pivotPanelVisible) ui.togglePivotPanel();
           }}
         />
       )}

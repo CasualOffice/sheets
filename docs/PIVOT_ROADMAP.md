@@ -16,15 +16,22 @@ feeding a single `setValues` write (`apply.ts`); models live on
 | **Multiple value fields** (one output column each)               | #211       |
 | **Distinct Count**                                               | #212       |
 | **Show Values As → % of Grand Total** (row + cross-tab)          | #214, #218 |
+| **Show Values As → % of Column / Row Total**                     | #223, #224 |
 | **Date grouping** of the primary row field (Year/Quarter/Month)  | #215       |
+| **Nested (multiple) column fields** → tuple cross-tab            | #220, #221 |
 | Drill-down (double-click a value → source rows)                  | P2         |
+| **PivotTable Fields pane** — reconfigure zones + live re-apply   | #229       |
 
-All of the above are pure-compute + dialog increments with unit + e2e coverage.
-That seam is now exhausted for cleanly-bounded work — the remaining items are
-either a compute **rewrite** (nested columns) or a new **UI subsystem** (field
-pane, live object). They need a design pass first; this doc is that pass.
+All of the above are pure-compute + dialog/panel increments with unit + e2e
+coverage. The nested-columns compute rewrite (designed below) shipped in
+#220/#221; the field pane (the last big UI subsystem) shipped its first slice in
+#229. Remaining work is the drag-and-drop layer on the pane plus the live,
+refreshable Excel-native pivot object.
 
-## Next: multiple (nested) column fields
+## Design record: nested column fields (shipped #220/#221)
+
+_Kept as the design rationale for the nested-column compute; implemented as
+described._
 
 **Why it's not a small increment.** `computeMatrix` is built around a _single_
 column field: `colFieldCol = model.cols[0]`, `colKeys` is a flat list of that
@@ -75,18 +82,31 @@ Estimate: ~1 focused PR for compute + colMeta + drill-down, ~1 for the dialog +
 e2e. Do compute first behind the existing single-field dialog (model already
 allows `cols: PivotFieldRef[]`), then ship the multi-select dialog.
 
-## Later: field pane + live object (out of scope until the above lands)
+## Field pane (slice 1 shipped #229) + live object
 
-- **Drag-and-drop PivotTable Fields pane** — the Excel side panel (drag fields
-  between Rows/Columns/Values/Filters). A real UI subsystem (a panel in the
-  rail, like Charts/Tables panels) on top of the existing model. Multi-day;
-  design separately.
-- **Live, refreshable pivot object** — today a pivot is materialised cells +
-  a model resource; "refresh" re-runs compute. A true live object (auto-refresh
-  on source change, Excel-native `xl/pivotTables` on export) is a larger effort
-  and overlaps the raw-OOXML pivot passthrough already in the xlsx bridge.
+**PivotTable Fields pane — slice 1 (#229, shipped).** A rail panel
+(`PivotFieldsPanel`, like Charts/Tables) that reflects a pivot across the four
+Excel zones (Filters / Columns / Rows / Values) and re-applies it **live** as
+you reconfigure — no delete-and-reinsert. Field assignment uses a click "+"
+menu (Excel's right-click "Add to Row Labels / …" affordance), with per-chip
+remove and reorder, Values aggregation + Show-Values-As editing, and Rows
+date-grouping. The model ops are pure + unit-tested (`fields-model.ts`); the
+wiring is e2e-tested (`pivot-fields-panel.spec.ts`). Auto-opens on insert. Also
+fixed a latent bug: `resources.ts` `VALID_AGGS` omitted `distinctCount`,
+silently dropping a saved Distinct-Count pivot on reload.
+
+**Slice 2 (next).** HTML5 drag-and-drop between zones (layered on the same
+`fields-model` ops); report-filter value selection (the Filters zone currently
+places/removes a field but stores all-values-allowed — no per-value checklist
+yet); auto-follow the active selection (select a cell inside a pivot → the pane
+switches to it via `findPivotAtCell`).
+
+**Live, refreshable pivot object.** Today a pivot is materialised cells + a
+model resource; "refresh" re-runs compute. A true live object (auto-refresh on
+source change, Excel-native `xl/pivotTables` on export) is a larger effort and
+overlaps the raw-OOXML pivot passthrough already in the xlsx bridge.
 
 ## Deferred (Excel parity, lower demand)
 
-Show Values As → % of Column/Row Total + running totals; calculated fields;
-value filters / top-N; manual sort & grouping of non-date fields.
+Running totals (% of … running / rank); calculated fields; value filters /
+top-N; manual sort & grouping of non-date fields.

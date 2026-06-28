@@ -13,6 +13,10 @@ export type UICtxValue = {
   toggleOutlinePanel: () => void;
   chartsPanelVisible: boolean;
   toggleChartsPanel: () => void;
+  /** PivotTable Fields task pane — reconfigure a pivot's Filters / Columns
+   *  / Rows / Values zones and re-apply it live (Excel's field pane). */
+  pivotPanelVisible: boolean;
+  togglePivotPanel: () => void;
   /** Comments task pane — our React panel that indexes thread comments on
    *  the active sheet (replaces Univer's bespoke comment sidebar so it
    *  shares the shared `.side-panel` shell + motion). */
