@@ -30,9 +30,21 @@ export const PIVOT_AGG_LABELS: Record<PivotAggregation, string> = {
 export type PivotFieldRef = { column: number };
 
 /** Pivot value field — a column to aggregate + the aggregation. */
+/** How a value field is displayed. 'normal' = the raw aggregate;
+ *  'pctOfGrandTotal' = each cell as a percentage of that value column's grand
+ *  total (Excel's "Show Values As → % of Grand Total"). */
+export type PivotShowAs = 'normal' | 'pctOfGrandTotal';
+
+export const PIVOT_SHOW_AS_LABELS: Record<PivotShowAs, string> = {
+  normal: 'Normal',
+  pctOfGrandTotal: '% of Grand Total',
+};
+
 export type PivotValueField = {
   column: number;
   agg: PivotAggregation;
+  /** Display transform; absent/`'normal'` shows the raw aggregate. */
+  showAs?: PivotShowAs;
 };
 
 /** P1 — a filter field. Source records are kept only when the value

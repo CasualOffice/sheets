@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '../shell/Dialog';
 import type { FUniver } from '@univerjs/core/facade';
-import { PIVOT_AGG_LABELS, type PivotAggregation, type PivotFilter } from './types';
+import {
+  PIVOT_AGG_LABELS,
+  PIVOT_SHOW_AS_LABELS,
+  type PivotAggregation,
+  type PivotFilter,
+  type PivotShowAs,
+} from './types';
 
 type Props = {
   api: FUniver;
@@ -17,8 +23,9 @@ type Props = {
      *  field (the classic single-column-per-value layout). P2 ships a
      *  single column field; the array shape leaves room for nesting. */
     colFieldColumns: number[];
-    /** One or more value fields, each a source column + its aggregation. */
-    valueFields: Array<{ column: number; aggregation: PivotAggregation }>;
+    /** One or more value fields, each a source column + its aggregation + an
+     *  optional display transform. */
+    valueFields: Array<{ column: number; aggregation: PivotAggregation; showAs: PivotShowAs }>;
     filters: PivotFilter[];
   }) => void;
 };
@@ -56,9 +63,9 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
   // One or more value fields. Each produces its own column in the output
   // (compute.ts already fans out multiple values). Defaults to a single
   // Sum-of-column-1 to match the prior single-value behaviour.
-  const [valueFields, setValueFields] = useState<Array<{ column: number; agg: PivotAggregation }>>([
-    { column: 1, agg: 'sum' },
-  ]);
+  const [valueFields, setValueFields] = useState<
+    Array<{ column: number; agg: PivotAggregation; showAs: PivotShowAs }>
+  >([{ column: 1, agg: 'sum', showAs: 'normal' }]);
   // P1 — filter field. -1 means "no filter".
   const [filterField, setFilterField] = useState<number>(-1);
   // Set of currently-allowed values for the filter field. Empty = none
@@ -169,7 +176,11 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
       target,
       rowFieldColumns,
       colFieldColumns,
-      valueFields: valueFields.map((v) => ({ column: v.column, aggregation: v.agg })),
+      valueFields: valueFields.map((v) => ({
+        column: v.column,
+        aggregation: v.agg,
+        showAs: v.showAs,
+      })),
       filters,
     });
   };
@@ -339,6 +350,24 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
                         </option>
                       ))}
                     </select>
+                    <select
+                      className="insert-pivot__select"
+                      data-testid={`insert-pivot-show-as${sfx}`}
+                      value={vf.showAs}
+                      onChange={(e) =>
+                        setValueFields((cur) =>
+                          cur.map((x, j) =>
+                            j === i ? { ...x, showAs: e.target.value as PivotShowAs } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {(Object.keys(PIVOT_SHOW_AS_LABELS) as PivotShowAs[]).map((s) => (
+                        <option key={s} value={s}>
+                          {PIVOT_SHOW_AS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
                     {valueFields.length > 1 && (
                       <button
                         type="button"
@@ -361,7 +390,7 @@ export function InsertPivotDialog({ api, defaultSourceA1, onCancel, onConfirm }:
                 onClick={() =>
                   setValueFields((cur) => [
                     ...cur,
-                    { column: cur[cur.length - 1]?.column ?? 0, agg: 'sum' },
+                    { column: cur[cur.length - 1]?.column ?? 0, agg: 'sum', showAs: 'normal' },
                   ])
                 }
               >

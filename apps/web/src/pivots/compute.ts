@@ -1,4 +1,4 @@
-import type { PivotAggregation, PivotModel } from './types';
+import type { PivotAggregation, PivotModel, PivotValueField } from './types';
 import { PIVOT_AGG_LABELS } from './types';
 
 /**
@@ -208,7 +208,36 @@ export function computePivot(source: SourceMatrix, model: PivotModel): PivotComp
   grid.push(total);
   rowMeta.push({ kind: 'grand-total' });
 
+  // "Show Values As → % of Grand Total" per value field. The grand-total row
+  // (just pushed) holds each value column's denominator; value columns start
+  // at index 1 (column 0 is the shared row-field label).
+  applyShowAsPercent(grid, model.values, 1);
+
   return { grid, rowMeta };
+}
+
+/**
+ * Rewrite each value column flagged `showAs: 'pctOfGrandTotal'` as a percentage
+ * of that column's grand total (the last grid row). Mutates `grid` in place;
+ * the header row is left untouched and the grand-total cell becomes 100.0%.
+ */
+function applyShowAsPercent(
+  grid: PivotGrid,
+  values: PivotValueField[],
+  valueColStart: number,
+): void {
+  if (grid.length < 2) return;
+  const lastRow = grid.length - 1;
+  values.forEach((v, vi) => {
+    if (v.showAs !== 'pctOfGrandTotal') return;
+    const col = valueColStart + vi;
+    const denom = Number(grid[lastRow][col]);
+    for (let r = 1; r < grid.length; r++) {
+      const raw = grid[r][col];
+      const n = typeof raw === 'number' ? raw : Number(raw);
+      grid[r][col] = denom && Number.isFinite(n) ? `${((n / denom) * 100).toFixed(1)}%` : '0.0%';
+    }
+  });
 }
 
 /**
