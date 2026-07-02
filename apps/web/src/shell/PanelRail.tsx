@@ -86,6 +86,13 @@ export function PanelRail() {
         pressed={ui.historyPanelVisible}
         onClick={ui.toggleHistoryPanel}
       />
+      <RailButton
+        id="ai"
+        label={ui.aiPanelVisible ? 'Hide AI' : 'AI'}
+        icon="auto_awesome"
+        pressed={ui.aiPanelVisible}
+        onClick={ui.toggleAiPanel}
+      />
     </aside>
   );
 }
