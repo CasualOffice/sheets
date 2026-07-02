@@ -58,6 +58,7 @@ import { WatchPanel } from './shell/WatchPanel';
 import { WatchProvider } from './shell/watch-context';
 import { CommentsPanel } from './shell/CommentsPanel';
 import { VersionHistoryPanel } from './shell/VersionHistoryPanel';
+import { AiPanel } from './shell/AiPanel';
 import { PanelRail } from './shell/PanelRail';
 import { PanelMutex } from './shell/PanelMutex';
 import { PreviewBanner } from './shell/PreviewBanner';
@@ -165,6 +166,7 @@ export function App() {
   const [watchPanelVisible, setWatchPanelVisible] = useState(false);
   const [commentsPanelVisible, setCommentsPanelVisible] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
+  const [aiPanelVisible, setAiPanelVisible] = useState(false);
   const [shareRoomOpen, setShareRoomOpen] = useState(false);
   const [showFormulas, setShowFormulas] = useState(false);
   const [loading, setLoading] = useState<LoadingState | null>(null);
@@ -541,6 +543,7 @@ export function App() {
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
             setWatchPanelVisible(false);
+            setAiPanelVisible(false);
           }
           return next;
         }),
@@ -555,6 +558,7 @@ export function App() {
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
             setWatchPanelVisible(false);
+            setAiPanelVisible(false);
           }
           return next;
         }),
@@ -569,6 +573,7 @@ export function App() {
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
             setWatchPanelVisible(false);
+            setAiPanelVisible(false);
           }
           return next;
         }),
@@ -583,6 +588,7 @@ export function App() {
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
             setWatchPanelVisible(false);
+            setAiPanelVisible(false);
           }
           return next;
         }),
@@ -597,6 +603,7 @@ export function App() {
             setPivotPanelVisible(false);
             setCommentsPanelVisible(false);
             setHistoryPanelVisible(false);
+            setAiPanelVisible(false);
           }
           return next;
         }),
@@ -611,6 +618,7 @@ export function App() {
             setPivotPanelVisible(false);
             setHistoryPanelVisible(false);
             setWatchPanelVisible(false);
+            setAiPanelVisible(false);
           }
           return next;
         }),
@@ -625,6 +633,22 @@ export function App() {
             setPivotPanelVisible(false);
             setCommentsPanelVisible(false);
             setWatchPanelVisible(false);
+            setAiPanelVisible(false);
+          }
+          return next;
+        }),
+      aiPanelVisible,
+      toggleAiPanel: () =>
+        setAiPanelVisible((v) => {
+          const next = !v;
+          if (next) {
+            setTablesPanelVisible(false);
+            setOutlinePanelVisible(false);
+            setChartsPanelVisible(false);
+            setPivotPanelVisible(false);
+            setCommentsPanelVisible(false);
+            setHistoryPanelVisible(false);
+            setWatchPanelVisible(false);
           }
           return next;
         }),
@@ -636,6 +660,7 @@ export function App() {
         setWatchPanelVisible(false);
         setCommentsPanelVisible(false);
         setHistoryPanelVisible(false);
+        setAiPanelVisible(false);
       },
       showFormulas,
       toggleShowFormulas: () => setShowFormulas((v) => !v),
@@ -651,6 +676,7 @@ export function App() {
       watchPanelVisible,
       commentsPanelVisible,
       historyPanelVisible,
+      aiPanelVisible,
       showFormulas,
     ],
   );
@@ -714,6 +740,7 @@ export function App() {
                                                 {watchPanelVisible && <WatchPanel />}
                                                 {commentsPanelVisible && <CommentsPanel />}
                                                 {historyPanelVisible && <VersionHistoryPanel />}
+                                                {aiPanelVisible && <AiPanel />}
                                                 <PanelRail />
                                               </div>
                                               <MobileActionBar />
