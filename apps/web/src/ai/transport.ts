@@ -305,13 +305,21 @@ function sheetsAiWsUrl(): string {
 }
 
 /**
+ * Returns true when a collab server WS URL is configured.
+ * Used by the UI to gate the AI panel button — on plain web without a collab
+ * server, the DirectTransport API-key flow is not yet exposed to end users.
+ */
+export function hasCollabServer(): boolean {
+  return !!windowStringGlobal('__COLLAB_WS_URL__') || !!viteEnv('VITE_COLLAB_WS_URL');
+}
+
+/**
  * Returns the appropriate transport for the current environment:
  *  - CollabTransport when the collab server is available
  *  - DirectTransport otherwise (user provides Anthropic key)
  */
 export function createSheetsTransport(): SheetsTransport {
-  const hasCollab = !!windowStringGlobal('__COLLAB_WS_URL__') || !!viteEnv('VITE_COLLAB_WS_URL');
-  if (hasCollab) {
+  if (hasCollabServer()) {
     return new CollabTransport(sheetsAiWsUrl());
   }
   return new DirectTransport();

@@ -16,6 +16,8 @@
 
 import { useUI } from '../use-ui';
 import { Icon } from './Icon';
+import { isDesktop } from '../desk-bridge-bootstrap';
+import { hasCollabServer } from '../ai/transport';
 
 /**
  * Right-edge vertical rail of panel-toggle buttons. Replaces the
@@ -34,6 +36,9 @@ import { Icon } from './Icon';
  */
 export function PanelRail() {
   const ui = useUI();
+  // AI panel only available on desktop or when a collab server is configured.
+  // In plain web without either, the DirectTransport API-key flow is hidden.
+  const showAiButton = isDesktop() || hasCollabServer();
 
   return (
     <aside className="panel-rail" data-testid="panel-rail" aria-label="Panels">
@@ -86,13 +91,15 @@ export function PanelRail() {
         pressed={ui.historyPanelVisible}
         onClick={ui.toggleHistoryPanel}
       />
-      <RailButton
-        id="ai"
-        label={ui.aiPanelVisible ? 'Hide AI' : 'AI'}
-        icon="auto_awesome"
-        pressed={ui.aiPanelVisible}
-        onClick={ui.toggleAiPanel}
-      />
+      {showAiButton && (
+        <RailButton
+          id="ai"
+          label={ui.aiPanelVisible ? 'Hide AI' : 'AI'}
+          icon="auto_awesome"
+          pressed={ui.aiPanelVisible}
+          onClick={ui.toggleAiPanel}
+        />
+      )}
     </aside>
   );
 }
