@@ -305,13 +305,31 @@ function sheetsAiWsUrl(): string {
 }
 
 /**
+ * Returns true when a collab server WS URL is configured.
+ * Used by the UI to gate the AI panel button — on plain web without a collab
+ * server, the DirectTransport API-key flow is not yet exposed to end users.
+ */
+export function hasCollabServer(): boolean {
+  return !!windowStringGlobal('__COLLAB_WS_URL__') || !!viteEnv('VITE_COLLAB_WS_URL');
+}
+
+/**
+ * Explicit opt-in to expose the AI panel on plain web (DirectTransport,
+ * bring-your-own Anthropic key). Off by default so the key form isn't shown
+ * to end users; a self-hoster sets `window.__ENABLE_AI__ = true` or builds
+ * with `VITE_ENABLE_AI=1`. The e2e suite sets the window global.
+ */
+export function aiUiForced(): boolean {
+  return windowStringGlobal('__ENABLE_AI__') === 'true' || !!viteEnv('VITE_ENABLE_AI');
+}
+
+/**
  * Returns the appropriate transport for the current environment:
  *  - CollabTransport when the collab server is available
  *  - DirectTransport otherwise (user provides Anthropic key)
  */
 export function createSheetsTransport(): SheetsTransport {
-  const hasCollab = !!windowStringGlobal('__COLLAB_WS_URL__') || !!viteEnv('VITE_COLLAB_WS_URL');
-  if (hasCollab) {
+  if (hasCollabServer()) {
     return new CollabTransport(sheetsAiWsUrl());
   }
   return new DirectTransport();
