@@ -72,6 +72,9 @@ export class DirectTransport implements SheetsTransport {
     if (!payload.apiKey) {
       return { data: { error: { message: 'No API key configured.' } }, status: 401 };
     }
+
+    const useStream = !!payload.onText;
+
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -85,10 +88,70 @@ export class DirectTransport implements SheetsTransport {
         system: payload.system,
         messages: payload.messages,
         tools: payload.tools,
+        ...(useStream ? { stream: true } : {}),
       }),
       signal: payload.signal,
     });
-    return { data: await resp.json(), status: resp.status };
+
+    if (!useStream || !resp.body) {
+      return { data: await resp.json(), status: resp.status };
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content: any[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let msgDelta: any = {};
+
+    try {
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') break outer;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let ev: any;
+          try { ev = JSON.parse(raw); } catch { continue; }
+
+          if (ev.type === 'content_block_start' && ev.content_block?.type === 'text') {
+            content.push({ type: 'text', text: '' });
+          } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+            content.push({ type: 'tool_use', id: ev.content_block.id, name: ev.content_block.name, input: {} });
+          } else if (ev.type === 'content_block_delta') {
+            const last = content[content.length - 1];
+            if (ev.delta?.type === 'text_delta' && last?.type === 'text') {
+              last.text += ev.delta.text ?? '';
+              payload.onText?.(ev.delta.text ?? '');
+            } else if (ev.delta?.type === 'input_json_delta' && last?.type === 'tool_use') {
+              last._inputStr = (last._inputStr ?? '') + (ev.delta.partial_json ?? '');
+            }
+          } else if (ev.type === 'content_block_stop') {
+            const last = content[content.length - 1];
+            if (last?.type === 'tool_use' && last._inputStr) {
+              try { last.input = JSON.parse(last._inputStr); } catch { /* leave empty */ }
+              delete last._inputStr;
+            }
+          } else if (ev.type === 'message_delta') {
+            msgDelta = ev.delta ?? {};
+          }
+        }
+      }
+    } catch (err) {
+      return { data: { error: { message: String(err) } }, status: 500 };
+    }
+
+    return {
+      data: { content, stop_reason: msgDelta.stop_reason ?? 'end_turn' },
+      status: resp.status,
+    };
   }
 }
 
