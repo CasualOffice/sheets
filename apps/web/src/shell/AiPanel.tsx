@@ -276,6 +276,7 @@ export function AiPanel() {
   );
 
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
+  const [streamingText, setStreamingText] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -369,6 +370,7 @@ export function AiPanel() {
         for (let round = 0; round < DEFAULT_MAX_TOOL_ROUNDS; round++) {
           if (ctrl.signal.aborted) break;
 
+          let streamedText = '';
           const payload: LlmCallPayload = {
             model: MODEL,
             max_tokens: 2048,
@@ -377,9 +379,20 @@ export function AiPanel() {
             tools: SHEETS_CATALOG,
             apiKey: apiKey || undefined,
             signal: ctrl.signal,
+            onText: (tok) => {
+              if (tok) {
+                streamedText += tok;
+                setStreamingText((prev) => prev + tok);
+              }
+            },
           };
 
           const { data, status } = await transport.call(payload);
+
+          if (streamedText.trim()) {
+            appendDisplay({ kind: 'assistant', text: streamedText });
+          }
+          setStreamingText('');
 
           if (status !== 200) {
             const errMsg = (data as { error?: { message?: string } })?.error?.message;
@@ -389,9 +402,11 @@ export function AiPanel() {
           const response = data as LlmResponse;
           messages = [...messages, { role: 'assistant', content: response.content }];
 
-          for (const block of response.content) {
-            if (block.type === 'text' && block.text.trim()) {
-              appendDisplay({ kind: 'assistant', text: block.text });
+          if (!streamedText) {
+            for (const block of response.content) {
+              if (block.type === 'text' && block.text.trim()) {
+                appendDisplay({ kind: 'assistant', text: block.text });
+              }
             }
           }
 
@@ -571,6 +586,12 @@ export function AiPanel() {
                   }
                   return null;
                 })}
+                {streamingText && (
+                  <div style={{ ...msgAssistantStyle, opacity: 0.85 }}>
+                    {streamingText}
+                    <span style={spinnerStyle} aria-hidden="true" />
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
