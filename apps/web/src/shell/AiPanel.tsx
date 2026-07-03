@@ -586,6 +586,12 @@ export function AiPanel() {
                   }
                   return null;
                 })}
+                {streamingText && (
+                  <div style={{ ...msgAssistantStyle, opacity: 0.85 }}>
+                    {streamingText}
+                    <span style={spinnerStyle} aria-hidden="true" />
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 

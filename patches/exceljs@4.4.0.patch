@@ -1,3 +1,17 @@
+diff --git a/lib/xlsx/xform/drawing/drawing-xform.js b/lib/xlsx/xform/drawing/drawing-xform.js
+index 6bc4c43d8a12d5c8a56c268d9ab068042f1d6358..c7f790ac49982d2ac803d8c1cb207fb89f499849 100644
+--- a/lib/xlsx/xform/drawing/drawing-xform.js
++++ b/lib/xlsx/xform/drawing/drawing-xform.js
+@@ -91,6 +91,9 @@ class DrawingXform extends BaseXform {
+   }
+ 
+   reconcile(model, options) {
++    // Guard: some XLSX files have a drawing relationship but no anchor elements,
++    // which leaves model.anchors undefined and crashes on forEach (sheets#256).
++    if (!model.anchors) return;
+     model.anchors.forEach(anchor => {
+       if (anchor.br) {
+         this.map['xdr:twoCellAnchor'].reconcile(anchor, options);
 diff --git a/lib/xlsx/xform/sheet/worksheet-xform.js b/lib/xlsx/xform/sheet/worksheet-xform.js
 index b38930042cbb05dccd01c46a9adacb7a9fc59dba..71d997cd0054c5032caf62fa206703a19f0145f6 100644
 --- a/lib/xlsx/xform/sheet/worksheet-xform.js

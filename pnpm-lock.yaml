@@ -61,7 +61,7 @@ overrides:
 
 patchedDependencies:
   exceljs@4.4.0:
-    hash: f915c5fc0e58a524bbcb8cd167f7170c7abdd61aa237976ed31bda489dad6d64
+    hash: 1fb55c8a7c22df8b9a8b0db40f56947e31e61ac12eceed806433c58da11b9397
     path: patches/exceljs@4.4.0.patch
 
 importers:
@@ -88,7 +88,7 @@ importers:
         version: 0.4.26(eslint@9.39.4)
       exceljs:
         specifier: 4.4.0
-        version: 4.4.0(patch_hash=f915c5fc0e58a524bbcb8cd167f7170c7abdd61aa237976ed31bda489dad6d64)
+        version: 4.4.0(patch_hash=1fb55c8a7c22df8b9a8b0db40f56947e31e61ac12eceed806433c58da11b9397)
       globals:
         specifier: ^15.13.0
         version: 15.15.0
@@ -335,7 +335,7 @@ importers:
         version: 6.0.0
       exceljs:
         specifier: ^4.4.0
-        version: 4.4.0(patch_hash=f915c5fc0e58a524bbcb8cd167f7170c7abdd61aa237976ed31bda489dad6d64)
+        version: 4.4.0(patch_hash=1fb55c8a7c22df8b9a8b0db40f56947e31e61ac12eceed806433c58da11b9397)
       jspdf:
         specifier: ^3.0.1
         version: 3.0.4
@@ -498,7 +498,7 @@ importers:
         version: link:../../vendor/univer-revamp/packages/ui
       exceljs:
         specifier: 4.4.0
-        version: 4.4.0(patch_hash=f915c5fc0e58a524bbcb8cd167f7170c7abdd61aa237976ed31bda489dad6d64)
+        version: 4.4.0(patch_hash=1fb55c8a7c22df8b9a8b0db40f56947e31e61ac12eceed806433c58da11b9397)
     devDependencies:
       '@hocuspocus/provider':
         specifier: ^2.15.2
@@ -4700,7 +4700,7 @@ snapshots:
 
   esutils@2.0.3: {}
 
-  exceljs@4.4.0(patch_hash=f915c5fc0e58a524bbcb8cd167f7170c7abdd61aa237976ed31bda489dad6d64):
+  exceljs@4.4.0(patch_hash=1fb55c8a7c22df8b9a8b0db40f56947e31e61ac12eceed806433c58da11b9397):
     dependencies:
       archiver: 5.3.2
       dayjs: 1.11.20
