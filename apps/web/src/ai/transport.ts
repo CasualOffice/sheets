@@ -314,6 +314,16 @@ export function hasCollabServer(): boolean {
 }
 
 /**
+ * Explicit opt-in to expose the AI panel on plain web (DirectTransport,
+ * bring-your-own Anthropic key). Off by default so the key form isn't shown
+ * to end users; a self-hoster sets `window.__ENABLE_AI__ = true` or builds
+ * with `VITE_ENABLE_AI=1`. The e2e suite sets the window global.
+ */
+export function aiUiForced(): boolean {
+  return windowStringGlobal('__ENABLE_AI__') === 'true' || !!viteEnv('VITE_ENABLE_AI');
+}
+
+/**
  * Returns the appropriate transport for the current environment:
  *  - CollabTransport when the collab server is available
  *  - DirectTransport otherwise (user provides Anthropic key)

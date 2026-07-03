@@ -33,6 +33,11 @@ const FAKE_KEY = 'sk-ant-test-key-for-visual-verify';
 
 test.describe('AI panel', () => {
   test.beforeEach(async ({ page }) => {
+    // Opt the AI panel into the plain-web (DirectTransport) flow so the rail
+    // button is shown — production hides it unless desktop / collab / this flag.
+    await page.addInitScript(() => {
+      (window as unknown as { __ENABLE_AI__: string }).__ENABLE_AI__ = 'true';
+    });
     await page.goto('/');
     await waitForUniver(page);
   });
