@@ -122,12 +122,21 @@ export class DirectTransport implements SheetsTransport {
           if (raw === '[DONE]') break outer;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let ev: any;
-          try { ev = JSON.parse(raw); } catch { continue; }
+          try {
+            ev = JSON.parse(raw);
+          } catch {
+            continue;
+          }
 
           if (ev.type === 'content_block_start' && ev.content_block?.type === 'text') {
             content.push({ type: 'text', text: '' });
           } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
-            content.push({ type: 'tool_use', id: ev.content_block.id, name: ev.content_block.name, input: {} });
+            content.push({
+              type: 'tool_use',
+              id: ev.content_block.id,
+              name: ev.content_block.name,
+              input: {},
+            });
           } else if (ev.type === 'content_block_delta') {
             const last = content[content.length - 1];
             if (ev.delta?.type === 'text_delta' && last?.type === 'text') {
@@ -139,7 +148,11 @@ export class DirectTransport implements SheetsTransport {
           } else if (ev.type === 'content_block_stop') {
             const last = content[content.length - 1];
             if (last?.type === 'tool_use' && last._inputStr) {
-              try { last.input = JSON.parse(last._inputStr); } catch { /* leave empty */ }
+              try {
+                last.input = JSON.parse(last._inputStr);
+              } catch {
+                /* leave empty */
+              }
               delete last._inputStr;
             }
           } else if (ev.type === 'message_delta') {

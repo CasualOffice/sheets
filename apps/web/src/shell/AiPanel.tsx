@@ -187,7 +187,11 @@ const QUICK_ACTIONS: ReadonlyArray<{ id: string; label: string; prompt: string }
     label: 'Analyze',
     prompt: 'Analyze this data and highlight the key trends, totals, and any outliers.',
   },
-  { id: 'chart', label: 'Add chart', prompt: 'Suggest and create a chart that best fits this data.' },
+  {
+    id: 'chart',
+    label: 'Add chart',
+    prompt: 'Suggest and create a chart that best fits this data.',
+  },
   {
     id: 'formula',
     label: 'Formula help',
@@ -350,146 +354,149 @@ export function AiPanel() {
     setShowKeySetup(false);
   }, [keyDraft]);
 
-  const send = useCallback(async (override?: string) => {
-    const text = (override ?? inputValue).trim();
-    if (!text || busy) return;
-    if (transport.requiresApiKey && !apiKey) return;
+  const send = useCallback(
+    async (override?: string) => {
+      const text = (override ?? inputValue).trim();
+      if (!text || busy) return;
+      if (transport.requiresApiKey && !apiKey) return;
 
-    setInputValue('');
-    setBusy(true);
-    appendDisplay({ kind: 'user', text });
-    historyRef.current = [...historyRef.current, { role: 'user', content: text }];
+      setInputValue('');
+      setBusy(true);
+      appendDisplay({ kind: 'user', text });
+      historyRef.current = [...historyRef.current, { role: 'user', content: text }];
 
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
 
-    try {
-      if (transport.drivesLoop) {
-        // ── Server-side loop (CollabTransport) ────────────────────────────
-        const payload: LlmCallPayload = {
-          model: MODEL,
-          max_tokens: 2048,
-          system: SYSTEM_PROMPT,
-          messages: historyRef.current,
-          tools: SHEETS_CATALOG,
-          apiKey: apiKey || undefined,
-          signal: ctrl.signal,
-          maxToolRounds: DEFAULT_MAX_TOOL_ROUNDS,
-          toolExecutor: async (toolName, args) => {
-            appendDisplay({ kind: 'tool_step', toolName, status: 'running' });
-            try {
-              const result = await bridge.callTool(toolName, args);
-              updateLastToolStep('done');
-              return result;
-            } catch (err) {
-              updateLastToolStep('error');
-              throw err;
-            }
-          },
-          onText: (t) => {
-            if (t.trim()) appendDisplay({ kind: 'assistant', text: t });
-          },
-        };
-
-        const { data, status, updatedHistory, capHit } = await transport.call(payload);
-        if (status !== 200) {
-          const errMsg = (data as { error?: { message?: string } })?.error?.message;
-          throw new Error(errMsg ?? `AI error ${status}`);
-        }
-        if (updatedHistory) historyRef.current = updatedHistory as LlmMessage[];
-        if (capHit) appendDisplay({ kind: 'cap', rounds: DEFAULT_MAX_TOOL_ROUNDS });
-      } else {
-        // ── Panel-driven loop (DirectTransport) ───────────────────────────
-        let messages = [...historyRef.current];
-        let panelCapHit = false;
-
-        for (let round = 0; round < DEFAULT_MAX_TOOL_ROUNDS; round++) {
-          if (ctrl.signal.aborted) break;
-
-          let streamedText = '';
+      try {
+        if (transport.drivesLoop) {
+          // ── Server-side loop (CollabTransport) ────────────────────────────
           const payload: LlmCallPayload = {
             model: MODEL,
             max_tokens: 2048,
             system: SYSTEM_PROMPT,
-            messages,
+            messages: historyRef.current,
             tools: SHEETS_CATALOG,
             apiKey: apiKey || undefined,
             signal: ctrl.signal,
-            onText: (tok) => {
-              if (tok) {
-                streamedText += tok;
-                setStreamingText((prev) => prev + tok);
+            maxToolRounds: DEFAULT_MAX_TOOL_ROUNDS,
+            toolExecutor: async (toolName, args) => {
+              appendDisplay({ kind: 'tool_step', toolName, status: 'running' });
+              try {
+                const result = await bridge.callTool(toolName, args);
+                updateLastToolStep('done');
+                return result;
+              } catch (err) {
+                updateLastToolStep('error');
+                throw err;
               }
+            },
+            onText: (t) => {
+              if (t.trim()) appendDisplay({ kind: 'assistant', text: t });
             },
           };
 
-          const { data, status } = await transport.call(payload);
-
-          if (streamedText.trim()) {
-            appendDisplay({ kind: 'assistant', text: streamedText });
-          }
-          setStreamingText('');
-
+          const { data, status, updatedHistory, capHit } = await transport.call(payload);
           if (status !== 200) {
             const errMsg = (data as { error?: { message?: string } })?.error?.message;
-            throw new Error(errMsg ?? `API error ${status}`);
+            throw new Error(errMsg ?? `AI error ${status}`);
           }
+          if (updatedHistory) historyRef.current = updatedHistory as LlmMessage[];
+          if (capHit) appendDisplay({ kind: 'cap', rounds: DEFAULT_MAX_TOOL_ROUNDS });
+        } else {
+          // ── Panel-driven loop (DirectTransport) ───────────────────────────
+          let messages = [...historyRef.current];
+          let panelCapHit = false;
 
-          const response = data as LlmResponse;
-          messages = [...messages, { role: 'assistant', content: response.content }];
+          for (let round = 0; round < DEFAULT_MAX_TOOL_ROUNDS; round++) {
+            if (ctrl.signal.aborted) break;
 
-          if (!streamedText) {
-            for (const block of response.content) {
-              if (block.type === 'text' && block.text.trim()) {
-                appendDisplay({ kind: 'assistant', text: block.text });
+            let streamedText = '';
+            const payload: LlmCallPayload = {
+              model: MODEL,
+              max_tokens: 2048,
+              system: SYSTEM_PROMPT,
+              messages,
+              tools: SHEETS_CATALOG,
+              apiKey: apiKey || undefined,
+              signal: ctrl.signal,
+              onText: (tok) => {
+                if (tok) {
+                  streamedText += tok;
+                  setStreamingText((prev) => prev + tok);
+                }
+              },
+            };
+
+            const { data, status } = await transport.call(payload);
+
+            if (streamedText.trim()) {
+              appendDisplay({ kind: 'assistant', text: streamedText });
+            }
+            setStreamingText('');
+
+            if (status !== 200) {
+              const errMsg = (data as { error?: { message?: string } })?.error?.message;
+              throw new Error(errMsg ?? `API error ${status}`);
+            }
+
+            const response = data as LlmResponse;
+            messages = [...messages, { role: 'assistant', content: response.content }];
+
+            if (!streamedText) {
+              for (const block of response.content) {
+                if (block.type === 'text' && block.text.trim()) {
+                  appendDisplay({ kind: 'assistant', text: block.text });
+                }
               }
             }
-          }
 
-          if (response.stop_reason !== 'tool_use') break;
+            if (response.stop_reason !== 'tool_use') break;
 
-          const toolUses = response.content.filter(
-            (b): b is Extract<LlmContentBlock, { type: 'tool_use' }> => b.type === 'tool_use',
-          );
-          const toolResults: LlmContentBlock[] = [];
+            const toolUses = response.content.filter(
+              (b): b is Extract<LlmContentBlock, { type: 'tool_use' }> => b.type === 'tool_use',
+            );
+            const toolResults: LlmContentBlock[] = [];
 
-          for (const tu of toolUses) {
-            appendDisplay({ kind: 'tool_step', toolName: tu.name, status: 'running' });
-            try {
-              const result = await bridge.callTool(tu.name, tu.input);
-              updateLastToolStep('done');
-              toolResults.push({
-                type: 'tool_result',
-                tool_use_id: tu.id,
-                content: JSON.stringify(result),
-              });
-            } catch (err) {
-              updateLastToolStep('error');
-              toolResults.push({
-                type: 'tool_result',
-                tool_use_id: tu.id,
-                content: JSON.stringify({ ok: false, message: String(err) }),
-              });
+            for (const tu of toolUses) {
+              appendDisplay({ kind: 'tool_step', toolName: tu.name, status: 'running' });
+              try {
+                const result = await bridge.callTool(tu.name, tu.input);
+                updateLastToolStep('done');
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: tu.id,
+                  content: JSON.stringify(result),
+                });
+              } catch (err) {
+                updateLastToolStep('error');
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: tu.id,
+                  content: JSON.stringify({ ok: false, message: String(err) }),
+                });
+              }
             }
+
+            messages = [...messages, { role: 'user', content: toolResults }];
+
+            if (round === DEFAULT_MAX_TOOL_ROUNDS - 1) panelCapHit = true;
           }
 
-          messages = [...messages, { role: 'user', content: toolResults }];
-
-          if (round === DEFAULT_MAX_TOOL_ROUNDS - 1) panelCapHit = true;
+          historyRef.current = messages;
+          if (panelCapHit) appendDisplay({ kind: 'cap', rounds: DEFAULT_MAX_TOOL_ROUNDS });
         }
-
-        historyRef.current = messages;
-        if (panelCapHit) appendDisplay({ kind: 'cap', rounds: DEFAULT_MAX_TOOL_ROUNDS });
+      } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return;
+        const msg = err instanceof Error ? err.message : String(err);
+        appendDisplay({ kind: 'error', text: msg });
+      } finally {
+        setBusy(false);
+        abortRef.current = null;
       }
-    } catch (err) {
-      if ((err as { name?: string }).name === 'AbortError') return;
-      const msg = err instanceof Error ? err.message : String(err);
-      appendDisplay({ kind: 'error', text: msg });
-    } finally {
-      setBusy(false);
-      abortRef.current = null;
-    }
-  }, [inputValue, busy, transport, apiKey, bridge, appendDisplay, updateLastToolStep]);
+    },
+    [inputValue, busy, transport, apiKey, bridge, appendDisplay, updateLastToolStep],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
