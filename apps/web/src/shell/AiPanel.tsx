@@ -178,6 +178,42 @@ const inputRowStyle: CSSProperties = {
   alignItems: 'flex-end',
 };
 
+// One-tap prompts so the panel isn't a blank chat box — spreadsheet-relevant
+// starting points the model + SHEETS_CATALOG tools can act on.
+const QUICK_ACTIONS: ReadonlyArray<{ id: string; label: string; prompt: string }> = [
+  { id: 'summarize', label: 'Summarize', prompt: 'Summarize the data in this spreadsheet.' },
+  {
+    id: 'analyze',
+    label: 'Analyze',
+    prompt: 'Analyze this data and highlight the key trends, totals, and any outliers.',
+  },
+  { id: 'chart', label: 'Add chart', prompt: 'Suggest and create a chart that best fits this data.' },
+  {
+    id: 'formula',
+    label: 'Formula help',
+    prompt: 'Suggest a formula to summarize or compute something useful from this data.',
+  },
+];
+
+const chipRowStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+  padding: '0 12px 8px',
+};
+
+const chipStyle: CSSProperties = {
+  fontSize: 12,
+  lineHeight: 1.2,
+  padding: '5px 10px',
+  border: '1px solid var(--color-border, #d1d5db)',
+  borderRadius: 999,
+  background: 'var(--color-surface, #ffffff)',
+  color: 'var(--color-text, #1f2328)',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
 const textareaStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
@@ -314,8 +350,8 @@ export function AiPanel() {
     setShowKeySetup(false);
   }, [keyDraft]);
 
-  const send = useCallback(async () => {
-    const text = inputValue.trim();
+  const send = useCallback(async (override?: string) => {
+    const text = (override ?? inputValue).trim();
     if (!text || busy) return;
     if (transport.requiresApiKey && !apiKey) return;
 
@@ -594,6 +630,22 @@ export function AiPanel() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+
+              {!busy && !(transport.requiresApiKey && !apiKey) && (
+                <div style={chipRowStyle}>
+                  {QUICK_ACTIONS.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      style={chipStyle}
+                      onClick={() => void send(a.prompt)}
+                      data-testid={`ai-quick-${a.id}`}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div style={inputRowStyle}>
                 <textarea

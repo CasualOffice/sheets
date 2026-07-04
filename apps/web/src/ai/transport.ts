@@ -23,10 +23,13 @@
  *                       full LLM tool loop and routes tool_call messages back to
  *                       the originating client
  *
- * DesktopTransport is omitted — Casual Sheets is not yet packaged as a Tauri app.
+ *  - DesktopTransport — routes to the native llama.cpp model loaded in the
+ *                       Casual Office desktop shell via the shared
+ *                       `docops_llm_call` Tauri command (no key, no server).
  */
 
 import { windowStringGlobal, viteEnv } from '../univer-facade';
+import { isDesktop } from '../desk-bridge-bootstrap';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -290,6 +293,53 @@ export class CollabTransport implements SheetsTransport {
   }
 }
 
+// ── DesktopTransport ─────────────────────────────────────────────────────────
+
+/**
+ * Routes AI calls to the native model loaded in the Casual Office desktop shell
+ * (the llama.cpp `ai-worker`) through the shared `docops_llm_call` Tauri command
+ * — the same backend the document editor uses. No API key, no collab server.
+ *
+ * drivesLoop=false: the panel drives the tool loop; each call() performs one LLM
+ * round and returns an Anthropic-shaped `{ content, stop_reason }` response.
+ */
+export class DesktopTransport implements SheetsTransport {
+  readonly requiresApiKey = false;
+  readonly drivesLoop = false;
+
+  async call(payload: LlmCallPayload): Promise<LlmCallResult> {
+    const invoke = (
+      window as unknown as {
+        __TAURI__?: { core?: { invoke?: (cmd: string, args?: unknown) => Promise<unknown> } };
+      }
+    ).__TAURI__?.core?.invoke;
+    if (!invoke) {
+      return {
+        data: { error: { message: 'Native AI is only available in the desktop app.' } },
+        status: 500,
+      };
+    }
+    try {
+      // The Rust command is docops_llm_call(args: DocopsLlmArgs), so the payload
+      // MUST be nested under `args` (a bare object throws "missing required key
+      // args"). Inner fields are camelCase (#[serde(rename_all = "camelCase")]).
+      const data = await invoke('docops_llm_call', {
+        args: {
+          model: payload.model,
+          system: payload.system,
+          messages: payload.messages,
+          tools: payload.tools,
+          maxTokens: payload.max_tokens,
+          apiKey: payload.apiKey ?? '',
+        },
+      });
+      return { data, status: 200 };
+    } catch (err) {
+      return { data: { error: { message: String(err) } }, status: 500 };
+    }
+  }
+}
+
 // ── Factory ────────────────────────────────────────────────────────────────
 
 /**
@@ -329,6 +379,11 @@ export function aiUiForced(): boolean {
  *  - DirectTransport otherwise (user provides Anthropic key)
  */
 export function createSheetsTransport(): SheetsTransport {
+  // Desktop shell: use the loaded native model. Its own bridge (?desk=1) means
+  // no collab server and no user API key are needed.
+  if (isDesktop()) {
+    return new DesktopTransport();
+  }
   if (hasCollabServer()) {
     return new CollabTransport(sheetsAiWsUrl());
   }
