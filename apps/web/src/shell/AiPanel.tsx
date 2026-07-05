@@ -305,8 +305,9 @@ const QUICK_ACTIONS: ReadonlyArray<{ id: string; label: string; prompt: string }
   },
   {
     id: 'chart',
-    label: 'Add chart',
-    prompt: 'Suggest and create a chart that best fits this data.',
+    label: 'Chart advice',
+    prompt:
+      'Recommend which chart type best fits this data and which ranges to plot. Explain your reasoning — do not attempt to create the chart.',
   },
   {
     id: 'formula',
@@ -897,6 +898,12 @@ export function AiPanel() {
                     <span style={spinnerStyle} aria-hidden="true" />
                   </div>
                 )}
+                {busy && !streamingText && (
+                  <div style={msgToolStyle} aria-live="polite">
+                    <span style={spinnerStyle} aria-hidden="true" />
+                    <span>Thinking…</span>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -923,6 +930,7 @@ export function AiPanel() {
                     onClick={() => setAgentMode((v) => !v)}
                     style={agentToggleStyle(agentMode)}
                     data-testid="ai-agent-toggle"
+                    aria-pressed={agentMode}
                     title={
                       agentMode
                         ? 'Agent mode — plans, executes, and reviews multi-step tasks'
@@ -930,7 +938,7 @@ export function AiPanel() {
                     }
                     disabled={busy}
                   >
-                    <Icon name="smart_toy" />
+                    <Icon name="auto_awesome" />
                     {agentMode ? 'Agent' : 'Chat'}
                   </button>
                   {agentMode && (
@@ -941,7 +949,7 @@ export function AiPanel() {
                       data-testid="ai-mcp-add"
                       title="Connect an external MCP server; its tools join the agent"
                     >
-                      <Icon name="hub" />
+                      <Icon name="link" />
                       MCP
                     </button>
                   )}
@@ -1001,15 +1009,27 @@ export function AiPanel() {
                   onKeyDown={handleKeyDown}
                   aria-label="Message input"
                 />
-                <button
-                  type="button"
-                  style={sendBtnStyle(busy)}
-                  disabled={busy}
-                  onClick={() => void send()}
-                  aria-label="Send"
-                >
-                  {busy ? <span style={spinnerStyle} /> : <Icon name="send" />}
-                </button>
+                {busy ? (
+                  <button
+                    type="button"
+                    style={sendBtnStyle(false)}
+                    onClick={() => abortRef.current?.abort()}
+                    aria-label="Stop"
+                    data-testid="ai-stop"
+                  >
+                    <Icon name="stop_circle" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    style={sendBtnStyle(!inputValue.trim())}
+                    disabled={!inputValue.trim()}
+                    onClick={() => void send()}
+                    aria-label="Send"
+                  >
+                    <Icon name="send" />
+                  </button>
+                )}
               </div>
 
               {transport.requiresApiKey && (
