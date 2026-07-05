@@ -62,10 +62,21 @@ export function transportLlm(
       onText,
     });
     if (status !== 200) {
-      const message =
-        (data as { error?: { message?: string } })?.error?.message ?? `API error ${status}`;
-      throw new Error(message);
+      throw new Error(friendlyLlmError(status, data));
     }
     return data as LlmResponse;
   };
+}
+
+/**
+ * Turn an HTTP status + Anthropic-shaped error body into an actionable message,
+ * so users see "your key was rejected" instead of a bare "API error 401".
+ */
+export function friendlyLlmError(status: number, data: unknown): string {
+  const raw = (data as { error?: { message?: string } })?.error?.message;
+  if (status === 401 || status === 403)
+    return raw || 'Your API key was rejected — check it in AI settings.';
+  if (status === 429) return raw || 'Rate limited — wait a moment and try again.';
+  if (status >= 500) return raw || `The AI service is unavailable (error ${status}).`;
+  return raw || `AI request failed (error ${status}).`;
 }

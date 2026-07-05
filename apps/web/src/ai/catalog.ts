@@ -108,9 +108,9 @@ export const SHEETS_CATALOG: SheetsTool[] = [
         },
         values: {
           type: 'array',
-          items: { type: 'array', items: { type: 'string' } },
+          items: { type: 'array', items: { type: ['string', 'number'] } },
           description:
-            'Values to write — outer array is rows, inner is columns. Must match the range dimensions.',
+            'Values to write — outer array is rows, inner is columns. Must match the range dimensions. Use numbers for numeric values (e.g. 100, not "100") so they compute correctly.',
         },
       },
       required: ['range', 'values'],
