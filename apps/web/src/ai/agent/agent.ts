@@ -145,9 +145,14 @@ export async function runAgent(
 
   try {
     // ── 1. PLAN ──────────────────────────────────────────────────────────
+    // Ground the planner with a cheap workbook snapshot when supplied, so the
+    // plan reflects real structure (a "summarize" goal isn't turned into edits).
+    const planUserMsg = options.planningContext
+      ? `Workbook snapshot:\n${options.planningContext}\n\nGoal: ${goal}`
+      : goal;
     const planResp = await llm({
       system: PLANNER_SYSTEM,
-      messages: [{ role: 'user', content: goal }],
+      messages: [{ role: 'user', content: planUserMsg }],
       tools: [SUBMIT_PLAN],
       signal,
     });
