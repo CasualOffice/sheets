@@ -243,6 +243,8 @@ async function executeTask(
   let lastError: string | undefined;
   let attemptedTools = 0;
   let failedTools = 0;
+  // Signature of the previous round's tool calls — for the repeated-call guard.
+  let lastSig: string | null = null;
 
   for (let round = 0; round < opts.maxRounds; round++) {
     if (opts.signal?.aborted) return { changed, failed: true, error: 'Cancelled.' };
@@ -261,6 +263,20 @@ async function executeTask(
       content: resp.stop_reason === 'tool_use' ? resp.content : textOf(resp.content) || ' ',
     });
     if (resp.stop_reason !== 'tool_use' || calls.length === 0) break;
+
+    // Loop guard: a small model can repeat the SAME tool call every round,
+    // burning the whole budget with no progress. If this round's calls are
+    // identical to the previous round's, stop — it's stuck, not working.
+    const sig = calls.map((c) => `${c.name}:${JSON.stringify(c.input ?? {})}`).join('|');
+    if (sig === lastSig) {
+      opts.emit({
+        type: 'task-text',
+        taskId: task.id,
+        text: '(stopped: the model repeated the same tool call without progress)',
+      });
+      break;
+    }
+    lastSig = sig;
 
     const results: LlmContentBlock[] = [];
     for (const call of calls) {
