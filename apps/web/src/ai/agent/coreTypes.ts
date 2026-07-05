@@ -15,6 +15,8 @@ export type DocOpsSuccess<T = unknown> = {
   changedBlockIds?: string[];
   diffSummary?: string;
   suggestionId?: string;
+  /** Set when the result came from an external (untrusted) MCP source. */
+  untrusted?: boolean;
 };
 export type DocOpsError = { ok: false; code: string; message: string; retryable: boolean };
 export type DocOpsResult<T = unknown> = DocOpsSuccess<T> | DocOpsError;
