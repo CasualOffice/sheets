@@ -89,14 +89,33 @@ export class SheetsBridge {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const activeWs = wb.getActiveSheet() as any;
+    // getActiveSheet() and getSheets() return different facade instances, so an
+    // identity (===) check always reports the active sheet as inactive. Compare
+    // by sheet id instead.
+    const activeId = activeWs?.getSheetId?.() ?? null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sheets = (wb.getSheets() as any[]).map((s: any) => ({
-      id: s.getSheetId?.() ?? null,
-      name: s.getSheetName?.() ?? s.getName?.() ?? null,
-      rowCount: s.getMaxRows?.() ?? null,
-      columnCount: s.getMaxColumns?.() ?? null,
-      isActive: s === activeWs,
-    }));
+    const sheets = (wb.getSheets() as any[]).map((s: any) => {
+      // Report the extent of cells that actually contain data — NOT the empty
+      // grid's max size (e.g. 1024x26), which is meaningless for a summary and
+      // makes the model think a blank sheet is full.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dataRange = s.getDataRange?.() as any;
+      const values: unknown[][] = dataRange?.getValues?.() ?? [];
+      const dataRows = values.length;
+      const dataColumns = (values[0] as unknown[])?.length ?? 0;
+      const isEmpty =
+        dataRows === 0 ||
+        !values.some((row) => row.some((c) => c !== null && c !== undefined && c !== ''));
+      return {
+        id: s.getSheetId?.() ?? null,
+        name: s.getSheetName?.() ?? s.getName?.() ?? null,
+        dataRows,
+        dataColumns,
+        dataRange: isEmpty ? null : (dataRange?.getA1Notation?.() ?? null),
+        isEmpty,
+        isActive: (s.getSheetId?.() ?? null) === activeId,
+      };
+    });
 
     return { ok: true, data: { sheets, sheetCount: sheets.length } };
   }
@@ -174,7 +193,21 @@ export class SheetsBridge {
       }
     }
 
-    return { ok: true, data: { rowCount, columnCount, nonEmptyCells } };
+    // Include the A1 of the used range so the model can read the actual values
+    // with get_cell_range before summarizing/analyzing.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dataRangeA1 = (dataRange as any).getA1Notation?.() ?? null;
+
+    return {
+      ok: true,
+      data: {
+        rowCount,
+        columnCount,
+        nonEmptyCells,
+        dataRange: dataRangeA1,
+        isEmpty: nonEmptyCells === 0,
+      },
+    };
   }
 
   private findInSheet(args: Record<string, unknown>): SheetsResult {

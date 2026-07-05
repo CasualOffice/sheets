@@ -34,7 +34,7 @@ export const SHEETS_CATALOG: SheetsTool[] = [
   {
     name: 'get_workbook_info',
     description:
-      'List all sheets in the workbook: their names, ids, and dimensions (row × column count). Call this first to orient yourself.',
+      'List all sheets: name, id, how many rows and columns of DATA each contains (dataRows/dataColumns — not the empty grid size), its used range in A1 (dataRange), and whether it is empty (isEmpty) or active. Call this first to orient yourself, then read the used range with get_cell_range to see the actual values.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -67,7 +67,7 @@ export const SHEETS_CATALOG: SheetsTool[] = [
   {
     name: 'get_sheet_stats',
     description:
-      'Return statistics about the active sheet: number of rows with data, columns with data, total non-empty cells.',
+      'Return the active sheet data extent: rowCount and columnCount of data, non-empty cell count, the used range in A1 (dataRange), and isEmpty. Use the dataRange with get_cell_range to read the actual values before summarizing or analyzing.',
     input_schema: {
       type: 'object',
       properties: {},
