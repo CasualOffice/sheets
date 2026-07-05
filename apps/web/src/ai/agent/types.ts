@@ -81,4 +81,10 @@ export interface AgentOptions {
   maxReflections?: number;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
+  /**
+   * A short snapshot of the workbook (e.g. sheet names + data extents) given to
+   * the PLANNER so it decomposes the goal against real structure instead of
+   * guessing. Keep it small (well under the context budget).
+   */
+  planningContext?: string;
 }

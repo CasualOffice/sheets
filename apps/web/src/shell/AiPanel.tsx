@@ -641,10 +641,18 @@ export function AiPanel() {
             .map((s) => s.source as ToolSource);
           const registry = createAgentRegistry(bridge, mcpSources);
           const llm = transportLlm(transport, { model: MODEL, apiKey: apiKey || undefined });
+          // Ground the planner with the workbook structure.
+          let planningContext: string | undefined;
+          try {
+            const info = await bridge.callTool('get_workbook_info', {});
+            if (info.ok && info.data) planningContext = JSON.stringify(info.data).slice(0, 1500);
+          } catch {
+            /* best-effort context */
+          }
           const result = await runAgent(
             text,
             { llm, registry },
-            { signal: ctrl.signal, onEvent: handleAgentEvent },
+            { signal: ctrl.signal, onEvent: handleAgentEvent, planningContext },
           );
           if (result.summary) {
             appendDisplay({ kind: 'assistant', text: result.summary });
