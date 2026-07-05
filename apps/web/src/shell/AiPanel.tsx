@@ -36,7 +36,12 @@ import { SHEETS_CATALOG } from '../ai/catalog';
 import { createSheetsTransport, type LlmCallPayload } from '../ai/transport';
 import { runAgent, type AgentEvent, type AgentTask, type ToolSource } from '../ai/agent';
 import type { McpClient } from '../ai/mcp';
-import { createAgentRegistry, createMcpClient, transportLlm } from '../ai/agentRuntime';
+import {
+  createAgentRegistry,
+  createMcpClient,
+  friendlyLlmError,
+  transportLlm,
+} from '../ai/agentRuntime';
 
 interface McpServerState {
   id: string;
@@ -627,8 +632,7 @@ export function AiPanel() {
 
           const { data, status, updatedHistory, capHit } = await transport.call(payload);
           if (status !== 200) {
-            const errMsg = (data as { error?: { message?: string } })?.error?.message;
-            throw new Error(errMsg ?? `AI error ${status}`);
+            throw new Error(friendlyLlmError(status, data));
           }
           if (updatedHistory) historyRef.current = updatedHistory as LlmMessage[];
           if (capHit) appendDisplay({ kind: 'cap', rounds: DEFAULT_MAX_TOOL_ROUNDS });
@@ -665,8 +669,7 @@ export function AiPanel() {
             setStreamingText('');
 
             if (status !== 200) {
-              const errMsg = (data as { error?: { message?: string } })?.error?.message;
-              throw new Error(errMsg ?? `API error ${status}`);
+              throw new Error(friendlyLlmError(status, data));
             }
 
             const response = data as LlmResponse;
@@ -760,6 +763,22 @@ export function AiPanel() {
         <header className="side-panel__header">
           <Icon name="auto_awesome" />
           <h2 className="side-panel__title">AI</h2>
+          {displayMessages.length > 0 && (
+            <button
+              type="button"
+              className="side-panel__close"
+              aria-label="Clear conversation"
+              title="Clear conversation"
+              disabled={busy}
+              onClick={() => {
+                historyRef.current = [];
+                setDisplayMessages([]);
+                setStreamingText('');
+              }}
+            >
+              <Icon name="delete_sweep" />
+            </button>
+          )}
           <button
             type="button"
             className="side-panel__close"
@@ -784,14 +803,20 @@ export function AiPanel() {
               </p>
               <input
                 type="password"
-                placeholder="sk-ant-..."
+                placeholder={apiKey ? '••••••••  (key saved — paste new to replace)' : 'sk-ant-...'}
                 value={keyDraft}
                 style={keyInputStyle}
+                autoFocus
                 onChange={(e) => setKeyDraft(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && saveKey()}
                 aria-label="Anthropic API key"
               />
-              <button type="button" style={saveBtnStyle} onClick={saveKey}>
+              <button
+                type="button"
+                style={saveBtnStyle}
+                onClick={saveKey}
+                disabled={!keyDraft.trim()}
+              >
                 Save key
               </button>
               {apiKey && (
@@ -808,10 +833,33 @@ export function AiPanel() {
                   Keep existing key
                 </button>
               )}
+              {apiKey && (
+                <button
+                  type="button"
+                  style={{
+                    ...saveBtnStyle,
+                    background: 'transparent',
+                    color: 'var(--color-danger, #c62828)',
+                    border: '1px solid var(--color-danger, #c62828)',
+                  }}
+                  onClick={() => {
+                    localStorage.removeItem(API_KEY_STORAGE);
+                    setApiKey('');
+                    setKeyDraft('');
+                  }}
+                >
+                  Remove key
+                </button>
+              )}
             </div>
           ) : (
             <>
-              <div style={messagesStyle}>
+              <div
+                style={messagesStyle}
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions text"
+              >
                 {displayMessages.length === 0 && (
                   <div
                     style={{
@@ -992,6 +1040,7 @@ export function AiPanel() {
                         }
                       }}
                       placeholder="https://mcp.example.com/rpc  (Enter to connect)"
+                      aria-label="MCP server URL"
                       style={mcpInputStyle}
                       data-testid="ai-mcp-input"
                     />
