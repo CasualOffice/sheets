@@ -186,4 +186,73 @@ test.describe('AI panel', () => {
     await expect(page.getByTestId('tables-panel')).toBeVisible();
     await expect(page.getByTestId('ai-panel')).toHaveCount(0);
   });
+
+  // ── Agentic + MCP ───────────────────────────────────────────────────────────
+
+  test('agent-mode toggle renders and flips Chat ↔ Agent', async ({ page }) => {
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [AI_KEY, FAKE_KEY] as [
+      string,
+      string,
+    ]);
+    await page.reload();
+    await waitForUniver(page);
+    await page.getByTestId('panel-rail-ai').click();
+    await expect(page.getByTestId('ai-panel')).toBeVisible();
+
+    const toggle = page.getByTestId('ai-agent-toggle');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveText(/Chat/);
+    await toggle.click();
+    await expect(toggle).toHaveText(/Agent/);
+  });
+
+  test('connects an external MCP server and shows its tool count', async ({ page }) => {
+    // Mock a Streamable-HTTP MCP server: reply to initialize + tools/list.
+    await page.route('**/mcp-test/rpc', async (route) => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.id === undefined) {
+        await route.fulfill({ status: 202, body: '' });
+        return;
+      }
+      const result =
+        body.method === 'initialize'
+          ? {
+              protocolVersion: '2025-06-18',
+              capabilities: { tools: {} },
+              serverInfo: { name: 'mock', version: '1' },
+            }
+          : body.method === 'tools/list'
+            ? {
+                tools: [
+                  {
+                    name: 'web_search',
+                    description: 'Search',
+                    inputSchema: { type: 'object', properties: {} },
+                  },
+                ],
+              }
+            : {};
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: body.id, result }),
+      });
+    });
+
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [AI_KEY, FAKE_KEY] as [
+      string,
+      string,
+    ]);
+    await page.reload();
+    await waitForUniver(page);
+    await page.getByTestId('panel-rail-ai').click();
+    await expect(page.getByTestId('ai-panel')).toBeVisible();
+
+    await page.getByTestId('ai-agent-toggle').click();
+    await page.getByTestId('ai-mcp-add').click();
+    await page.getByTestId('ai-mcp-input').fill('http://localhost/mcp-test/rpc');
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByTestId('ai-mcp-section')).toContainText('1 tools', { timeout: 8000 });
+  });
 });
