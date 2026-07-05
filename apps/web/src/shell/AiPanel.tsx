@@ -34,6 +34,18 @@ import { Icon } from './Icon';
 import { SheetsBridge } from '../ai/bridge';
 import { SHEETS_CATALOG } from '../ai/catalog';
 import { createSheetsTransport, type LlmCallPayload } from '../ai/transport';
+import { runAgent, type AgentEvent, type AgentTask, type ToolSource } from '../ai/agent';
+import type { McpClient } from '../ai/mcp';
+import { createAgentRegistry, createMcpClient, transportLlm } from '../ai/agentRuntime';
+
+interface McpServerState {
+  id: string;
+  url: string;
+  status: 'connecting' | 'connected' | 'error';
+  toolCount: number;
+  source: McpClient | null;
+  error?: string;
+}
 
 // ── LLM wire types ─────────────────────────────────────────────────────────
 
@@ -59,7 +71,8 @@ type DisplayMessage =
   | { kind: 'assistant'; text: string }
   | { kind: 'tool_step'; toolName: string; status: 'running' | 'done' | 'error' }
   | { kind: 'error'; text: string }
-  | { kind: 'cap'; rounds: number };
+  | { kind: 'cap'; rounds: number }
+  | { kind: 'plan'; tasks: AgentTask[] };
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -168,6 +181,109 @@ const msgCapStyle: CSSProperties = {
   borderRadius: 6,
   background: 'var(--color-surface-sunken, #f8f9fa)',
   border: '1px solid var(--color-border-light, #e5e7eb)',
+};
+
+const msgPlanStyle: CSSProperties = {
+  alignSelf: 'stretch',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  padding: '8px 12px',
+  borderRadius: 8,
+  background: 'var(--color-surface-sunken, #f8f9fa)',
+  border: '1px solid var(--color-border-light, #e5e7eb)',
+};
+
+const msgPlanTitleStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+  color: 'var(--color-text-muted, #6b7280)',
+  marginBottom: 2,
+};
+
+const msgPlanTaskStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 13,
+  color: 'var(--color-text, #1f2937)',
+};
+
+const agentToggleRowStyle: CSSProperties = {
+  display: 'flex',
+  padding: '4px 12px 0',
+};
+
+const agentToggleStyle = (active: boolean): CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  fontSize: 11.5,
+  fontWeight: 600,
+  padding: '2px 8px',
+  borderRadius: 999,
+  cursor: 'pointer',
+  color: active ? '#fff' : 'var(--color-text-muted, #6b7280)',
+  background: active ? 'var(--color-primary, #1a73e8)' : 'var(--color-surface-sunken, #f8f9fa)',
+  border: `1px solid ${active ? 'var(--color-primary, #1a73e8)' : 'var(--color-border-light, #e5e7eb)'}`,
+});
+
+const mcpAddBtnStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  fontSize: 11.5,
+  fontWeight: 600,
+  padding: '2px 8px',
+  borderRadius: 999,
+  cursor: 'pointer',
+  color: 'var(--color-text-muted, #6b7280)',
+  background: 'var(--color-surface-sunken, #f8f9fa)',
+  border: '1px solid var(--color-border-light, #e5e7eb)',
+  marginLeft: 6,
+};
+
+const mcpSectionStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+  padding: '4px 12px 0',
+};
+
+const mcpChipStyle = (status: 'connecting' | 'connected' | 'error'): CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  fontSize: 11,
+  padding: '2px 6px',
+  borderRadius: 6,
+  color: status === 'error' ? 'var(--color-danger, #c62828)' : 'var(--color-text-muted, #6b7280)',
+  background: 'var(--color-surface-sunken, #f8f9fa)',
+  border: '1px solid var(--color-border-light, #e5e7eb)',
+});
+
+const mcpRemoveStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  background: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  padding: 0,
+  color: 'inherit',
+  opacity: 0.7,
+};
+
+const mcpInputStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 200,
+  fontSize: 12,
+  padding: '4px 8px',
+  borderRadius: 6,
+  border: '1px solid var(--color-border-light, #e5e7eb)',
+  background: 'var(--color-surface, #fff)',
+  color: 'var(--color-text, #1f2937)',
 };
 
 const inputRowStyle: CSSProperties = {
@@ -319,6 +435,12 @@ export function AiPanel() {
   const [streamingText, setStreamingText] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [busy, setBusy] = useState(false);
+  // Agent mode: plan → execute → reflect. Opt-in; only when the panel drives
+  // the loop (Direct/Desktop, not collab where the server owns the loop).
+  const [agentMode, setAgentMode] = useState(false);
+  const [mcpServers, setMcpServers] = useState<McpServerState[]>([]);
+  const [mcpUrlDraft, setMcpUrlDraft] = useState('');
+  const [showMcpAdd, setShowMcpAdd] = useState(false);
 
   const historyRef = useRef<LlmMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -342,6 +464,93 @@ export function AiPanel() {
         }
       }
       return copy;
+    });
+  }, []);
+
+  const updatePlan = useCallback((mutate: (tasks: AgentTask[]) => AgentTask[]) => {
+    setDisplayMessages((prev) => {
+      const copy = [...prev];
+      for (let i = copy.length - 1; i >= 0; i--) {
+        if (copy[i].kind === 'plan') {
+          const msg = copy[i] as Extract<DisplayMessage, { kind: 'plan' }>;
+          copy[i] = { ...msg, tasks: mutate(msg.tasks) };
+          break;
+        }
+      }
+      return copy;
+    });
+  }, []);
+
+  const handleAgentEvent = useCallback(
+    (ev: AgentEvent) => {
+      switch (ev.type) {
+        case 'plan':
+          appendDisplay({ kind: 'plan', tasks: ev.tasks });
+          break;
+        case 'task-start':
+          updatePlan((tasks) =>
+            tasks.map((t) => (t.id === ev.taskId ? { ...t, status: 'running' } : t)),
+          );
+          break;
+        case 'task-tool':
+          if (ev.status === 'running')
+            appendDisplay({ kind: 'tool_step', toolName: ev.tool, status: 'running' });
+          else updateLastToolStep(ev.status);
+          break;
+        case 'task-end':
+          updatePlan((tasks) =>
+            tasks.map((t) => (t.id === ev.taskId ? { ...t, status: ev.status } : t)),
+          );
+          break;
+        case 'reflect':
+          if (ev.note) appendDisplay({ kind: 'assistant', text: ev.note });
+          if (ev.addedTasks.length) updatePlan((tasks) => [...tasks, ...ev.addedTasks]);
+          break;
+        case 'error':
+          appendDisplay({ kind: 'error', text: ev.message });
+          break;
+      }
+    },
+    [appendDisplay, updateLastToolStep, updatePlan],
+  );
+
+  const connectMcp = useCallback(
+    async (rawUrl: string) => {
+      const url = rawUrl.trim();
+      if (!url) return;
+      const id = `mcp:${url}`;
+      if (mcpServers.some((s) => s.id === id)) return;
+      const client = createMcpClient(url, id);
+      setMcpServers((prev) => [
+        ...prev,
+        { id, url, status: 'connecting', toolCount: 0, source: client },
+      ]);
+      setMcpUrlDraft('');
+      setShowMcpAdd(false);
+      try {
+        const tools = await client.listTools();
+        setMcpServers((prev) =>
+          prev.map((s) =>
+            s.id === id ? { ...s, status: 'connected', toolCount: tools.length } : s,
+          ),
+        );
+      } catch (err) {
+        setMcpServers((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? { ...s, status: 'error', error: err instanceof Error ? err.message : String(err) }
+              : s,
+          ),
+        );
+      }
+    },
+    [mcpServers],
+  );
+
+  const removeMcp = useCallback((id: string) => {
+    setMcpServers((prev) => {
+      prev.find((s) => s.id === id)?.source?.close();
+      return prev.filter((s) => s.id !== id);
     });
   }, []);
 
@@ -369,7 +578,26 @@ export function AiPanel() {
       abortRef.current = ctrl;
 
       try {
-        if (transport.drivesLoop) {
+        if (agentMode && !transport.drivesLoop) {
+          // ── Agent mode: plan → execute → reflect ─────────────────────────
+          const mcpSources = mcpServers
+            .filter((s) => s.status === 'connected' && s.source)
+            .map((s) => s.source as ToolSource);
+          const registry = createAgentRegistry(bridge, mcpSources);
+          const llm = transportLlm(transport, { model: MODEL, apiKey: apiKey || undefined });
+          const result = await runAgent(
+            text,
+            { llm, registry },
+            { signal: ctrl.signal, onEvent: handleAgentEvent },
+          );
+          if (result.summary) {
+            appendDisplay({ kind: 'assistant', text: result.summary });
+            historyRef.current = [
+              ...historyRef.current,
+              { role: 'assistant', content: result.summary },
+            ];
+          }
+        } else if (transport.drivesLoop) {
           // ── Server-side loop (CollabTransport) ────────────────────────────
           const payload: LlmCallPayload = {
             model: MODEL,
@@ -495,7 +723,18 @@ export function AiPanel() {
         abortRef.current = null;
       }
     },
-    [inputValue, busy, transport, apiKey, bridge, appendDisplay, updateLastToolStep],
+    [
+      inputValue,
+      busy,
+      transport,
+      apiKey,
+      bridge,
+      appendDisplay,
+      updateLastToolStep,
+      agentMode,
+      handleAgentEvent,
+      mcpServers,
+    ],
   );
 
   const handleKeyDown = useCallback(
@@ -627,6 +866,29 @@ export function AiPanel() {
                       </div>
                     );
                   }
+                  if (msg.kind === 'plan') {
+                    return (
+                      <div key={i} style={msgPlanStyle} data-testid="ai-plan">
+                        <div style={msgPlanTitleStyle}>Plan</div>
+                        {msg.tasks.map((t) => (
+                          <div key={t.id} style={msgPlanTaskStyle}>
+                            {t.status === 'running' ? (
+                              <span style={spinnerStyle} aria-hidden="true" />
+                            ) : t.status === 'done' ? (
+                              <Icon name="check" />
+                            ) : t.status === 'failed' ? (
+                              <Icon name="close" />
+                            ) : (
+                              <Icon name="radio_button_unchecked" />
+                            )}
+                            <span style={{ opacity: t.status === 'pending' ? 0.6 : 1 }}>
+                              {t.title}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
                   return null;
                 })}
                 {streamingText && (
@@ -654,6 +916,80 @@ export function AiPanel() {
                 </div>
               )}
 
+              {!transport.drivesLoop && (
+                <div style={agentToggleRowStyle}>
+                  <button
+                    type="button"
+                    onClick={() => setAgentMode((v) => !v)}
+                    style={agentToggleStyle(agentMode)}
+                    data-testid="ai-agent-toggle"
+                    title={
+                      agentMode
+                        ? 'Agent mode — plans, executes, and reviews multi-step tasks'
+                        : 'Chat mode — single reply'
+                    }
+                    disabled={busy}
+                  >
+                    <Icon name="smart_toy" />
+                    {agentMode ? 'Agent' : 'Chat'}
+                  </button>
+                  {agentMode && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMcpAdd((v) => !v)}
+                      style={mcpAddBtnStyle}
+                      data-testid="ai-mcp-add"
+                      title="Connect an external MCP server; its tools join the agent"
+                    >
+                      <Icon name="hub" />
+                      MCP
+                    </button>
+                  )}
+                </div>
+              )}
+              {agentMode && !transport.drivesLoop && (mcpServers.length > 0 || showMcpAdd) && (
+                <div style={mcpSectionStyle} data-testid="ai-mcp-section">
+                  {mcpServers.map((s) => (
+                    <div key={s.id} style={mcpChipStyle(s.status)}>
+                      {s.status === 'connecting' ? (
+                        <span style={spinnerStyle} aria-hidden="true" />
+                      ) : s.status === 'connected' ? (
+                        <Icon name="check_circle" />
+                      ) : (
+                        <Icon name="error" />
+                      )}
+                      <span title={s.error ?? s.url}>
+                        {s.url.replace(/^https?:\/\//, '')}
+                        {s.status === 'connected' ? ` · ${s.toolCount} tools` : ''}
+                        {s.status === 'error' ? ' · failed' : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeMcp(s.id)}
+                        style={mcpRemoveStyle}
+                        aria-label="Remove MCP server"
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </div>
+                  ))}
+                  {showMcpAdd && (
+                    <input
+                      value={mcpUrlDraft}
+                      onChange={(e) => setMcpUrlDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void connectMcp(mcpUrlDraft);
+                        }
+                      }}
+                      placeholder="https://mcp.example.com/rpc  (Enter to connect)"
+                      style={mcpInputStyle}
+                      data-testid="ai-mcp-input"
+                    />
+                  )}
+                </div>
+              )}
               <div style={inputRowStyle}>
                 <textarea
                   rows={1}
