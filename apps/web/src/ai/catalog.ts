@@ -92,6 +92,25 @@ export const SHEETS_CATALOG: SheetsTool[] = [
       required: ['query'],
     },
   },
+  {
+    name: 'search_sheet',
+    description:
+      'Retrieve the rows/regions most relevant to a natural-language query (top-k header-carrying bands, each with its A1 range). Use this to answer questions about or summarize a large sheet instead of reading the whole data range. Read a returned a1Range with get_cell_range for full detail before editing.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'What to look for, in natural language.',
+        },
+        k: {
+          type: 'number',
+          description: 'Max bands to return (1–8). Defaults to 5.',
+        },
+      },
+      required: ['query'],
+    },
+  },
 
   // ── Write tools ────────────────────────────────────────────────────────────
   {

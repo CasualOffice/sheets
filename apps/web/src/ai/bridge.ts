@@ -24,6 +24,7 @@
 
 import type { FUniver } from '@univerjs/core/facade';
 import { activeSheet, activeRange, rangeFromA1, rangeAt } from '../univer-facade';
+import { retrieve, type RetrievalChunk } from './retrieval';
 
 export type SheetsResult =
   | { ok: true; data?: unknown; diffSummary?: string }
@@ -58,6 +59,8 @@ export class SheetsBridge {
         return this.getSheetStats();
       case 'find_in_sheet':
         return this.findInSheet(args);
+      case 'search_sheet':
+        return this.searchSheet(args);
       case 'set_cell_values':
         return this.setCellValues(args);
       case 'set_formula':
@@ -256,6 +259,75 @@ export class SheetsBridge {
     return { ok: true, data: { matches, count: matches.length } };
   }
 
+  /**
+   * RAG: chunk the active sheet into header-carrying row bands and return the
+   * bands most relevant to `query` (BM25), each with its A1 range so the model
+   * can read the full band with get_cell_range before editing. Avoids sending
+   * the whole (potentially huge) data range to the model.
+   */
+  private searchSheet(args: Record<string, unknown>): SheetsResult {
+    const api = this.getApi();
+    if (!api) return this.noApi();
+    const query = String(args.query ?? '').trim();
+    if (!query) {
+      return { ok: false, code: 'VALIDATION', message: 'query is required.', retryable: false };
+    }
+    const k = typeof args.k === 'number' ? Math.min(Math.max(Math.floor(args.k), 1), 8) : 5;
+
+    const sheet = activeSheet(api);
+    if (!sheet) return this.noApi();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = sheet as any;
+    const sheetName: string = s.getSheetName?.() ?? s.getName?.() ?? 'Sheet1';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dataRange = s.getDataRange?.() as any;
+    const values: unknown[][] = dataRange?.getValues?.() ?? [];
+    if (!values.length) {
+      return { ok: true, data: { chunks: [], count: 0, note: 'The sheet is empty.' } };
+    }
+
+    const startRow: number = dataRange.getRow?.() ?? 0;
+    const startCol: number = dataRange.getColumn?.() ?? 0;
+    const colLetter = (col: number) => rowColToA1(0, col).replace(/\d+$/, '');
+    const rowToTsv = (row: unknown[]) => row.map((c) => c ?? '').join('\t');
+
+    const header = values[0] ?? [];
+    const headerTsv = rowToTsv(header);
+    const lastCol = startCol + Math.max(header.length, 1) - 1;
+    const BAND = 30;
+
+    const chunks: RetrievalChunk[] = [];
+    for (let start = 1; start < values.length; start += BAND) {
+      const band = values.slice(start, start + BAND);
+      const firstRow = startRow + start;
+      const lastRow = startRow + Math.min(start + BAND, values.length) - 1;
+      const a1 = `${sheetName}!${colLetter(startCol)}${firstRow + 1}:${colLetter(lastCol)}${lastRow + 1}`;
+      chunks.push({
+        id: `sc${chunks.length}`,
+        // Header row carried in every band so column meaning is preserved.
+        text: headerTsv + '\n' + band.map(rowToTsv).join('\n'),
+        meta: { a1Range: a1 },
+      });
+    }
+
+    const result = retrieve(chunks, query, { k });
+    return {
+      ok: true,
+      data: {
+        chunks: result.chunks.map((c) => ({
+          a1Range: (c.meta as { a1Range?: string })?.a1Range ?? null,
+          snippet: c.text.slice(0, 800),
+          score: Math.round(c.score * 100) / 100,
+        })),
+        count: result.chunks.length,
+        truncated: result.truncated,
+        note: result.chunks.length
+          ? 'Read a1Range with get_cell_range for full detail before editing.'
+          : 'No rows matched the query.',
+      },
+    };
+  }
+
   private setCellValues(args: Record<string, unknown>): SheetsResult {
     const api = this.getApi();
     if (!api) return this.noApi();
@@ -304,9 +376,21 @@ export class SheetsBridge {
         : row,
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const setValues = (range as any).setValues;
+    if (typeof setValues !== 'function') {
+      // Assert the facade method exists — optional chaining (setValues?.()) would
+      // silently no-op and then report ok:true, so the model claims the write
+      // happened when nothing was written.
+      return {
+        ok: false,
+        code: 'INTERNAL',
+        message: 'Spreadsheet write API unavailable (setValues missing).',
+        retryable: false,
+      };
+    }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (range as any).setValues?.(coerced);
+      setValues.call(range, coerced);
     } catch {
       return {
         ok: false,
@@ -346,10 +430,19 @@ export class SheetsBridge {
       };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const setValue = (cell as any).setValue;
+    if (typeof setValue !== 'function') {
+      return {
+        ok: false,
+        code: 'INTERNAL',
+        message: 'Spreadsheet write API unavailable (setValue missing).',
+        retryable: false,
+      };
+    }
     try {
       const f = formula.startsWith('=') ? formula : `=${formula}`;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (cell as any).setValue?.({ f });
+      setValue.call(cell, { f });
     } catch {
       return {
         ok: false,
