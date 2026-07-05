@@ -63,8 +63,19 @@ export class McpClient implements ToolSource {
 
   async listTools(): Promise<DocOpsTool[]> {
     await this.ensureInitialized();
-    const res = await this.rpc.request<{ tools?: McpToolDef[] }>('tools/list');
-    return (res.tools ?? []).map((t) => ({
+    // Follow the pagination cursor so a server that pages its catalog doesn't
+    // silently expose only the first page.
+    const all: McpToolDef[] = [];
+    let cursor: string | undefined;
+    do {
+      const res = await this.rpc.request<{ tools?: McpToolDef[]; nextCursor?: string }>(
+        'tools/list',
+        cursor ? { cursor } : undefined,
+      );
+      all.push(...(res.tools ?? []));
+      cursor = res.nextCursor;
+    } while (cursor && all.length < 500);
+    return all.map((t) => ({
       name: t.name,
       description: t.description ?? t.name,
       input_schema: {
