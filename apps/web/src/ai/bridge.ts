@@ -255,9 +255,25 @@ export class SheetsBridge {
       };
     }
 
+    // Coerce clean numeric-literal strings to numbers so "100" isn't stored as
+    // text (which silently breaks SUM and other aggregations). Leave anything
+    // that would change meaning alone: leading-zero codes ("007"), thousands
+    // separators ("1,000"), currency ("$5"), etc.
+    const coerced = (values as unknown[][]).map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => {
+            if (typeof cell === 'string') {
+              const t = cell.trim();
+              if (/^-?\d+(\.\d+)?$/.test(t) && !/^-?0\d/.test(t)) return Number(t);
+            }
+            return cell;
+          })
+        : row,
+    );
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (range as any).setValues?.(values);
+      (range as any).setValues?.(coerced);
     } catch {
       return {
         ok: false,
