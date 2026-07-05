@@ -11,6 +11,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // CI shards across 4 runners; cap workers to the 2 vCPUs per runner so we
+  // don't oversubscribe the CPU and slow every test into timeout territory
+  // (the chart/format specs were flaking on assertion timeouts under load).
+  workers: process.env.CI ? 2 : undefined,
+  // Give assertions headroom under CI contention.
+  expect: { timeout: process.env.CI ? 10000 : 5000 },
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   // These specs hit the production docker stack on :3000 (Fastify
   // serves built bundle + api + WS from one origin) — they're run
