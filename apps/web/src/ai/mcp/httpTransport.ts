@@ -30,6 +30,12 @@ export interface HttpMcpTransportOptions {
   fetchImpl?: typeof fetch;
   /** MCP protocol version echoed on every request after initialize. */
   protocolVersion?: string;
+  /**
+   * Same-origin CORS proxy (e.g. the collab server's /api/mcp-proxy). When set,
+   * requests are POSTed here as { url, headers, body } and forwarded server-side
+   * — the browser workaround for MCP servers that don't send CORS headers.
+   */
+  proxyUrl?: string;
 }
 
 export class HttpMcpTransport implements JsonRpcTransport {
@@ -43,12 +49,15 @@ export class HttpMcpTransport implements JsonRpcTransport {
   private sessionId: string | null = null;
   private closed = false;
 
+  private readonly proxyUrl: string | undefined;
+
   constructor(
     private readonly url: string,
     options: HttpMcpTransportOptions = {},
   ) {
     this.headers = options.headers ?? {};
     this.protocolVersion = options.protocolVersion ?? DEFAULT_PROTOCOL_VERSION;
+    this.proxyUrl = options.proxyUrl;
     // Bind to globalThis: native `fetch` throws "Illegal invocation" when
     // called as a method of another object (this === transport).
     this.doFetch = options.fetchImpl ?? fetch.bind(globalThis);
@@ -58,16 +67,29 @@ export class HttpMcpTransport implements JsonRpcTransport {
     if (this.closed) return;
     const controller = new AbortController();
     this.inflight.add(controller);
-    void this.doFetch(this.url, {
+    // The MCP headers (auth, session, protocol version) belong on the request to
+    // the target server. Direct: put them on this request. Proxied: hand them to
+    // the proxy in the body so it forwards them server-side.
+    const mcpHeaders: Record<string, string> = {
+      'mcp-protocol-version': this.protocolVersion,
+      ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}),
+      ...this.headers,
+    };
+    const target = this.proxyUrl ?? this.url;
+    const reqHeaders: Record<string, string> = this.proxyUrl
+      ? { 'content-type': 'application/json' }
+      : {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          ...mcpHeaders,
+        };
+    const reqBody = this.proxyUrl
+      ? JSON.stringify({ url: this.url, headers: mcpHeaders, body: message })
+      : message;
+    void this.doFetch(target, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        'mcp-protocol-version': this.protocolVersion,
-        ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}),
-        ...this.headers,
-      },
-      body: message,
+      headers: reqHeaders,
+      body: reqBody,
       signal: controller.signal,
     })
       .then(async (resp) => {
