@@ -25,6 +25,7 @@
 import type { FUniver } from '@univerjs/core/facade';
 import { activeSheet, activeRange, rangeFromA1, rangeAt } from '../univer-facade';
 import { retrieve, type RetrievalChunk } from './retrieval';
+import { getSharedWorkspace } from './workspaceStore';
 
 export type SheetsResult =
   | { ok: true; data?: unknown; diffSummary?: string }
@@ -61,6 +62,8 @@ export class SheetsBridge {
         return this.findInSheet(args);
       case 'search_sheet':
         return this.searchSheet(args);
+      case 'search_workspace':
+        return this.searchWorkspace(args);
       case 'set_cell_values':
         return this.setCellValues(args);
       case 'set_formula':
@@ -324,6 +327,41 @@ export class SheetsBridge {
         note: result.chunks.length
           ? 'Read a1Range with get_cell_range for full detail before editing.'
           : 'No rows matched the query.',
+      },
+    };
+  }
+
+  /**
+   * RAG across the user's LOCAL workspace (other files in the folder), each hit
+   * tagged with its source file to cite. On-device; unavailable until the host
+   * indexes a folder.
+   */
+  private searchWorkspace(args: Record<string, unknown>): SheetsResult {
+    const ws = getSharedWorkspace();
+    if (!ws) {
+      return {
+        ok: false,
+        code: 'UNSUPPORTED',
+        message: 'No workspace folder is indexed. Ask the user to open a folder first.',
+        retryable: false,
+      };
+    }
+    const query = String(args.query ?? '').trim();
+    if (!query) {
+      return { ok: false, code: 'VALIDATION', message: 'query is required.', retryable: false };
+    }
+    const k = typeof args.k === 'number' ? Math.min(Math.max(Math.floor(args.k), 1), 8) : 6;
+    const result = ws.search(query, k);
+    return {
+      ok: true,
+      data: {
+        hits: result.hits.map((h) => ({ source: h.docName, snippet: h.snippet, score: h.score })),
+        sources: result.sources.map((s) => s.docName),
+        count: result.hits.length,
+        truncated: result.truncated,
+        note: result.hits.length
+          ? 'Passages from across the workspace. Cite the source file for each claim.'
+          : 'No passages in the workspace matched the query.',
       },
     };
   }
