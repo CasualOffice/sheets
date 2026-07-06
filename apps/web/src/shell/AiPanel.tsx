@@ -42,6 +42,21 @@ import {
   friendlyLlmError,
   transportLlm,
 } from '../ai/agentRuntime';
+import { setWorkspaceDocs } from '../ai/workspaceStore';
+
+/** Tauri invoke when running inside Casual Desktop, else null (web). */
+function desktopInvoke():
+  | ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>)
+  | null {
+  const inv = (
+    window as {
+      __TAURI__?: {
+        core?: { invoke?: (c: string, a?: Record<string, unknown>) => Promise<unknown> };
+      };
+    }
+  ).__TAURI__?.core?.invoke;
+  return typeof inv === 'function' ? inv : null;
+}
 
 interface McpServerState {
   id: string;
@@ -117,6 +132,8 @@ Read tools (never mutate):
   get_cell_range    — read the actual cell values from an A1 range (e.g. "A1:D10")
   get_sheet_stats   — data extent: rowCount, columnCount, non-empty cells, and the used range's A1
   find_in_sheet     — search for text or a value (case-insensitive) in the active sheet
+  search_sheet      — retrieve the rows/regions most relevant to a query (large sheets)
+  search_workspace  — search the user's OTHER local files (when a folder is open); cite the source file
 
 Write tools:
   set_cell_values   — write text or numbers to a range (2D array, must match range shape)
@@ -476,6 +493,38 @@ export function AiPanel() {
   const [mcpUrlDraft, setMcpUrlDraft] = useState('');
   const [mcpTokenDraft, setMcpTokenDraft] = useState('');
   const [showMcpAdd, setShowMcpAdd] = useState(false);
+
+  // On-device workspace RAG (desktop only).
+  const [workspace, setWorkspace] = useState<{ count: number; folder: string } | null>(null);
+  const [indexingWorkspace, setIndexingWorkspace] = useState(false);
+  const canIndexWorkspace = !!desktopInvoke();
+
+  const indexWorkspace = useCallback(async () => {
+    const invoke = desktopInvoke();
+    if (!invoke || indexingWorkspace) return;
+    setIndexingWorkspace(true);
+    try {
+      const folder = (await invoke('pick_workspace_folder')) as string | null;
+      if (!folder) return;
+      const docs = (await invoke('read_workspace_folder', { path: folder })) as {
+        id: string;
+        name: string;
+        text: string;
+      }[];
+      setWorkspaceDocs(docs);
+      const folderName = folder.split(/[\\/]/).pop() || folder;
+      setWorkspace(docs.length ? { count: docs.length, folder: folderName } : null);
+    } catch {
+      /* dialog cancelled or read failed — leave the current workspace as-is */
+    } finally {
+      setIndexingWorkspace(false);
+    }
+  }, [indexingWorkspace]);
+
+  const clearWorkspaceFolder = useCallback(() => {
+    setWorkspaceDocs([]);
+    setWorkspace(null);
+  }, []);
 
   const historyRef = useRef<LlmMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1059,6 +1108,31 @@ export function AiPanel() {
                       MCP
                     </button>
                   )}
+                  {canIndexWorkspace &&
+                    (workspace ? (
+                      <button
+                        type="button"
+                        onClick={clearWorkspaceFolder}
+                        style={mcpAddBtnStyle}
+                        data-testid="ai-workspace-chip"
+                        title={`${workspace.count} file${workspace.count === 1 ? '' : 's'} from "${workspace.folder}" indexed for the AI. Click to clear.`}
+                      >
+                        <Icon name="folder" />
+                        {workspace.count} indexed
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={indexWorkspace}
+                        style={mcpAddBtnStyle}
+                        disabled={indexingWorkspace}
+                        data-testid="ai-workspace-add"
+                        title="Index a local folder so the AI can search and cite across your files — on-device"
+                      >
+                        <Icon name="folder" />
+                        {indexingWorkspace ? 'Indexing…' : 'Folder'}
+                      </button>
+                    ))}
                 </div>
               )}
               {agentMode && !transport.drivesLoop && (mcpServers.length > 0 || showMcpAdd) && (

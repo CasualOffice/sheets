@@ -111,6 +111,25 @@ export const SHEETS_CATALOG: SheetsTool[] = [
       required: ['query'],
     },
   },
+  {
+    name: 'search_workspace',
+    description:
+      "Retrieve relevant passages from the user's OTHER local files (the open folder/workspace), not just the current workbook. Returns passages each tagged with their source file to cite. Use when the question spans multiple documents/spreadsheets. Only available when a workspace folder is open.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'What to look for across the workspace, in natural language.',
+        },
+        k: {
+          type: 'number',
+          description: 'Max passages to return (1–8). Defaults to 6.',
+        },
+      },
+      required: ['query'],
+    },
+  },
 
   // ── Write tools ────────────────────────────────────────────────────────────
   {
