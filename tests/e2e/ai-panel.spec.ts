@@ -207,9 +207,12 @@ test.describe('AI panel', () => {
   });
 
   test('connects an external MCP server and shows its tool count', async ({ page }) => {
-    // Mock a Streamable-HTTP MCP server: reply to initialize + tools/list.
-    await page.route('**/mcp-test/rpc', async (route) => {
-      const body = JSON.parse(route.request().postData() || '{}');
+    // On the web the panel routes MCP through the same-origin /api/mcp-proxy
+    // (browsers can't reach external MCP servers — no CORS). The proxy request
+    // wraps the JSON-RPC as { url, headers, body }; unwrap it here.
+    await page.route('**/api/mcp-proxy', async (route) => {
+      const envelope = JSON.parse(route.request().postData() || '{}');
+      const body = JSON.parse(envelope.body || '{}');
       if (body.id === undefined) {
         await route.fulfill({ status: 202, body: '' });
         return;
