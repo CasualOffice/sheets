@@ -605,10 +605,14 @@ export function AiPanel() {
       const id = `mcp:${url}`;
       if (mcpServers.some((s) => s.id === id)) return;
       const token = rawToken?.trim();
+      // Web browsers can't reach most external MCP servers (no CORS) — route
+      // through the same-origin collab proxy. Desktop connects directly.
+      const proxyUrl = desktopInvoke() ? undefined : '/api/mcp-proxy';
       const client = createMcpClient(
         url,
         id,
         token ? { Authorization: `Bearer ${token}` } : undefined,
+        proxyUrl,
       );
       setMcpServers((prev) => [
         ...prev,
