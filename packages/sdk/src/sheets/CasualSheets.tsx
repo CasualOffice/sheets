@@ -85,7 +85,13 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 // (loaded via dynamic import only when a formula worker is passed).
 import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univerjs/rpc';
 
-import { createCasualSheetsAPI, type CasualSheetsAPI, type DocumentMode } from './api';
+import {
+  createCasualSheetsAPI,
+  type CasualSheetsAPI,
+  type CasualSheetsAPIInternal,
+  type DocumentMode,
+  type RangeRef,
+} from './api';
 // Type-only — erased at build, so the collab entry (Yjs + Hocuspocus) stays out
 // of the `sheets` bundle. The runtime `attachCollab` is pulled in lazily via a
 // dynamic `import('@casualoffice/sheets/collab')` only when the `collab` prop is
@@ -140,6 +146,20 @@ export interface CasualSheetsProps {
   /** Fired once when the editor unmounts, with the final snapshot — the host's
    *  last chance to persist before the workbook is disposed. */
   onExit?: (snapshot: IWorkbookData) => void;
+  /** The active selection changed (canvas-driven), or `null` when there is none.
+   *  The prop half of the canonical `selectionChange` event (doc 38 §3); the
+   *  same event is available via `api.on('selectionChange', …)`. Wired to
+   *  Univer's `SelectionChanged` / `SelectionMoveEnd` facade events. */
+  onSelectionChange?: (selection: RangeRef | null) => void;
+  /** A boot/runtime error surfaced by the editor — the prop half of the
+   *  canonical `error` event (doc 38 §3). Also available via
+   *  `api.on('error', …)`. */
+  onError?: (error: Error) => void;
+  /** The unsaved-changes flag flipped: `true` after the first edit since the
+   *  last load/save, `false` on save / `setContent` / `import`. The prop half of
+   *  the canonical `dirtyChange` event (doc 38 §3); also `api.on('dirtyChange',
+   *  …)`. Lets a host drive a "•/unsaved" title dot without diffing snapshots. */
+  onDirtyChange?: (dirty: boolean) => void;
   /** Lazy-load the feature plugins (conditional formatting, data
    *  validation, hyperlinks, notes, tables, comments, drawings, sort,
    *  filter, find/replace). Default `true`: plugins whose data is in
@@ -291,6 +311,9 @@ export function CasualSheets({
   onChangeDebounceMs = 400,
   onSave,
   onExit,
+  onSelectionChange,
+  onError,
+  onDirtyChange,
   lazyPlugins = true,
   onBeforeCreateUnit,
   formula,
@@ -318,17 +341,30 @@ export function CasualSheets({
   const effectiveMode: DocumentMode = documentMode ?? (readOnly ? 'viewing' : 'editing');
   const hostRef = useRef<HTMLDivElement>(null);
   // Keep the latest onChange callable without re-subscribing (the effect
-  // mounts once). The subscription itself is only wired when onChange was
-  // present at mount.
+  // mounts once). The mutation subscription is always wired (it also backs the
+  // `dirtyChange` / `change` emitter); only the snapshot serialization inside it
+  // is gated on an actual consumer.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const hasOnChange = useRef(!!onChange).current;
   // Latest save/exit callbacks, called via refs so they fire without re-running
   // the boot effect. onExit is read in cleanup; onSave on the Ctrl/Cmd+S handler.
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  // Latest handlers for the canonical event props (doc 38 §3), read via refs so
+  // they fire without re-running the boot effect. `hasX` (fixed at mount) gates
+  // whether we bridge each prop to the unified emitter — a host that passes none
+  // of them (and never calls `api.on`) pays for none of the extra wiring.
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  const hasSelectionChange = useRef(!!onSelectionChange).current;
+  const hasError = useRef(!!onError).current;
+  const hasDirtyChange = useRef(!!onDirtyChange).current;
   // The live FUniver facade, captured at mount so the reactive appearance
   // effect can reach Univer's ThemeService without re-running boot.
   const apiRef = useRef<CasualSheetsAPI | null>(null);
@@ -440,7 +476,24 @@ export function CasualSheets({
       univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialData);
 
       const api = createCasualSheetsAPI(FUniver.newAPI(univer));
+      const apiInternal = api as CasualSheetsAPIInternal;
       apiRef.current = api;
+      // Bridge the declarative event props (doc 38 §3) to the unified emitter, so
+      // a prop and `api.on(name, …)` both receive the event. Only wire the bridge
+      // when the prop was present at mount — direct `api.on(...)` still works
+      // without it (the emitter fires to its own subscribers regardless). The
+      // selection bridge is what makes the factory's `SelectionChanged` listener
+      // do real work, so bare hosts that pass no `onSelectionChange` (and never
+      // call `api.on`) never pay for `getSelection` on every selection move.
+      if (hasSelectionChange) {
+        apiInternal.on('selectionChange', (sel) => onSelectionChangeRef.current?.(sel));
+      }
+      if (hasError) {
+        apiInternal.on('error', (err) => onErrorRef.current?.(err));
+      }
+      if (hasDirtyChange) {
+        apiInternal.on('dirtyChange', (d) => onDirtyChangeRef.current?.(d));
+      }
       // Hand the live API to the built-in chrome (FormulaBar subscribes to it).
       // Only when chrome is shown, so bare-grid consumers never re-render.
       if (!cancelled && chrome !== 'none') setChromeApi(api);
@@ -465,11 +518,18 @@ export function CasualSheets({
         });
       }
       onReady?.(api);
+      // Fire the canonical `ready` event for `api.on('ready', …)` subscribers.
+      // `ready` is sticky in the emitter, so a late subscription still fires.
+      if (!cancelled) apiInternal.emit('ready', api);
 
-      // Debounced snapshot stream → onChange. Subscribed AFTER createUnit so the
-      // initial unit-creation mutations don't fire a spurious first emit. Uses the
-      // mutation hook (CLAUDE.md hard rule), never UI events.
-      if (hasOnChange) {
+      // Mutation stream → dirty flag + debounced `change` (prop + emitter).
+      // Subscribed AFTER createUnit so the initial unit-creation mutations don't
+      // fire a spurious first emit. Uses the mutation hook (CLAUDE.md hard rule),
+      // never UI events. Always subscribed now (not just when `onChange` was
+      // passed) because `dirtyChange` and `api.on('change', …)` also depend on
+      // it; the raw callback is cheap (a dirty-flag flip + a debounce timer), and
+      // the expensive snapshot serialization is gated on an actual consumer.
+      {
         const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
           ._injector;
         const cmdSvc = injector?.get(ICommandService) as
@@ -480,10 +540,17 @@ export function CasualSheets({
             }
           | undefined;
         changeSub = cmdSvc?.onMutationExecutedForCollab(() => {
+          // First edit since load/save → dirty (emits dirtyChange on transition).
+          apiInternal.markDirty(true);
           if (changeTimer) clearTimeout(changeTimer);
           changeTimer = setTimeout(() => {
-            const snap = api.getSnapshot();
-            if (snap) onChangeRef.current?.(snap);
+            // Only serialize when something actually consumes the snapshot.
+            if (!onChangeRef.current && apiInternal.listenerCount('change') === 0) return;
+            const snap = api.getContent();
+            if (snap) {
+              onChangeRef.current?.(snap);
+              apiInternal.emit('change', snap);
+            }
           }, onChangeDebounceMs);
         });
         // If we unmounted during the eager-load await, cleanup already ran with
@@ -494,7 +561,16 @@ export function CasualSheets({
       // Idle-load the remaining feature plugins so Insert / Data / Format actions
       // are ready when the user reaches them.
       if (lazyPlugins) idleLoadAll(univer);
-    })();
+    })().catch((err: unknown) => {
+      // Boot failure (plugin load, unit creation, …) → the canonical `error`
+      // event. Prefer the emitter once the API exists (reaches both the `onError`
+      // prop bridge and `api.on('error', …)`); before then fall back to the prop.
+      if (cancelled) return;
+      const e = err instanceof Error ? err : new Error(String(err));
+      const cur = apiRef.current as CasualSheetsAPIInternal | null;
+      if (cur) cur.emit('error', e);
+      else onErrorRef.current?.(e);
+    });
 
     return () => {
       cancelled = true;
@@ -503,7 +579,7 @@ export function CasualSheets({
       // Last-chance persist: emit the final snapshot before the workbook is
       // disposed (disposal is deferred via microtask below, so it's still alive).
       if (onExitRef.current) {
-        const snap = apiRef.current?.getSnapshot();
+        const snap = apiRef.current?.getContent();
         if (snap) onExitRef.current(snap);
       }
       apiRef.current = null;
@@ -568,8 +644,16 @@ export function CasualSheets({
   const onKeyDownCapture = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
-      const snap = apiRef.current?.getSnapshot();
-      if (snap) onSaveRef.current?.(snap);
+      const api = apiRef.current;
+      const snap = api?.getContent();
+      if (snap) {
+        onSaveRef.current?.(snap);
+        // Canonical `save` event + clear the dirty flag (an explicit save means
+        // the buffer is clean until the next edit).
+        const apiInternal = api as CasualSheetsAPIInternal;
+        apiInternal.emit('save', snap);
+        apiInternal.markDirty(false);
+      }
     }
   };
 
