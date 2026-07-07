@@ -21,6 +21,7 @@ export { CasualSheets, type CasualSheetsProps } from './CasualSheets';
 export {
   createCasualSheetsAPI,
   type CasualSheetsAPI,
+  type DocumentMode,
   type RangeRef,
   type CommandRecord,
 } from './api';

@@ -85,7 +85,7 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 // (loaded via dynamic import only when a formula worker is passed).
 import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univerjs/rpc';
 
-import { createCasualSheetsAPI, type CasualSheetsAPI } from './api';
+import { createCasualSheetsAPI, type CasualSheetsAPI, type DocumentMode } from './api';
 import {
   eagerLoadForSnapshot,
   ensurePlugin,
@@ -222,6 +222,17 @@ export interface CasualSheetsProps {
    *  OVERRIDE dialogs by kind. Built-ins are the defaults; host entries
    *  append/override. See `ChromeExtensions` for the exact shape. */
   extensions?: ChromeExtensions;
+  /** Document interaction mode (SuperDoc-aligned vocabulary, shared with the
+   *  docs SDK):
+   *  - `'editing'` (default): fully editable.
+   *  - `'viewing'`: read-only — applies the command-veto + permission path
+   *    (`applyReadOnly`) to the mounted workbook.
+   *  Reactive: flipping it re-applies via `api.setDocumentMode`. Wins over the
+   *  deprecated `readOnly` prop when both are set. */
+  documentMode?: DocumentMode;
+  /** @deprecated Use `documentMode` instead. `true` maps to
+   *  `documentMode="viewing"`. Ignored when `documentMode` is set. */
+  readOnly?: boolean;
   /** Container style. Default fills the parent. */
   style?: CSSProperties;
   /** Container className for additional styling hooks. */
@@ -264,10 +275,15 @@ export function CasualSheets({
   onDialogRequest,
   hostOwnedDialogs,
   extensions,
+  documentMode,
+  readOnly,
   style,
   className,
   testId = 'casual-sheets',
 }: CasualSheetsProps) {
+  // `documentMode` wins; the deprecated `readOnly` boolean only applies when
+  // `documentMode` is unset. Absent both → editable.
+  const effectiveMode: DocumentMode = documentMode ?? (readOnly ? 'viewing' : 'editing');
   const hostRef = useRef<HTMLDivElement>(null);
   // Keep the latest onChange callable without re-subscribing (the effect
   // mounts once). The subscription itself is only wired when onChange was
@@ -386,6 +402,16 @@ export function CasualSheets({
       // effect below also runs on mount, but apiRef may not be set yet when it
       // first fires — this guarantees dark mode from the first paint).
       applyAppearance(api, container, appearance);
+      // Apply the initial document mode. Deferred a frame for the read-only case:
+      // sheets-ui sets WorkbookEditablePermission → true during unit setup AFTER
+      // onReady, which would clobber a synchronous flip (the embed preview path
+      // waits a rAF for the same reason). The command-veto layer is unaffected,
+      // but the rAF keeps the permission layer in sync too.
+      if (effectiveMode === 'viewing') {
+        requestAnimationFrame(() => {
+          if (!cancelled) api.setDocumentMode('viewing');
+        });
+      }
       onReady?.(api);
 
       // Debounced snapshot stream → onChange. Subscribed AFTER createUnit so the
@@ -451,6 +477,13 @@ export function CasualSheets({
     if (!api || !container) return;
     applyAppearance(api, container, appearance);
   }, [appearance]);
+
+  // Reactive document mode. On first mount apiRef may not be populated yet (boot
+  // is async) — that run bails and the boot effect applies the initial mode; this
+  // effect then handles every subsequent `documentMode` / `readOnly` flip.
+  useEffect(() => {
+    apiRef.current?.setDocumentMode(effectiveMode);
+  }, [effectiveMode]);
 
   // Ctrl/Cmd+S anywhere in the editor → onSave (suppress the browser dialog).
   // Capture phase so we beat Univer's own key handling on the canvas.

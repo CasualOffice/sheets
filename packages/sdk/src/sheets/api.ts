@@ -54,9 +54,23 @@ import {
   type CommandRecord,
   type MutationEmitter,
 } from './scripting';
+import { applyReadOnly } from './read-only';
 
 // Re-export so hosts can type a recorded/scripted step off the main entry.
 export type { CommandRecord } from './scripting';
+
+/**
+ * Document interaction mode — the SuperDoc-aligned vocabulary shared with the
+ * docs SDK so hosts drive both editors the same way:
+ *
+ *  - `'editing'` — fully editable (the default).
+ *  - `'viewing'` — read-only: the same command-veto + permission path as
+ *    {@link applyReadOnly}.
+ *
+ * Sheets has no `'suggesting'` tier (that's a docs-only track-changes concept),
+ * so the union is the two states.
+ */
+export type DocumentMode = 'editing' | 'viewing';
 
 /** The active selection, as a sheet-scoped range. */
 export interface RangeRef {
@@ -111,6 +125,16 @@ export interface CasualSheetsAPI {
    *  `appearance` prop. Flips Univer's `ThemeService.setDarkMode` (canvas
    *  colours + the `univer-dark` class Univer applies to the document root). */
   setTheme(appearance: 'light' | 'dark'): void;
+  /** Switch the active workbook between `'editing'` (fully editable, the
+   *  default) and `'viewing'` (read-only). `'viewing'` applies the same
+   *  command-veto + `WorkbookEditablePermission` path as {@link applyReadOnly};
+   *  `'editing'` disposes it and restores the prior editable state. Idempotent —
+   *  re-applying the current mode is a no-op. No-op when there is no active
+   *  workbook. */
+  setDocumentMode(mode: DocumentMode): void;
+  /** The current document mode: `'viewing'` while read-only is applied via
+   *  {@link setDocumentMode}, else `'editing'`. */
+  getDocumentMode(): DocumentMode;
   /** The FUniver facade — documented escape hatch, NOT covered by semver. */
   univer: FUniver;
 }
@@ -127,6 +151,12 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
     if (current) univerAPI.disposeUnit(current.getId());
     univerAPI.createWorkbook(data);
   };
+
+  // Document-mode state: `'editing'` by default. When `'viewing'`, we hold the
+  // disposer returned by applyReadOnly so switching back to `'editing'` restores
+  // the prior editable state instead of reinventing the permission path.
+  let documentMode: DocumentMode = 'editing';
+  let readOnlyDisposer: (() => void) | null = null;
 
   return {
     univer: univerAPI,
@@ -210,6 +240,24 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
         | { setDarkMode(b: boolean): void; darkMode: boolean }
         | undefined;
       if (themeService && themeService.darkMode !== dark) themeService.setDarkMode(dark);
+    },
+
+    setDocumentMode(mode) {
+      if (mode === documentMode) return;
+      if (mode === 'viewing') {
+        const wb = univerAPI.getActiveWorkbook();
+        if (!wb) return; // no workbook yet — stay 'editing', caller can retry
+        readOnlyDisposer = applyReadOnly(univerAPI, wb.getId());
+        documentMode = 'viewing';
+      } else {
+        readOnlyDisposer?.();
+        readOnlyDisposer = null;
+        documentMode = 'editing';
+      }
+    },
+
+    getDocumentMode() {
+      return documentMode;
     },
   };
 }
