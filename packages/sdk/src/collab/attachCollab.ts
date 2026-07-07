@@ -67,6 +67,16 @@ export type CollabRole = 'view' | 'write';
 /** Coarse connection state mapped from Hocuspocus's provider status. */
 export type CollabConnectionStatus = 'connecting' | 'live' | 'offline';
 
+/**
+ * Options for {@link attachCollab} and the declarative `collab` prop.
+ *
+ * Field names are aligned with the unified `CollabConfig` shape (doc 38 §6):
+ * the overlapping concepts — `server`, `room`, `password`, `token`, `role`,
+ * `share` — use the exact same names across both editors, so a host wires
+ * collab identically for docs and sheets. `onStatus` / `onSnapshot` are the
+ * sheets-side host callbacks; local `user` identity is a top-level SDK config
+ * key (doc 38 §1/§6), not a collab option.
+ */
 export interface AttachCollabOptions {
   /** Room / document id. Becomes the Hocuspocus document name. */
   room: string;

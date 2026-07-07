@@ -18,6 +18,7 @@
  * Sheets surface — React wrappers around Univer Sheets.
  */
 export { CasualSheets, type CasualSheetsProps } from './CasualSheets';
+export { mountCasualSheets, type MountedCasualSheets } from './mount';
 export {
   createCasualSheetsAPI,
   type CasualSheetsAPI,

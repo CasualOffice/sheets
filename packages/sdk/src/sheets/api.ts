@@ -24,8 +24,8 @@
  *
  * Surface (canonical, doc 38 §4):
  *   getContent / setContent / import / export / getSelection / focus /
- *   on / off / executeCommand / executeCommands / onMutation / setTheme /
- *   setDocumentMode / getDocumentMode / univer
+ *   on / off / executeCommand / executeCommands / undo / redo / onMutation /
+ *   setTheme / setDocumentMode / getDocumentMode / univer
  *   (+ deprecated aliases getSnapshot / loadSnapshot; format-specific
  *   importXlsx / exportXlsx retained)
  *
@@ -172,6 +172,14 @@ export interface CasualSheetsAPI {
    *  skipped (the underlying state may have moved on). Resolves to the number
    *  of steps that ran without throwing. */
   executeCommands(steps: CommandRecord[]): Promise<number>;
+  /** Undo the last edit — the canonical cross-editor history control (doc 38
+   *  §4). Dispatches Univer's `univer.command.undo` on the active unit
+   *  (fire-and-forget: no-op when there is nothing to undo). */
+  undo(): void;
+  /** Redo the last undone edit — the canonical cross-editor history control
+   *  (doc 38 §4). Dispatches Univer's `univer.command.redo` (fire-and-forget:
+   *  no-op when there is nothing to redo). */
+  redo(): void;
   /** Observe the replayable mutation stream so a host can record automations
    *  or build an audit log. Wraps Univer's canonical collab hook
    *  (`onMutationExecutedForCollab`): fires for `CommandType.MUTATION` only —
@@ -416,6 +424,18 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
 
     executeCommands(steps) {
       return runSteps((id, params) => univerAPI.executeCommand(id, params), steps);
+    },
+
+    // History controls (doc 38 §4). Dispatched through the same command path the
+    // built-in chrome (Toolbar/MenuBar) and the app shell already use, so undo/
+    // redo, collab replay, and dirty tracking all stay consistent. Void the
+    // promise — the canonical handle types these as fire-and-forget.
+    undo() {
+      void univerAPI.executeCommand('univer.command.undo');
+    },
+
+    redo() {
+      void univerAPI.executeCommand('univer.command.redo');
     },
 
     onMutation(handler) {
