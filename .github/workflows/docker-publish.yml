@@ -130,7 +130,11 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          # Tag push → amd64 only (fast; arm64 under QEMU adds ~60 min and
+          # was blocking releases). Manual `workflow_dispatch` (with a tag
+          # input) → full multi-arch, so arm64 is available on-demand
+          # without gating the release: gh workflow run docker-publish.yml -f tag=vX.Y.Z
+          platforms: ${{ github.event_name == 'workflow_dispatch' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
