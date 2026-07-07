@@ -7,13 +7,9 @@ name: Sync Docker Hub overview
 #   • automatically when docs/DOCKERHUB.md changes on main, and
 #   • on demand via the Actions "Run workflow" button.
 #
-# AUTH NOTE: the Docker Hub description API needs a credential with write access
-# to the *repository's* metadata, which a plain image-push access token does NOT
-# have (it 403s). Set a `DOCKERHUB_DESCRIPTION_TOKEN` secret to a PAT (or account
-# password) whose owner can edit the casualoffice/sheets repo; this workflow
-# prefers it and falls back to `DOCKERHUB_TOKEN`. Until then the step will fail
-# (visibly — this workflow is NOT continue-on-error, unlike the publish step) so
-# the auth gap is obvious rather than silent.
+# AUTH NOTE: this uses the same `DOCKERHUB_TOKEN` credential as the image push
+# (matching the docs repo's release.yml). That token must have write access to
+# the repository's Docker Hub metadata for the description PATCH to succeed.
 
 on:
   workflow_dispatch:
@@ -32,7 +28,7 @@ jobs:
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN || secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: casualoffice/sheets
           short-description: 'Excel-flavored web spreadsheet with real-time co-editing. Single image (web + Hocuspocus + Fastify). Apache-2.0.'
           readme-filepath: ./docs/DOCKERHUB.md
