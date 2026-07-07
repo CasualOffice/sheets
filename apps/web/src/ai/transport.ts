@@ -180,7 +180,11 @@ export class DirectTransport implements SheetsTransport {
  */
 export class CollabTransport implements SheetsTransport {
   readonly requiresApiKey = false;
-  readonly drivesLoop = true;
+  // Single round per call() — the panel/agent drives the tool loop; the collab
+  // server is a key-holding LLM proxy for one turn. drivesLoop=true previously
+  // ceded the whole loop to the server, hiding the Agent toggle on every web
+  // session. See CasualOffice/collab singleRound.
+  readonly drivesLoop = false;
 
   constructor(private readonly aiWsUrl: string) {}
 
@@ -228,8 +232,8 @@ export class CollabTransport implements SheetsTransport {
             system: payload.system,
             messages: payload.messages,
             tools: payload.tools,
+            singleRound: true,
             ...(payload.apiKey ? { apiKey: payload.apiKey } : {}),
-            ...(payload.maxToolRounds != null ? { maxToolRounds: payload.maxToolRounds } : {}),
           }),
         );
       });
@@ -244,7 +248,16 @@ export class CollabTransport implements SheetsTransport {
           return;
         }
 
-        if (msg.type === 'text') {
+        if (msg.type === 'round') {
+          // Single-round reply: the panel/agent drives the loop from here.
+          settle({
+            data: {
+              content: msg.content ?? [],
+              stop_reason: (msg.stop_reason as string) ?? 'end_turn',
+            },
+            status: 200,
+          });
+        } else if (msg.type === 'text') {
           payload.onText?.(msg.text as string);
         } else if (msg.type === 'tool_call') {
           const id = msg.id as string;
