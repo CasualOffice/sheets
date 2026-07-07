@@ -99,6 +99,7 @@ import {
 } from '../univer/lazy-plugins';
 import type { ChromeExtensions } from '../chrome/extensions';
 import type { DialogKind } from '../chrome/dialog-context';
+import { AiPanelSurface, type SheetsAiConfig } from '../ai/AiPanelSurface';
 // Chrome is lazy-loaded from the `@casualoffice/sheets/chrome` subpath (NOT a
 // relative import — that would inline under this build's splitting:false). The
 // subpath is externalised in tsup, so the consumer's bundler code-splits it and
@@ -247,6 +248,18 @@ export interface CasualSheetsProps {
    *  hosts that drive the room lifecycle themselves (presence UI, preflight,
    *  reconnect banners) — don't combine both on one editor. */
   collab?: AttachCollabOptions;
+  /** AI assistant surface, declaratively. Pass `{ enabled: true, transport,
+   *  render }` to mount a supported AI task-pane beside the grid — mirrors how
+   *  the docs SDK exposes its DocOps panel behind a transport prop. The SDK
+   *  owns the prop contract, the `SheetsAiTransport` type, and the layout slot;
+   *  the panel body is supplied via `ai.render` (the reference app passes its
+   *  `<AiPanel>`) and drives its tool loop against `ai.transport`. Build a
+   *  transport with `createSheetsAiTransport()` (desktop-native → collab
+   *  single-round → browser-direct). Omit `ai` for an editor with no AI.
+   *
+   *  Reactive: flipping `enabled` mounts/unmounts the pane once the editor is
+   *  ready. See `SheetsAiConfig`. */
+  ai?: SheetsAiConfig;
   /** @deprecated Use `documentMode` instead. `true` maps to
    *  `documentMode="viewing"`. Ignored when `documentMode` is set. */
   readOnly?: boolean;
@@ -294,6 +307,7 @@ export function CasualSheets({
   extensions,
   documentMode,
   collab,
+  ai,
   readOnly,
   style,
   className,
@@ -332,6 +346,11 @@ export function CasualSheets({
   const collabRef = useRef(collab);
   collabRef.current = collab;
   const [collabApi, setCollabApi] = useState<CasualSheetsAPI | null>(null);
+  // AI surface. Like chrome/collab, only surface the ready api as state when
+  // the `ai` prop was present at mount — so editors with no AI never take the
+  // extra re-render. The panel itself only mounts when `ai.enabled` is set.
+  const hasAi = useRef(!!ai).current;
+  const [aiApi, setAiApi] = useState<CasualSheetsAPI | null>(null);
 
   useEffect(() => {
     const container = hostRef.current;
@@ -428,6 +447,9 @@ export function CasualSheets({
       // Hand the ready api to the declarative-collab effect (only when the
       // `collab` prop was present at mount — otherwise no extra re-render).
       if (!cancelled && hasCollab) setCollabApi(api);
+      // Hand the ready api to the AI surface (only when `ai` was present at
+      // mount — otherwise no extra re-render).
+      if (!cancelled && hasAi) setAiApi(api);
       // Apply the initial appearance now that the editor exists (the reactive
       // effect below also runs on mount, but apiRef may not be set yet when it
       // first fires — this guarantees dark mode from the first paint).
@@ -487,6 +509,7 @@ export function CasualSheets({
       apiRef.current = null;
       setChromeApi(null);
       setCollabApi(null);
+      setAiApi(null);
       if (lazyPlugins) setUniverForLazyLoad(null);
       // Defer disposal off the React render phase — Univer owns its
       // own React root, and a synchronous unmount mid-render warns
@@ -555,14 +578,35 @@ export function CasualSheets({
   // wraps the grid in a flex column with the built-in chrome above it; the grid
   // container (hostRef, where Univer mounts) fills the remaining space.
   if (chrome === 'none') {
+    // No `ai` prop → the exact bare-grid shape existing consumers rely on.
+    if (!hasAi) {
+      return (
+        <div
+          ref={hostRef}
+          onKeyDownCapture={onKeyDownCapture}
+          style={{ ...DEFAULT_STYLE, ...style }}
+          className={className}
+          data-testid={testId}
+        />
+      );
+    }
+    // With `ai`, the grid + AI pane sit in a stable flex row (shape fixed at
+    // mount by `hasAi`, so toggling `ai.enabled` never remounts the grid host —
+    // it only adds/removes the aside sibling). The grid host still fills the
+    // remaining space, so Univer's canvas sizing is unchanged.
     return (
       <div
-        ref={hostRef}
-        onKeyDownCapture={onKeyDownCapture}
-        style={{ ...DEFAULT_STYLE, ...style }}
         className={className}
         data-testid={testId}
-      />
+        onKeyDownCapture={onKeyDownCapture}
+        style={{ ...DEFAULT_STYLE, ...style, display: 'flex', flexDirection: 'row' }}
+      >
+        <div
+          ref={hostRef}
+          style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative' }}
+        />
+        <AiPanelSurface config={ai} api={aiApi} />
+      </div>
     );
   }
 
@@ -609,7 +653,19 @@ export function CasualSheets({
           extensions={extensions}
         />
       </Suspense>
-      <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
+      {hasAi ? (
+        // Grid + AI pane share a flex row so the built-in chrome (top/bottom
+        // bars) still spans the full width. Shape fixed at mount by `hasAi`.
+        <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'row' }}>
+          <div
+            ref={hostRef}
+            style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative' }}
+          />
+          <AiPanelSurface config={ai} api={aiApi} />
+        </div>
+      ) : (
+        <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
+      )}
       <Suspense fallback={null}>
         <ChromeBottom api={chromeApi} />
       </Suspense>

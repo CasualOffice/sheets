@@ -34,6 +34,25 @@ export {
   type MentionProvider,
 } from './mention-source';
 export { CasualMentionIOService } from './mention-io';
+
+// AI surface — the `ai` prop contract on `CasualSheets`, its transport type,
+// and the shipped transport implementations (direct / collab single-round /
+// desktop-native + the `createSheetsAiTransport` factory).
+export {
+  AiPanelSurface,
+  DirectAiTransport,
+  CollabAiTransport,
+  DesktopAiTransport,
+  createSheetsAiTransport,
+  type SheetsAiConfig,
+  type SheetsAiAction,
+  type SheetsAiRenderContext,
+  type SheetsAiTransport,
+  type SheetsAiLlmPayload,
+  type SheetsAiLlmResult,
+  type SheetsAiToolExecutor,
+  type CreateSheetsAiTransportOptions,
+} from '../ai';
 export {
   CasualSheetsIframe,
   type CasualSheetsIframeProps,
