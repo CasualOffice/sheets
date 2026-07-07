@@ -1,5 +1,110 @@
 # @casualoffice/sheets
 
+## 0.16.0
+
+### Minor Changes
+
+- 6936318: Preserve color-scale conditional formatting through the xlsx round-trip. Excel's 2- and 3-color scales now map to and from Univer's conditional-formatting resource — the gradient stops (`min` / `max` / `num` / `percent` / `percentile` / `formula` thresholds, each with its color) round-trip and paint the value-mapped gradient immediately on open.
+
+  Also re-applies a hardening fix that didn't land in the previous CF merge: a foreign or partially-formed CF resource payload with no `style` no longer throws and aborts the whole xlsx export.
+
+  `dataBar` remains unmapped — ExcelJS surfaces data bars via the x14 extension on read without the fill color, so they can't round-trip faithfully yet; `iconSet` is pending (needs the OOXML↔Univer icon-ordering mapping). The text `beginsWith` / `endsWith` / `notContainsText` operators and `duplicateValues` / `uniqueValues` stay unmapped (ExcelJS can't round-trip them).
+
+- 6dff888: Preserve data-bar conditional formatting through the xlsx round-trip, with the bar fill colour. ExcelJS can't carry a data bar faithfully — it reads everything except the fill colour and writes a broken `<color auto="1"/>` — so this adds a raw-OOXML bridge (`databar-passthrough.ts`, mirroring the pivot passthrough): the positive bar colour is read straight from the worksheet XML on import and the whole `<cfRule type="dataBar">` block is spliced into the worksheet XML on export. Imported data bars now render in-editor (via Univer's IDataBar) and round-trip their colour, min/max anchors, and show-value flag.
+
+  Scope is the legacy data-bar block (positive colour + min/max + showValue). The x14 extension — explicit gradient flag and negative/axis colours — is deferred; Excel renders a sensible gradient bar from the legacy block, and axis/border/direction have no representation in Univer's model. A data bar anchored to a `formula` threshold is dropped (ExcelJS floatifies cfvo values on read), consistent with the other CF rule types.
+
+- 1411f01: Preserve duplicate-values and unique-values conditional formatting through the xlsx round-trip. ExcelJS drops these rules entirely (no reader or writer for them), so they're bridged via raw OOXML (`cf-dxf-passthrough.ts`): on import the `<cfRule type="duplicateValues|uniqueValues">` is read from the worksheet XML and its style resolved against `styles.xml`'s `<dxfs>`; on export the rule is spliced back into the worksheet XML and its differential style appended to `<dxfs>` (with correct index coordination against any styles ExcelJS already wrote). Imported duplicate/unique rules now render in-editor and round-trip their fill/font style.
+- 962161f: Preserve icon-set conditional formatting through the xlsx round-trip. Excel icon-set rules (3/4/5 arrows, traffic lights, signs, ratings, flags, symbols, quarters) now map to and from Univer's conditional-formatting resource — the icon group, threshold bands, `reverse` flag, and show-value option round-trip, and the correct icon paints per band immediately on open.
+
+  OOXML orders icon thresholds low→high while Univer's bands run high→low (top icon first), so the mapping inverts threshold order on import and back on export. The three Excel-2010 x14 icon sets (`3Triangles` / `3Stars` / `5Boxes`) and any icon set using a `formula` threshold are skipped — ExcelJS can't write them faithfully, so they're dropped rather than corrupted.
+
+  Also re-applies a fix that didn't land in the previous CF merge: a color-scale rule using a `formula` threshold is now dropped (ExcelJS floatifies the threshold value on read, destroying the formula) instead of emitting a corrupt `NaN` stop.
+
+- 40c12bd: Preserve the remaining text conditional-formatting operators — `beginsWith`, `endsWith`, and `notContainsText` — through the xlsx round-trip (on top of the existing `containsText` and blanks/errors predicates). ExcelJS surfaces these rules fully on read (type, operator, formula, style) and writes them back when given an explicit formula, so the search string is recovered from / written into the rule formula and they round-trip and paint on open. With this, every Excel conditional-formatting rule type now round-trips.
+- 4720ed5: Preserve more conditional-formatting rule types through the xlsx round-trip. On top of the existing `cellIs` (numeric) and `expression` (formula) highlight rules, the bridge now maps Excel's `top10` (top/bottom N, with percent), `aboveAverage` (above/below the range mean), `timePeriod` (today / last 7 days / this month / …), and `containsText` text rules (the `containsText` operator plus the blanks/errors predicates) to and from Univer's conditional-formatting resource — so these survive Excel → open here → save → Excel and paint immediately on open.
+
+  `beginsWith` / `endsWith` / `notContainsText`, `duplicateValues` / `uniqueValues`, and the visual rule types (color scale / data bar / icon set) remain unmapped: ExcelJS can't round-trip the first two groups without losing their meaning, so they're skipped rather than corrupted.
+
+- fd1ea16: Native pivot export (opt-in). The SDK now exports `generateNativePivot` (build real `xl/pivotTables` + `xl/pivotCaches` OOXML from a pivot model) and `applyPivotsToZip`, so a host can compose native PivotTables into an export. The app wires this behind an off-by-default flag (`cs-native-pivots`): when enabled, in-app pivots round-trip to Excel as real, refreshable PivotTables instead of flat cells. Default behaviour is unchanged.
+- 251481e: SDK parity with the unified docs/sheets contract (doc 38). `CasualSheetsAPI` gains
+  `undo()` / `redo()` (dispatch Univer's `univer.command.undo` / `.redo`, the same
+  command path the built-in chrome uses). New `mountCasualSheets(container, options)`
+  imperative entry mounts `<CasualSheets>` into a DOM node for non-React hosts and
+  resolves the full `CasualSheetsAPI` plus a `destroy()` — the sheets peer of the
+  docs SDK's `renderAsync`, distinct from the iframe-only `mountEmbedded`.
+  `AttachCollabOptions` field names are documented as aligned with the unified
+  `CollabConfig` shape (`server` / `room` / `password` / `token` / `role` / `share`).
+  Additive only — no existing export changed or removed.
+
+### Patch Changes
+
+- 94131b8: Data Validation parity: add the **Time** Allow-type and fix DV i18n.
+  - **Time validation type** — Excel exposes Time as a distinct Allow-type (Whole / Decimal / List / Date / **Time** / Text length / Custom). Univer's `DataValidationType.TIME` enum and the cell-edit time-picker already existed but no validator/view was registered; the fork now registers `TimeValidator` (parses to a fractional serial, validates the standard operators, normalizes to `HH:mm:ss`) and its panel view.
+  - **Input Message editor** — the DV panel's Advance options now expose the input-message toggle + title/text fields (the on-hover popup shipped previously).
+  - **i18n fix** — the locale bundle merged only the DV _UI_ strings, so the DV Type/Operator selectors and cell error messages rendered raw i18n keys (`sheets-data-validation.date.title` instead of "Date") for every type. The base `@univerjs/data-validation` + `@univerjs/sheets-data-validation` locales are now merged in both the app and the SDK embed runtime.
+
+- 0d508b5: Preserve conditional-formatting highlight rules through the xlsx round-trip. Previously all conditional formatting was dropped on import and export. Now `cellIs` (numeric comparisons) and `expression` (formula) rules — with their fill/font style — bridge to and from Univer's `SHEET_CONDITIONAL_FORMATTING_PLUGIN` resource, so a workbook's highlight rules survive Excel → open here → save → Excel instead of being lost. Visual rule types (color scales, data bars, icon sets) and text/time-period operators aren't mapped yet and are skipped (never corrupted); live in-editor re-rendering of imported rules is a follow-up.
+- fd53802: Fix xlsx import corrupting filled-down (shared) formulas. A slave cell of a shared formula was imported as `=<masterAddress>` (e.g. `=B1`) instead of its position-translated formula, so opening a workbook with an autofilled column and recalculating/saving silently corrupted every cell after the first. The parser now reads ExcelJS's translated `cell.formula` for shared-formula cells.
+- d380a3e: Preserve Excel border line styles on xlsx import/export. The style mapping previously hardcoded every border to a thin line, so dashed, double, thick, medium, hair, dotted, and the dash-dot variants all collapsed to thin on open — and again on save. Borders now map both directions between Excel's line styles and Univer's `BorderStyleTypes`, so the full set survives the round-trip (unrecognized styles still fall back to thin so a border is never dropped).
+- 6cd6417: Preserve cell indentation on xlsx import/export. Excel's `alignment.indent` level was dropped, so indented/outline data flattened to the left edge on open and on save. It now maps to Univer's left padding (`pd.l`, which the renderer applies as a text indent) at ~10px per level on top of the 2px default, and round-trips exactly back to the Excel level.
+- 1651f35: Tag imported xlsx cells with their value type (`t`). Univer's conditional-formatting number-rule evaluator reads a cell's `CellValueType` directly, so imported numeric cells — which previously carried only a value, no type — never matched a `cellIs` rule and their highlight fill stayed blank on open. Numeric, boolean, and string cells are now typed on import, so conditional-formatting highlight rules (and anything else that keys off `t`) evaluate and paint immediately, no interaction required.
+- 680715c: Fix xlsx import storing date cells as ISO strings instead of Excel serial numbers. ExcelJS surfaces date/time-formatted cells as JS Dates; the importer wrote them as `toISOString()`, so date functions (e.g. `=NETWORKDAYS(E8,F8)`) couldn't parse their operands and errored, and dates displayed as raw ISO text. Date cells now import as Excel serial numbers (preserving the date number-format), so date math evaluates and the cell renders and round-trips as a date.
+- 86268d7: Preserve strikethrough and text rotation on xlsx import/export. Both were dropped by the style mapping: `font.strike` now round-trips through Univer's `st`, and angled or stacked (`vertical`) cell text round-trips through `tr` (preserving the angle and direction). Follows the border-style fidelity fix.
+- 6a2331c: Fix raw i18n keys in the filter, table and hyperlink features. Like the data-validation fix in #252, the locale bundle merged only the `-ui` halves of these features, so their error toasts and generated labels rendered raw keys (e.g. `sheets-table.tablePrefix`, `sheets-filter.command.not-valid-filter-range`, `sheets-hyper-link.message.refError`). The base `@univerjs/sheets-filter`, `@univerjs/sheets-table` and `@univerjs/sheets-hyper-link` locales are now merged into both the app bundle and the SDK embed runtime. (All three are already pinned + fork-linked deps, so no dependency changes.)
+- 5386225: Speed up auto-fit column width on large sheets. The Univer fork's
+  `calculateAutoWidthInRange` built a full `DocumentViewModel` +
+  `DocumentSkeleton` and laid it out for every measured cell — on a whole-sheet
+  auto-fit that is tens of thousands of layouts, so fitting a 21k-row × 8-col
+  sheet froze the UI for ~10s. The common cell (plain value, no rich text, no
+  wrap, no rotation) now measures its widest line with the LRU-cached
+  `FontCache` — the same primitive the renderer uses to size non-wrap content —
+  and falls through to the old `DocumentSkeleton` path only for wrap / rotation /
+  rich-text cells. Auto-fitting that 21k × 8 sheet drops from ~10s to ~0.3s, with
+  pixel-consistent widths. Validated by the engine-render integration suite plus
+  a new end-to-end auto-fit benchmark.
+- 5317557: Speed up editing on large sheets. The Univer fork's `updateFormulaData` (run on every cell edit) did two whole-sheet O(cells) scans per edit and rebuilt the formula data for every sheet of every unit — so a single edit on a 100k-row workbook took ~124ms. It's now incremental: the formula-id map and the id→formula fix-up pass run only when the edit actually touches a shared-formula (`si`) relationship, and it seeds from just the edited sheet. A single-cell edit on a 100k-row sheet of SUM formulas drops to ~77ms. Validated by the fork's full formula test suite (3834 tests) plus end-to-end recalc checks.
+- fe2d4c9: Speed up xlsx import. The raw-OOXML conditional-formatting captures (data-bar colours + duplicate/unique rules) were each loading the zip and re-decompressing every worksheet's XML separately — adding ~455ms to parsing a 160k-cell workbook even when it had no conditional formatting. They're now merged into a single zip pass that decompresses each worksheet once, cutting large-file parse time ~40% (≈994ms → ≈590ms in that benchmark). Behavior is unchanged.
+- c5911ae: Raise the undo depth from 20 to 100 to match Excel. The Univer fork capped the
+  undo stack at 20 levels — a frequent power-user papercut, since a handful of
+  find-and-replaces or fill-downs would exhaust it and silently drop older
+  history. Each undo entry holds only mutation params (range refs + values), so
+  the deeper stack is cheap for the common edit.
+- 41465e3: Preserve external-workbook links across an xlsx round-trip. A formula like
+  `=[1]Sheet1!A1` references another workbook via `<externalReferences>` →
+  `xl/externalLinks/**`. ExcelJS has no external-link model, so it rebuilt the
+  export without those parts and without `<externalReferences>` — the `[N]` index
+  dangled and the formula resolved to `#REF!` on save (silent corruption). A new
+  external-link passthrough captures `xl/externalLinks/**` in reference order at
+  parse time and re-injects them at export, patching `[Content_Types].xml`,
+  re-creating the workbook→externalLink relationships, and rebuilding
+  `<externalReferences>` in the original order so the `[N]` indices still resolve.
+  The link parts (source path + cached values) are preserved verbatim.
+- 2306f83: Preserve embedded images and shapes across an xlsx round-trip. Univer has no
+  drawing model, so ExcelJS rebuilt the exported workbook without any picture —
+  opening an `.xlsx` and saving it silently dropped every embedded image. A new
+  drawing-passthrough layer captures `xl/media/**` + `xl/drawings/**` (and the
+  per-sheet drawing linkage, keyed by decoded sheet name) at parse time and
+  re-injects them at export, patching `[Content_Types].xml` and the sheet
+  `<drawing>` relationship. Images aren't rendered in the editor yet, but they now
+  survive open → save so Excel keeps them. Shapes/SmartArt ride along (same parts).
+- 0290b09: Preserve print titles (repeat rows/columns) across an xlsx round-trip. The
+  page-setup bridge already carried orientation, scale, margins, and print area;
+  it now also captures `printTitlesRow` / `printTitlesColumn` on import and
+  re-applies them on export, so a workbook authored to repeat its header row (or
+  left column) on every printed page keeps that setting through open → save.
+- a7fa701: Preserve threaded comments — authors, timestamps, and reply chains — across an
+  xlsx round-trip. Modern Excel comments live in `xl/threadedComments/**` +
+  `xl/persons/**`, but ExcelJS only models the legacy note, so our bridge
+  collapsed every thread to a single note authored "imported" and dropped the
+  replies/authors on save. A new threaded-comment passthrough captures the
+  threaded layer at parse time and re-injects it at export — restoring the parts,
+  declaring their content types, and re-creating the workbook→persons and
+  sheet→threadedComment relationships (the parts are discovered by relationship
+  type, so no XML-element injection is needed). It rides on top of the legacy
+  note ExcelJS still writes, so for an open → save round-trip the full
+  author/reply metadata survives in Excel.
+
 ## 0.15.1
 
 ### Patch Changes
