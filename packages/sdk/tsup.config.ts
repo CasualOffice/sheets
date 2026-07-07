@@ -100,6 +100,11 @@ const mainConfig = defineConfig({
     'yjs',
     '@hocuspocus/provider',
     '@casualoffice/sheets/chrome',
+    // Same reason as /chrome: `sheets`'s declarative `collab` prop lazy
+    // `import('@casualoffice/sheets/collab')`. Externalising keeps it a bare
+    // subpath the CONSUMER code-splits, so single-user hosts never inline the
+    // Yjs/Hocuspocus collab layer into the editor entry.
+    '@casualoffice/sheets/collab',
     // Same reason as /chrome: `sheets`'s `api.importXlsx` / `api.exportXlsx`
     // lazy `import('@casualoffice/sheets/xlsx')`. Externalising keeps it a bare
     // subpath the CONSUMER code-splits (splitting:false would otherwise inline

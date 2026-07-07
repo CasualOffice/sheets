@@ -17,6 +17,7 @@
     "baseUrl": ".",
     "paths": {
       "@casualoffice/sheets/chrome": ["./src/chrome/index.ts"],
+      "@casualoffice/sheets/collab": ["./src/collab/index.ts"],
       "@casualoffice/sheets/xlsx": ["./src/xlsx/index.ts"]
     }
   },

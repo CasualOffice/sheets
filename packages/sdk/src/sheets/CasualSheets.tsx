@@ -86,6 +86,11 @@ import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
 import type { UniverRPCMainThreadPlugin as RpcMainThreadPluginType } from '@univerjs/rpc';
 
 import { createCasualSheetsAPI, type CasualSheetsAPI, type DocumentMode } from './api';
+// Type-only — erased at build, so the collab entry (Yjs + Hocuspocus) stays out
+// of the `sheets` bundle. The runtime `attachCollab` is pulled in lazily via a
+// dynamic `import('@casualoffice/sheets/collab')` only when the `collab` prop is
+// set (see the collab effect), so bare-grid hosts never load it.
+import type { AttachCollabOptions, CollabHandle } from '../collab/attachCollab';
 import {
   eagerLoadForSnapshot,
   ensurePlugin,
@@ -230,6 +235,18 @@ export interface CasualSheetsProps {
    *  Reactive: flipping it re-applies via `api.setDocumentMode`. Wins over the
    *  deprecated `readOnly` prop when both are set. */
   documentMode?: DocumentMode;
+  /** Real-time co-editing, declaratively. Pass `{ server, room, … }` to join a
+   *  room and the SDK wires Yjs/Hocuspocus itself once the editor is ready
+   *  (mirrors how the docs `CasualEditor` opts in via `backendUrl`); omit it for
+   *  a single-user editor. Options match `attachCollab` (`server`, `room`,
+   *  `password`, `token`, `role`, `share`, `onStatus`, `onSnapshot`).
+   *
+   *  Lifecycle: attaches after `onReady`, detaches on unmount, and re-attaches
+   *  when `server` / `room` / `password` / `token` / `role` change. The
+   *  imperative `attachCollab(api, opts)` export stays available for advanced
+   *  hosts that drive the room lifecycle themselves (presence UI, preflight,
+   *  reconnect banners) — don't combine both on one editor. */
+  collab?: AttachCollabOptions;
   /** @deprecated Use `documentMode` instead. `true` maps to
    *  `documentMode="viewing"`. Ignored when `documentMode` is set. */
   readOnly?: boolean;
@@ -276,6 +293,7 @@ export function CasualSheets({
   hostOwnedDialogs,
   extensions,
   documentMode,
+  collab,
   readOnly,
   style,
   className,
@@ -305,6 +323,15 @@ export function CasualSheets({
   // bare-grid path never triggers this re-render. A single post-mount setState
   // doesn't disturb the grid (Univer owns its canvas outside React).
   const [chromeApi, setChromeApi] = useState<CasualSheetsAPI | null>(null);
+  // Declarative collab. `hasCollab` is fixed at mount (the boot effect runs
+  // once): only then do we surface the ready api as state to drive the attach
+  // effect, so single-user consumers never take the extra re-render. The latest
+  // options live on a ref so callback/`share` changes don't force a re-attach —
+  // the attach effect only re-runs on connection-identity changes.
+  const hasCollab = useRef(!!collab).current;
+  const collabRef = useRef(collab);
+  collabRef.current = collab;
+  const [collabApi, setCollabApi] = useState<CasualSheetsAPI | null>(null);
 
   useEffect(() => {
     const container = hostRef.current;
@@ -398,6 +425,9 @@ export function CasualSheets({
       // Hand the live API to the built-in chrome (FormulaBar subscribes to it).
       // Only when chrome is shown, so bare-grid consumers never re-render.
       if (!cancelled && chrome !== 'none') setChromeApi(api);
+      // Hand the ready api to the declarative-collab effect (only when the
+      // `collab` prop was present at mount — otherwise no extra re-render).
+      if (!cancelled && hasCollab) setCollabApi(api);
       // Apply the initial appearance now that the editor exists (the reactive
       // effect below also runs on mount, but apiRef may not be set yet when it
       // first fires — this guarantees dark mode from the first paint).
@@ -456,6 +486,7 @@ export function CasualSheets({
       }
       apiRef.current = null;
       setChromeApi(null);
+      setCollabApi(null);
       if (lazyPlugins) setUniverForLazyLoad(null);
       // Defer disposal off the React render phase — Univer owns its
       // own React root, and a synchronous unmount mid-render warns
@@ -484,6 +515,30 @@ export function CasualSheets({
   useEffect(() => {
     apiRef.current?.setDocumentMode(effectiveMode);
   }, [effectiveMode]);
+
+  // Declarative collab: attach once the api is ready, detach on unmount, and
+  // re-attach when the connection identity changes. `attachCollab` (and its
+  // Yjs/Hocuspocus transport) is loaded lazily via the externalised
+  // `@casualoffice/sheets/collab` subpath — same code-split as `chrome`/`xlsx`
+  // — so single-user hosts never pull it into their bundle. Options are read
+  // from `collabRef` at attach time so callback/`share` changes don't re-attach.
+  useEffect(() => {
+    if (!collabApi || !collabRef.current) return;
+    let handle: CollabHandle | null = null;
+    let disposed = false;
+    void import('@casualoffice/sheets/collab').then(({ attachCollab }) => {
+      const opts = collabRef.current;
+      if (disposed || !opts) return;
+      handle = attachCollab(collabApi, opts);
+    });
+    return () => {
+      disposed = true;
+      handle?.detach();
+      handle = null;
+    };
+    // Re-attach only on connection-identity changes (server/room/auth/role); the
+    // options object identity and callbacks are read live from `collabRef`.
+  }, [collabApi, collab?.server, collab?.room, collab?.password, collab?.token, collab?.role]);
 
   // Ctrl/Cmd+S anywhere in the editor → onSave (suppress the browser dialog).
   // Capture phase so we beat Univer's own key handling on the canvas.
