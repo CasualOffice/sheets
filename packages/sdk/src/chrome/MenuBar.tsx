@@ -54,52 +54,24 @@ import type { CasualSheetsAPI } from '../sheets/api';
 import { ensurePluginByName } from '../univer';
 import { Icon } from './Icon';
 import { ensureChromeFonts } from './fonts';
-import { useDialogs, type DialogKind } from './dialog-context';
-import type { ChromeExtensions, MenuExtension } from './extensions';
+import { useDialogs } from './dialog-context';
+import type { ChromeExtensions } from './extensions';
+import {
+  computeVisibleMenus,
+  type MenuDef,
+  type MenuId,
+  type MenuItemDef,
+  type RunFn,
+} from './menu-model';
 
-type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data' | 'help';
+export type { MenuDialogKind } from './menu-model';
 
 /**
- * Dialog kinds the host can choose to render via `onDialogRequest`. These are
- * the actions the SDK chrome can't fulfil on its own (no built-in modal). The
- * string is passed straight to the host hook; the `context` (when present)
- * carries the pre-resolved A1 selection so the host doesn't have to re-read it.
+ * The menu data model + pure gating engine live in `./menu-model` (univer-free,
+ * so unit-testable). `RunFn` / `MenuItemDef` / `MenuDef` / `MenuId` /
+ * `MenuDialogKind` are re-imported above; the `run` handlers that populate
+ * `MENUS` are defined inline below against the `@univerjs/core` facade.
  */
-export type MenuDialogKind = DialogKind;
-
-type RunFn = (api: CasualSheetsAPI) => void;
-
-type MenuItemDef =
-  | {
-      kind: 'item';
-      id: string;
-      label: string;
-      icon?: string;
-      shortcut?: string;
-      /** Dispatch a command / facade call directly. */
-      run?: RunFn;
-      /** Route through the host's `onDialogRequest`. Omitted if no host hook. */
-      dialog?: MenuDialogKind;
-      /** Feature gate — item hidden when `features[feature] === false`. */
-      feature?: string;
-    }
-  | { kind: 'separator'; id: string; feature?: string }
-  | {
-      kind: 'submenu';
-      id: string;
-      label: string;
-      icon?: string;
-      items: MenuItemDef[];
-      feature?: string;
-    };
-
-interface MenuDef {
-  id: MenuId;
-  label: string;
-  /** Feature gate for the whole menu. */
-  feature?: string;
-  items: MenuItemDef[];
-}
 
 /**
  * Pretty-print a `Ctrl+Shift+X` shortcut for the current platform. The SDK
@@ -559,6 +531,7 @@ const MENUS: MenuDef[] = [
         label: 'About casual sheets',
         icon: 'help_outline',
         dialog: 'about',
+        feature: 'branding',
       },
     ],
   },
@@ -1106,6 +1079,12 @@ const MENUS: MenuDef[] = [
   {
     id: 'help',
     label: 'Help',
+    // Whole-menu gate: an embedded host passes `features={{ help: false }}` to
+    // drop the Help menu entirely (no editor-branded surface). Individual
+    // branding links below also carry `feature: 'branding'` so a host that
+    // keeps Help (for keyboard shortcuts) can still hide the About / GitHub
+    // links with `features={{ branding: false }}`.
+    feature: 'help',
     items: [
       {
         kind: 'item',
@@ -1115,14 +1094,22 @@ const MENUS: MenuDef[] = [
         shortcut: 'Ctrl+/',
         dialog: 'keyboard-shortcuts',
       },
-      { kind: 'separator', id: 'sep-help' },
-      { kind: 'item', id: 'about', label: 'About casual sheets', icon: 'info', dialog: 'about' },
+      { kind: 'separator', id: 'sep-help', feature: 'branding' },
+      {
+        kind: 'item',
+        id: 'about',
+        label: 'About casual sheets',
+        icon: 'info',
+        dialog: 'about',
+        feature: 'branding',
+      },
       {
         kind: 'item',
         id: 'github',
         label: 'View on GitHub',
         icon: 'open_in_new',
         run: () => openExternal('https://github.com/CasualOffice/sheets'),
+        feature: 'branding',
       },
     ],
   },
@@ -1219,93 +1206,6 @@ const SUBMENU_PANEL_STYLE: CSSProperties = {
   zIndex: 1001,
 };
 
-/* ───────────────────────────── filtering ──────────────────────────────── */
-
-/** True when the feature gate (if any) is enabled (default: enabled). */
-function featureOn(feature: string | undefined, features: Record<string, boolean>): boolean {
-  if (!feature) return true;
-  return features[feature] !== false;
-}
-
-/**
- * Keep an item if its feature is on AND — for a dialog item — the chrome can
- * open it (built-in dialog, host override, or `onDialogRequest`). Dialog items
- * with no way to open are dropped (the SDK never fakes a dialog). Submenus are
- * filtered recursively and dropped when empty.
- */
-function keepItem(
-  item: MenuItemDef,
-  features: Record<string, boolean>,
-  canOpen: (kind: DialogKind) => boolean,
-): MenuItemDef | null {
-  if (!featureOn(item.feature, features)) return null;
-  if (item.kind === 'separator') return item;
-  if (item.kind === 'submenu') {
-    const items = filterItems(item.items, features, canOpen);
-    if (items.length === 0) return null;
-    return { ...item, items };
-  }
-  if (item.dialog && !canOpen(item.dialog)) return null;
-  return item;
-}
-
-/** Filter a list and collapse leading/trailing/double separators. */
-function filterItems(
-  items: MenuItemDef[],
-  features: Record<string, boolean>,
-  canOpen: (kind: DialogKind) => boolean,
-): MenuItemDef[] {
-  const kept = items
-    .map((i) => keepItem(i, features, canOpen))
-    .filter((i): i is MenuItemDef => i !== null);
-  // Collapse separators: drop leading, trailing, and runs.
-  const out: MenuItemDef[] = [];
-  for (const item of kept) {
-    if (item.kind === 'separator') {
-      if (out.length === 0) continue;
-      if (out[out.length - 1].kind === 'separator') continue;
-    }
-    out.push(item);
-  }
-  while (out.length > 0 && out[out.length - 1].kind === 'separator') out.pop();
-  return out;
-}
-
-/* ─────────────────────────── host extensions ──────────────────────────── */
-
-/**
- * Append host menu extensions to their target top-level menu. Each extension
- * becomes a normal `item` (with a leading separator before the first host item
- * in that menu so it's visually grouped). Host items dispatch via `onClick` or
- * route a `dialog` kind through the dialog host, exactly like built-ins.
- */
-function withMenuExtensions(menus: MenuDef[], ext?: MenuExtension[]): MenuDef[] {
-  if (!ext || ext.length === 0) return menus;
-  const byMenu = new Map<MenuId, MenuExtension[]>();
-  for (const e of ext) {
-    const list = byMenu.get(e.menu) ?? [];
-    list.push(e);
-    byMenu.set(e.menu, list);
-  }
-  return menus.map((menu) => {
-    const extras = byMenu.get(menu.id);
-    if (!extras || extras.length === 0) return menu;
-    const items: MenuItemDef[] = [...menu.items, { kind: 'separator', id: `ext-sep-${menu.id}` }];
-    for (const e of extras) {
-      items.push({
-        kind: 'item',
-        id: `ext-${e.id}`,
-        label: e.label,
-        icon: e.icon,
-        shortcut: e.shortcut,
-        dialog: e.dialog,
-        run: e.onClick ? (api) => e.onClick?.(api) : undefined,
-      });
-    }
-    return { ...menu, items };
-  });
-}
-
 /* ───────────────────────────── component ──────────────────────────────── */
 
 export interface MenuBarProps {
@@ -1381,15 +1281,10 @@ export function MenuBar({ api, features = {}, extensions }: MenuBarProps) {
     item.run?.(api);
   };
 
-  // Compute the visible menus once per render (feature + dialog-open gating),
-  // then append host menu extensions to their target menu.
-  const baseMenus = withMenuExtensions(MENUS, extensions?.menu);
-  const visibleMenus = baseMenus
-    .map((menu) => ({
-      ...menu,
-      items: filterItems(menu.items, features, dialogs.canOpen),
-    }))
-    .filter((menu) => featureOn(menu.feature, features) && menu.items.length > 0);
+  // Compute the visible menus once per render (feature + dialog-open gating +
+  // host menu extensions). Extracted to `computeVisibleMenus` so the gating
+  // contract is unit-testable without a DOM.
+  const visibleMenus = computeVisibleMenus(MENUS, features, dialogs.canOpen, extensions?.menu);
 
   const renderItems = (items: MenuItemDef[]): ReactNode =>
     items.map((item) => {
