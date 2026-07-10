@@ -14,6 +14,9 @@ import type { ComponentType } from 'react';
 
 import type { PanelComponentProps } from './extensions';
 import { TablesPanel } from './TablesPanel';
+import { PivotFieldsPanel } from './PivotFieldsPanel';
+import { CommentsPanel } from './CommentsPanel';
+import { HistoryPanel } from './HistoryPanel';
 
 export interface BuiltInPanel {
   /** Stable id (rail `data-testid` `cs-panel-rail-<id>`, mutex key). */
@@ -28,4 +31,12 @@ export interface BuiltInPanel {
 
 export const BUILT_IN_PANELS: BuiltInPanel[] = [
   { id: 'tables', label: 'Tables', icon: 'table', component: TablesPanel },
+  {
+    id: 'pivot',
+    label: 'PivotTable Fields',
+    icon: 'pivot_table_chart',
+    component: PivotFieldsPanel,
+  },
+  { id: 'comments', label: 'Comments', icon: 'forum', component: CommentsPanel },
+  { id: 'history', label: 'History', icon: 'history', component: HistoryPanel },
 ];
