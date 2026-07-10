@@ -106,6 +106,9 @@ import {
 import type { ChromeExtensions } from '../chrome/extensions';
 import type { DialogKind } from '../chrome/dialog-context';
 import { AiPanelSurface, type SheetsAiConfig } from '../ai/AiPanelSurface';
+import { PanelProvider } from '../chrome/panel-context';
+import { PanelRail } from '../chrome/PanelRail';
+import { PanelHost } from '../chrome/PanelHost';
 // Chrome is lazy-loaded from the `@casualoffice/sheets/chrome` subpath (NOT a
 // relative import — that would inline under this build's splitting:false). The
 // subpath is externalised in tsup, so the consumer's bundler code-splits it and
@@ -713,47 +716,49 @@ export function CasualSheets({
   } as CSSProperties;
 
   return (
-    <div
-      className={className}
-      data-testid={testId}
-      data-theme={dark ? 'dark' : 'light'}
-      onKeyDownCapture={onKeyDownCapture}
-      style={{
-        ...DEFAULT_STYLE,
-        ...chromeVars,
-        ...style,
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* Bars appear once their lazy chunk loads (a tick after first paint); the
+    <PanelProvider>
+      <div
+        className={className}
+        data-testid={testId}
+        data-theme={dark ? 'dark' : 'light'}
+        onKeyDownCapture={onKeyDownCapture}
+        style={{
+          ...DEFAULT_STYLE,
+          ...chromeVars,
+          ...style,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Bars appear once their lazy chunk loads (a tick after first paint); the
           grid host is OUTSIDE Suspense so Univer mounts immediately. */}
-      <Suspense fallback={null}>
-        <ChromeTop
-          api={chromeApi}
-          features={features}
-          onDialogRequest={onDialogRequest}
-          hostOwnedDialogs={hostOwnedDialogs}
-          extensions={extensions}
-        />
-      </Suspense>
-      {hasAi ? (
-        // Grid + AI pane share a flex row so the built-in chrome (top/bottom
-        // bars) still spans the full width. Shape fixed at mount by `hasAi`.
+        <Suspense fallback={null}>
+          <ChromeTop
+            api={chromeApi}
+            features={features}
+            onDialogRequest={onDialogRequest}
+            hostOwnedDialogs={hostOwnedDialogs}
+            extensions={extensions}
+          />
+        </Suspense>
+        {/* Grid + side panels + rail share a flex row so the built-in chrome
+          (top/bottom bars) still spans the full width. The row shape is stable
+          (grid host never remounts); PanelHost/AI aside only add/remove
+          siblings, and the rail is always present. */}
         <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'row' }}>
           <div
             ref={hostRef}
             style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative' }}
           />
-          <AiPanelSurface config={ai} api={aiApi} />
+          <PanelHost api={chromeApi} extensions={extensions} />
+          {hasAi && <AiPanelSurface config={ai} api={aiApi} />}
+          <PanelRail extensions={extensions} />
         </div>
-      ) : (
-        <div ref={hostRef} style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }} />
-      )}
-      <Suspense fallback={null}>
-        <ChromeBottom api={chromeApi} />
-      </Suspense>
-    </div>
+        <Suspense fallback={null}>
+          <ChromeBottom api={chromeApi} />
+        </Suspense>
+      </div>
+    </PanelProvider>
   );
 }
 
