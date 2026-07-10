@@ -40,6 +40,18 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import type { CasualSheetsAPI } from '../sheets/api';
 import type { ChromeExtensions, DialogComponentProps } from './extensions';
 import { FormatCellsDialog } from './FormatCellsDialog';
+import { DataValidationDialog } from './DataValidationDialog';
+import { ConditionalFormattingDialog } from './ConditionalFormattingDialog';
+import { CustomSortDialog } from './CustomSortDialog';
+import { PasteSpecialDialog } from './PasteSpecialDialog';
+import { InsertFunctionDialog } from './InsertFunctionDialog';
+import { NameManagerDialog } from './NameManagerDialog';
+import { InsertCellsDialog } from './InsertCellsDialog';
+import { DeleteCellsDialog } from './DeleteCellsDialog';
+import { GoalSeekDialog } from './GoalSeekDialog';
+import { InsertChartDialog } from './InsertChartDialog';
+import { InsertSparklineDialog } from './InsertSparklineDialog';
+import { InsertPivotDialog } from './InsertPivotDialog';
 
 /**
  * All dialog kinds the chrome knows about. Mirrors `MenuDialogKind` in MenuBar
@@ -76,6 +88,18 @@ export type DialogKind =
  */
 const BUILT_IN_DIALOGS: Partial<Record<DialogKind, React.ComponentType<DialogComponentProps>>> = {
   'format-cells': FormatCellsDialog,
+  'data-validation': DataValidationDialog,
+  'conditional-formatting': ConditionalFormattingDialog,
+  'custom-sort': CustomSortDialog,
+  'paste-special': PasteSpecialDialog,
+  'insert-function': InsertFunctionDialog,
+  'name-manager': NameManagerDialog,
+  'insert-cells': InsertCellsDialog,
+  'delete-cells': DeleteCellsDialog,
+  'goal-seek': GoalSeekDialog,
+  'insert-chart': InsertChartDialog,
+  'insert-sparkline': InsertSparklineDialog,
+  'insert-pivot': InsertPivotDialog,
 };
 
 /** Kinds the chrome can open without a host (built-in modal or self-managing). */
