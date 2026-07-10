@@ -1,0 +1,51 @@
+/**
+ * Copyright 2026 Casual Office
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ */
+
+/**
+ * Renders the currently-open side panel's body (built-in or host-supplied),
+ * to the left of the rail. Returns null when no panel is open so the grid keeps
+ * the full width. Each panel body receives `{ api, onClose }`.
+ */
+import type { CSSProperties } from 'react';
+
+import type { CasualSheetsAPI } from '../sheets/api';
+import type { ChromeExtensions } from './extensions';
+import { usePanels } from './panel-context';
+import { BUILT_IN_PANELS } from './panel-registry';
+
+const asideStyle: CSSProperties = {
+  flex: '0 0 auto',
+  width: 300,
+  minWidth: 0,
+  height: '100%',
+  overflow: 'auto',
+  borderLeft: '1px solid var(--cs-chrome-border, #edeff3)',
+  background: 'var(--cs-chrome-input-bg, #ffffff)',
+  color: 'var(--cs-chrome-fg, #201f1e)',
+};
+
+export function PanelHost({
+  api,
+  extensions,
+}: {
+  api: CasualSheetsAPI | null;
+  extensions?: ChromeExtensions;
+}) {
+  const panels = usePanels();
+  const openId = panels.openPanelId;
+  if (!openId || !api) return null;
+
+  const builtIn = BUILT_IN_PANELS.find((p) => p.id === openId);
+  const host = extensions?.panels?.find((p) => p.id === openId);
+  const Body = builtIn?.component ?? host?.component;
+  if (!Body) return null;
+
+  return (
+    <aside style={asideStyle} data-testid={`cs-panel-${openId}`}>
+      <Body api={api} onClose={panels.close} />
+    </aside>
+  );
+}
