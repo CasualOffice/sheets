@@ -9,7 +9,7 @@
  * to the left of the rail. Returns null when no panel is open so the grid keeps
  * the full width. Each panel body receives `{ api, onClose }`.
  */
-import type { CSSProperties } from 'react';
+import { Suspense, type CSSProperties } from 'react';
 
 import type { CasualSheetsAPI } from '../sheets/api';
 import type { ChromeExtensions } from './extensions';
@@ -45,7 +45,11 @@ export function PanelHost({
 
   return (
     <aside style={asideStyle} data-testid={`cs-panel-${openId}`}>
-      <Body api={api} onClose={panels.close} />
+      {/* Panels may be lazy (e.g. Charts pulls echarts) — Suspense keeps the
+          rest of the chrome painted while the chunk loads. */}
+      <Suspense fallback={null}>
+        <Body api={api} onClose={panels.close} />
+      </Suspense>
     </aside>
   );
 }

@@ -109,6 +109,13 @@ import { AiPanelSurface, type SheetsAiConfig } from '../ai/AiPanelSurface';
 import { PanelProvider } from '../chrome/panel-context';
 import { PanelRail } from '../chrome/PanelRail';
 import { PanelHost } from '../chrome/PanelHost';
+// Charts: the provider is echarts-free (resources/types only) so it imports
+// eagerly; the overlay pulls echarts, so it's lazy — echarts becomes its own
+// async chunk, loaded only when a chart actually renders.
+import { ChartsProvider } from '../charts/charts-context';
+const ChartLayer = lazy(() =>
+  import('../charts/ChartLayer').then((m) => ({ default: m.ChartLayer })),
+);
 // Chrome is lazy-loaded from the `@casualoffice/sheets/chrome` subpath (NOT a
 // relative import — that would inline under this build's splitting:false). The
 // subpath is externalised in tsup, so the consumer's bundler code-splits it and
@@ -748,9 +755,23 @@ export function CasualSheets({
         <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'row' }}>
           <div
             ref={hostRef}
+            data-testid="univer-host"
             style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative' }}
           />
-          <PanelHost api={chromeApi} extensions={extensions} />
+          {/* Charts context + overlay live once the api is ready (it arrives
+              after Univer boots into the grid host above, so it can't gate the
+              host). ChartLayer portals onto the `univer-host` marker; the
+              Charts panel (inside PanelHost) reads the same context. */}
+          {chromeApi ? (
+            <ChartsProvider api={chromeApi}>
+              <Suspense fallback={null}>
+                <ChartLayer />
+              </Suspense>
+              <PanelHost api={chromeApi} extensions={extensions} />
+            </ChartsProvider>
+          ) : (
+            <PanelHost api={chromeApi} extensions={extensions} />
+          )}
           {hasAi && <AiPanelSurface config={ai} api={aiApi} />}
           <PanelRail extensions={extensions} />
         </div>
