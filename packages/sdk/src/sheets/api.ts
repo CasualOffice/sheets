@@ -235,7 +235,33 @@ export interface CasualSheetsAPIInternal extends CasualSheetsAPI {
  * to {@link CasualSheetsAPI} for hosts, while the `<CasualSheets>` wrapper casts
  * back to reach `emit` / `markDirty`.
  */
-export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
+export function createCasualSheetsAPI(
+  univerAPI: FUniver,
+  initialResources?: IWorkbookData['resources'],
+): CasualSheetsAPI {
+  // SDK-owned snapshot resources (charts / pivots / sparklines panels persist
+  // their models here). Univer's `.save()`/`.load()` silently drop any resource
+  // it doesn't own, so getContent()/setContent() alone can't round-trip them.
+  // We shadow them in an SDK-layer store: setContent captures them before the
+  // workbook swap, getContent merges them back onto the Univer snapshot. This
+  // keeps the panels' existing `IWorkbookData.resources` read/write working and
+  // makes them survive save/reload + collab.
+  const CUSTOM_RESOURCE_NAMES = new Set([
+    '__casual_sheets_charts__',
+    '__casual_sheets_pivots__',
+    '__casual_sheets_sparklines__',
+  ]);
+  const customResources = new Map<string, string>();
+  const captureCustom = (resources: IWorkbookData['resources']) => {
+    customResources.clear();
+    for (const r of resources ?? []) {
+      if (CUSTOM_RESOURCE_NAMES.has(r.name) && r.data) customResources.set(r.name, r.data);
+    }
+  };
+  // Seed from the mounted snapshot so pivots/charts saved in a loaded workbook
+  // are visible before the first edit.
+  captureCustom(initialResources);
+
   // Extracted so importXlsx / setContent reuse the exact same swap semantics.
   const swapWorkbook = (data: IWorkbookData) => {
     const current = univerAPI.getActiveWorkbook();
@@ -267,9 +293,18 @@ export function createCasualSheetsAPI(univerAPI: FUniver): CasualSheetsAPI {
   let documentMode: DocumentMode = 'editing';
   let readOnlyDisposer: (() => void) | null = null;
 
-  const getContent = (): IWorkbookData | null => univerAPI.getActiveWorkbook()?.save() ?? null;
+  const getContent = (): IWorkbookData | null => {
+    const snap = univerAPI.getActiveWorkbook()?.save() ?? null;
+    if (!snap || customResources.size === 0) return snap;
+    // Re-attach the SDK-owned resources Univer dropped on save.
+    const resources = (snap.resources ?? []).filter((r) => !CUSTOM_RESOURCE_NAMES.has(r.name));
+    for (const [name, data] of customResources) resources.push({ name, data });
+    return { ...snap, resources };
+  };
 
   const setContent = (data: IWorkbookData): void => {
+    // Capture the SDK-owned resources before Univer drops them on the swap.
+    captureCustom(data.resources);
     swapWorkbook(data);
     // A fresh snapshot is a clean buffer until the user edits it.
     markDirty(false);

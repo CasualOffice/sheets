@@ -485,7 +485,7 @@ export function CasualSheets({
 
       univer.createUnit(UniverInstanceType.UNIVER_SHEET, initialData);
 
-      const api = createCasualSheetsAPI(FUniver.newAPI(univer));
+      const api = createCasualSheetsAPI(FUniver.newAPI(univer), initialData.resources);
       const apiInternal = api as CasualSheetsAPIInternal;
       apiRef.current = api;
       // Bridge the declarative event props (doc 38 §3) to the unified emitter, so

@@ -30,14 +30,11 @@
  *     INLINED here (structurally identical to apps/web/src/pivots/*) so the SDK
  *     stays free of the app package.
  *
- * COMPUTE GAP (honest limitation): the app's pivot *engine* — `computePivot` /
- * `applyPivot` (apps/web/src/pivots/{compute,apply}.ts) — is app-only code, not
- * a Univer plugin, and porting it is out of scope for this PR. This panel fully
- * edits + persists the pivot's field configuration (definition), but it does NOT
- * re-render the output cell grid: the laid-out pivot rectangle on the sheet only
- * refreshes once the app engine re-applies the model. So field assignment,
- * drag-and-drop, agg/showAs/grouping/filters all work and are saved, but the
- * visible output lags the config until the engine port lands (a later PR).
+ * The pivot engine (`computePivot` / `applyPivot`, ported to ../pivots) runs on
+ * every edit: `commit()` re-applies the model to the sheet so the laid-out
+ * output grid recomputes live, then persists the model (with its new output
+ * extent) into the workbook resource. Field assignment, drag-and-drop,
+ * agg/showAs/grouping/filters all recompute the visible pivot immediately.
  */
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
@@ -46,6 +43,7 @@ import type { IWorkbookData } from '@univerjs/core';
 import type { CasualSheetsAPI } from '../sheets/api';
 import type { PanelComponentProps } from './extensions';
 import { Icon } from './Icon';
+import { applyPivot } from '../pivots/apply';
 
 /* ------------------------------------------------------------------ *
  * Pivot model — mirrors apps/web/src/pivots/types.ts (duplicated so the
@@ -459,8 +457,13 @@ export function PivotFieldsPanel({ api, onClose }: PanelComponentProps) {
   // Optimistic local update + persist. We update `pivots` immediately so the UI
   // is responsive, then write through to the snapshot so it round-trips.
   const commit = (next: PivotModel) => {
-    setPivots((prev) => prev.map((p) => (p.id === next.id ? next : p)));
-    persistPivot(api, next);
+    // Recompute the laid-out output grid on the sheet (pivot engine), then
+    // persist the model with the fresh output extent so the next apply clears
+    // the previous region before writing the new one.
+    const extent = applyPivot(api.univer, next, next.lastOutputExtent ?? null);
+    const model = extent ? { ...next, lastOutputExtent: extent } : next;
+    setPivots((prev) => prev.map((p) => (p.id === model.id ? model : p)));
+    persistPivot(api, model);
   };
 
   const optsFor = (col: number) => ({
@@ -530,30 +533,6 @@ export function PivotFieldsPanel({ api, onClose }: PanelComponentProps) {
                 </select>
               </label>
             )}
-
-            {/* Compute-gap notice — field config saves + round-trips, but the
-                output grid only re-renders when the app pivot engine re-applies. */}
-            <div
-              data-testid="cs-pivot-fields-apply-notice"
-              style={{
-                display: 'flex',
-                gap: 6,
-                fontSize: 11,
-                lineHeight: 1.4,
-                opacity: 0.75,
-                background: 'var(--cs-chrome-surface, #f4f6fb)',
-                border,
-                borderRadius: 6,
-                padding: '6px 8px',
-                marginBottom: 12,
-              }}
-            >
-              <Icon name="info" size={14} style={{ opacity: 0.7, flexShrink: 0, marginTop: 1 }} />
-              <span>
-                Field changes are saved to the PivotTable. The output cells refresh once the pivot
-                engine re-applies the layout.
-              </span>
-            </div>
 
             {/* Source field list */}
             <section style={{ marginBottom: 14 }}>
