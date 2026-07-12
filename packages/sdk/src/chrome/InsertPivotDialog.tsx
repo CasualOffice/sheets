@@ -49,8 +49,10 @@
  */
 
 import { useMemo, useState, type CSSProperties } from 'react';
+import type { IWorkbookData } from '@univerjs/core';
 import type { DialogComponentProps } from './extensions';
 import type { CasualSheetsAPI } from '../sheets/api';
+import type { PivotModel } from '../pivots/types';
 import { Dialog } from './Dialog';
 import {
   DIALOG_BTN_PRIMARY_STYLE,
@@ -86,11 +88,15 @@ function activeRange(api: CasualSheetsAPI) {
 interface RangeView {
   getValues: () => Cell[][];
   getA1Notation?: () => string;
+  /** Top-left cell coords (0-based) — used to anchor the pivot's source range. */
+  getRow?: () => number;
+  getColumn?: () => number;
 }
 
 /** Loosely-typed FWorksheet view — sheet name + a range handle by A1. */
 interface SheetView {
   getSheetName: () => string;
+  getSheetId?: () => string;
   getRange: (a1: string) => RangeView & { setValues: (v: Cell[][]) => unknown };
 }
 
@@ -205,6 +211,35 @@ function toA1(row: number, col: number): string {
   return `${letters}${row + 1}`;
 }
 
+/** Resource envelope the pivot models live in — matches PivotFieldsPanel so the
+ *  panel edits the same pivot the dialog created. */
+const PIVOTS_RESOURCE_NAME = '__casual_sheets_pivots__';
+
+/** Append a freshly-created pivot model to the workbook snapshot resource. */
+function persistPivotModel(api: CasualSheetsAPI, model: PivotModel): void {
+  const data = api.getContent();
+  if (!data) return;
+  const resources = data.resources ? [...data.resources] : [];
+  const idx = resources.findIndex((r) => r.name === PIVOTS_RESOURCE_NAME);
+  let pivots: PivotModel[] = [];
+  if (idx >= 0 && resources[idx]?.data) {
+    try {
+      const parsed = JSON.parse(resources[idx].data) as { v?: number; pivots?: PivotModel[] };
+      if (parsed?.v === 1 && Array.isArray(parsed.pivots)) pivots = parsed.pivots;
+    } catch {
+      pivots = [];
+    }
+  }
+  const merged = pivots.some((p) => p.id === model.id)
+    ? pivots.map((p) => (p.id === model.id ? model : p))
+    : [...pivots, model];
+  const entry = { name: PIVOTS_RESOURCE_NAME, data: JSON.stringify({ v: 1, pivots: merged }) };
+  if (idx >= 0) resources[idx] = entry;
+  else resources.push(entry);
+  const nextData: IWorkbookData = { ...data, resources };
+  api.setContent(nextData);
+}
+
 interface DialogState {
   useHeader: boolean;
   groupCol: number;
@@ -288,6 +323,23 @@ export function InsertPivotDialog({ api, onClose }: DialogComponentProps) {
       return;
     }
 
+    // Source range coords (absolute) — the pivot model reads its data from here,
+    // and the Fields panel re-applies against the same range on every edit.
+    const srcRange = activeRange(api) as unknown as RangeView | null;
+    const activeWs = wb.getActiveSheet() as unknown as SheetView | null;
+    const srcRow = srcRange?.getRow?.() ?? 0;
+    const srcCol = srcRange?.getColumn?.() ?? 0;
+    const sourceSheetId = activeWs?.getSheetId?.() ?? '';
+    const sourceRange = {
+      startRow: srcRow,
+      startColumn: srcCol,
+      endRow: srcRow + source.length - 1,
+      endColumn: srcCol + (source[0]?.length ?? 1) - 1,
+    };
+
+    let targetSheetId = sourceSheetId;
+    let target = { row: 0, column: 0 };
+
     try {
       if (state.destination === 'newSheet') {
         const name = state.sheetName.trim() || 'Pivot';
@@ -296,8 +348,9 @@ export function InsertPivotDialog({ api, onClose }: DialogComponentProps) {
         const sheet = (
           wb as unknown as { create: (n: string, r: number, c: number) => SheetView }
         ).create(name, rows, 4);
-        const target = sheet.getRange(`A1:${toA1(pivot.grid.length - 1, 1)}`);
-        target.setValues(pivot.grid);
+        sheet.getRange(`A1:${toA1(pivot.grid.length - 1, 1)}`).setValues(pivot.grid);
+        targetSheetId = sheet.getSheetId?.() ?? sourceSheetId;
+        target = { row: 0, column: 0 };
       } else {
         const anchor = state.anchor.trim().toUpperCase();
         if (!/^[A-Z]+[0-9]+$/.test(anchor)) {
@@ -317,10 +370,29 @@ export function InsertPivotDialog({ api, onClose }: DialogComponentProps) {
         const startRow = Number(m[2]) - 1;
         const end = toA1(startRow + pivot.grid.length - 1, col + 1);
         sheet.getRange(`${anchor}:${end}`).setValues(pivot.grid);
+        target = { row: startRow, column: col };
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create the pivot table.');
       return;
+    }
+
+    // Persist an editable model (header-based pivots only — the model treats the
+    // source's first row as headers) so the Fields panel can reconfigure it and
+    // the engine recomputes the output grid on every edit.
+    if (state.useHeader && sourceSheetId && targetSheetId) {
+      persistPivotModel(api, {
+        id: `pivot-${targetSheetId}-${target.row}-${target.column}`,
+        sourceSheetId,
+        source: sourceRange,
+        targetSheetId,
+        target,
+        rows: [{ column: state.groupCol }],
+        cols: [],
+        values: [{ column: state.valueCol, agg: state.aggFn }],
+        filters: [],
+        lastOutputExtent: { rows: pivot.grid.length, cols: pivot.grid[0]?.length ?? 0 },
+      });
     }
 
     onClose();
