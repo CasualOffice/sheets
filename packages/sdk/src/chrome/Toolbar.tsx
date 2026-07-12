@@ -371,7 +371,13 @@ const BAR_STYLE: CSSProperties = {
   background: 'var(--cs-chrome-bg, #eef1f5)',
   flex: '0 0 auto',
   userSelect: 'none',
-  flexWrap: 'wrap',
+  // Single row that scrolls horizontally when the controls don't fit — never
+  // wrap into a broken second row with orphaned icons (matches Google Sheets /
+  // the standalone app's overflow-scroll toolbar). Scrollbar hidden; the row
+  // stays one line and the groups keep their order.
+  flexWrap: 'nowrap',
+  overflowX: 'auto',
+  scrollbarWidth: 'none',
 };
 
 const BTN_STYLE: CSSProperties = {

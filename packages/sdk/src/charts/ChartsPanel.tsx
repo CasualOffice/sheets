@@ -17,6 +17,41 @@
 import { useMemo, useState } from 'react';
 import type { PanelComponentProps } from '../chrome/extensions';
 import { Icon } from '../chrome/Icon';
+import { PanelHeader, PanelEmpty, IconButton } from '../chrome/panel-shell';
+
+const MUTED = 'var(--color-text-secondary, var(--cs-chrome-muted, #605e5c))';
+const DIVIDER = 'var(--color-divider, var(--cs-chrome-border, #edeff3))';
+const rowStyle = {
+  border: `1px solid ${DIVIDER}`,
+  borderRadius: 8,
+  padding: 10,
+  display: 'flex',
+  flexDirection: 'column' as const,
+  gap: 6,
+};
+const nameBtnStyle = {
+  flex: 1,
+  textAlign: 'left' as const,
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  font: 'inherit',
+  fontWeight: 600,
+  color: 'inherit',
+};
+const ctaStyle = {
+  border: `1px solid ${DIVIDER}`,
+  borderRadius: 6,
+  padding: '6px 12px',
+  cursor: 'pointer',
+  font: 'inherit',
+  fontWeight: 600,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  background: 'var(--color-surface, var(--cs-chrome-input-bg, #fff))',
+  color: 'var(--color-accent, var(--cs-chrome-active-fg, #0e7490))',
+};
 import { useCharts } from './charts-context';
 import { getActiveSelectionRange, rangeToA1, buildChartModelForRange } from './insert-chart';
 import { nextChartName } from './naming';
@@ -85,61 +120,51 @@ export function ChartsPanel({ api, onClose }: PanelComponentProps) {
   };
 
   return (
-    <aside className="side-panel charts-panel" data-testid="charts-panel">
-      <header className="side-panel__header">
-        <Icon name="bar_chart" size={16} />
-        <h2 className="side-panel__title">Charts</h2>
-        {!empty && <span className="side-panel__count">{visible.length}</span>}
-        <button
-          type="button"
-          className="side-panel__close"
-          aria-label="Close charts panel"
-          onClick={onClose}
-        >
-          <Icon name="close" size={16} />
-        </button>
-      </header>
-      <div className="charts-panel__body">
+    <div data-testid="charts-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <PanelHeader icon="bar_chart" title="Charts" count={visible.length} onClose={onClose} />
+      <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
         {empty ? (
-          <div className="charts-panel__empty" data-testid="charts-panel-empty">
-            <Icon name="bar_chart" size={32} style={{ opacity: 0.4 }} />
-            <div className="charts-panel__empty-title">No charts on this sheet</div>
-            <div className="charts-panel__empty-body">
-              Select the data range you want to plot, then click below — or use{' '}
-              <strong>Insert → Chart</strong> from the menu.
+          <PanelEmpty icon="bar_chart" title="No charts on this sheet" testId="charts-panel-empty">
+            Select the data range you want to plot, then use <strong>Insert → Chart</strong> — or:
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                data-testid="charts-panel-empty-cta"
+                disabled={!univer}
+                onClick={openInsert}
+                style={ctaStyle}
+              >
+                <Icon name="add" size={16} /> Insert chart
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn-primary charts-panel__empty-cta"
-              data-testid="charts-panel-empty-cta"
-              disabled={!univer}
-              onClick={openInsert}
-            >
-              Insert chart
-            </button>
-          </div>
+          </PanelEmpty>
         ) : (
-          <ul className="charts-panel__list">
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
             {visible.map((c) => {
               const isRenaming = renaming?.id === c.id;
               const displayName = c.title ?? 'Chart';
               return (
-                <li
-                  className="charts-panel__row"
-                  key={c.id}
-                  data-testid={`charts-panel-row-${c.id}`}
-                >
-                  <div className="charts-panel__name">
+                <li key={c.id} data-testid={`charts-panel-row-${c.id}`} style={rowStyle}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span
-                      className="material-symbols-outlined charts-panel__type-icon"
+                      className="material-symbols-outlined"
                       aria-hidden="true"
+                      style={{ fontSize: 18, color: MUTED, flex: '0 0 auto' }}
                     >
                       {FAMILY_ICONS[CHART_FAMILY_OF[c.type]]}
                     </span>
                     {isRenaming ? (
                       <input
                         autoFocus
-                        className="charts-panel__name-input"
                         value={renaming.draft}
                         onChange={(e) => setRenaming({ id: c.id, draft: e.target.value })}
                         onBlur={() => onRenameCommit(c.id, displayName)}
@@ -147,45 +172,41 @@ export function ChartsPanel({ api, onClose }: PanelComponentProps) {
                           if (e.key === 'Enter') onRenameCommit(c.id, displayName);
                           if (e.key === 'Escape') setRenaming(null);
                         }}
+                        style={{ flex: 1, font: 'inherit', padding: '2px 4px' }}
                       />
                     ) : (
                       <button
                         type="button"
-                        className="charts-panel__name-btn"
                         onClick={() => setRenaming({ id: c.id, draft: displayName })}
                         title="Click to rename"
+                        style={nameBtnStyle}
                       >
                         {displayName}
                       </button>
                     )}
+                    <IconButton
+                      name="delete"
+                      label={`Delete ${displayName}`}
+                      onClick={() => remove(c.id)}
+                      size={16}
+                    />
                   </div>
-                  <div className="charts-panel__meta">
-                    <span className="charts-panel__type-label">{CHART_TYPE_LABEL[c.type]}</span>
-                    <span className="charts-panel__range" title="Source range">
-                      {rangeToA1(c.source)}
-                    </span>
+                  <div style={{ display: 'flex', gap: 8, fontSize: 12, color: MUTED }}>
+                    <span>{CHART_TYPE_LABEL[c.type]}</span>
+                    <span title="Source range">{rangeToA1(c.source)}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="charts-panel__delete"
-                    aria-label={`Delete ${displayName}`}
-                    title="Delete chart"
-                    onClick={() => remove(c.id)}
-                  >
-                    <Icon name="delete" />
-                  </button>
                 </li>
               );
             })}
-            <li className="charts-panel__add-row">
+            <li style={{ listStyle: 'none', marginTop: 4 }}>
               <button
                 type="button"
-                className="btn-secondary charts-panel__add"
                 data-testid="charts-panel-add"
                 disabled={!univer}
                 onClick={openInsert}
+                style={ctaStyle}
               >
-                <Icon name="add" /> Insert chart
+                <Icon name="add" size={16} /> Insert chart
               </button>
             </li>
           </ul>
@@ -206,6 +227,6 @@ export function ChartsPanel({ api, onClose }: PanelComponentProps) {
           }}
         />
       )}
-    </aside>
+    </div>
   );
 }
