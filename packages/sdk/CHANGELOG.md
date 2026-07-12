@@ -1,5 +1,16 @@
 # @casualoffice/sheets
 
+## 0.19.0
+
+### Minor Changes
+
+- 7602c58: Add the Charts panel and live chart overlay to the SDK chrome, so embedders can insert and edit charts natively (previously charts existed only in the standalone app). Insert a chart from the Charts panel (or Insert menu); it renders as an ECharts overlay anchored over the grid, moves/resizes, and persists in the workbook. echarts is lazy-loaded — it only downloads when a chart first renders or the Charts panel opens, so `chrome:"full"` hosts that never use charts don't pay for it. Column/bar/line/pie/scatter, combo/dual-axis, and trendlines are supported; chart definitions round-trip through the workbook snapshot.
+- fca3d94: Add a side-panel rail to the SDK chrome (`chrome:"full"`/`"embedded"`), so embedders get the panels the standalone app has instead of a bare grid. This first drop ships the rail + a one-at-a-time panel store (mutex) + a built-in-panel registry, and the **Tables** panel (list / rename / re-theme / delete the tables on the active sheet). Host panels registered via `extensions.panels` appear on the same rail. Charts, Pivot, Comments and History panels follow.
+- b7d5099: Add the Comments, PivotTable Fields, and History panels to the SDK chrome rail (following the Tables panel from the previous release), so embedders get them natively:
+  - **Comments** — lists thread comments on the active sheet (open + resolved), resolve/reopen, and add-comment; clicking a row navigates to the cell for full reply threading. Author avatars/mentions are host-owned and degrade to the in-band author.
+  - **PivotTable Fields** — edit a pivot's field layout (Rows/Columns/Values/Filters, aggregation, show-values-as, date grouping); the definition round-trips through the workbook. Recomputing the laid-out grid still needs the pivot engine (a later change) — the panel notes this.
+  - **History** — an activity feed of recent edits (from the command service). Persistent version history remains host-owned.
+
 ## 0.18.0
 
 ### Minor Changes
