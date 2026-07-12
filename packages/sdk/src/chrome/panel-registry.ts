@@ -10,13 +10,18 @@
  * more via `extensions.panels` (see extensions.ts) — those are merged after
  * these on the rail.
  */
-import type { ComponentType } from 'react';
+import { lazy, type ComponentType } from 'react';
 
 import type { PanelComponentProps } from './extensions';
 import { TablesPanel } from './TablesPanel';
 import { PivotFieldsPanel } from './PivotFieldsPanel';
 import { CommentsPanel } from './CommentsPanel';
 import { HistoryPanel } from './HistoryPanel';
+// Charts panel pulls echarts — lazy so it (and echarts) only load when the
+// panel is first opened. PanelHost renders panels inside a Suspense boundary.
+const ChartsPanel = lazy(() =>
+  import('../charts/ChartsPanel').then((m) => ({ default: m.ChartsPanel })),
+);
 
 export interface BuiltInPanel {
   /** Stable id (rail `data-testid` `cs-panel-rail-<id>`, mutex key). */
@@ -37,6 +42,7 @@ export const BUILT_IN_PANELS: BuiltInPanel[] = [
     icon: 'pivot_table_chart',
     component: PivotFieldsPanel,
   },
+  { id: 'charts', label: 'Charts', icon: 'analytics', component: ChartsPanel },
   { id: 'comments', label: 'Comments', icon: 'forum', component: CommentsPanel },
   { id: 'history', label: 'History', icon: 'history', component: HistoryPanel },
 ];

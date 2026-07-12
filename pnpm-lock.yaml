@@ -496,6 +496,9 @@ importers:
       '@univerjs/ui':
         specifier: link:../../vendor/univer-revamp/packages/ui
         version: link:../../vendor/univer-revamp/packages/ui
+      echarts:
+        specifier: 6.0.0
+        version: 6.0.0
       exceljs:
         specifier: 4.4.0
         version: 4.4.0(patch_hash=1fb55c8a7c22df8b9a8b0db40f56947e31e61ac12eceed806433c58da11b9397)
