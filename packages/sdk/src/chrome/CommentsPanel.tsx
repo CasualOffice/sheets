@@ -25,6 +25,7 @@ import { SheetsThreadCommentModel } from '@univerjs/sheets-thread-comment';
 import { ensurePluginByName } from '../univer';
 import type { PanelComponentProps } from './extensions';
 import { Icon } from './Icon';
+import { PanelHeader, IconButton } from './panel-shell';
 
 interface CommentRow {
   id: string;
@@ -295,23 +296,13 @@ export function CommentsPanel({ api, onClose }: PanelComponentProps) {
       data-testid="cs-comments-panel"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
-      <header style={header}>
-        <Icon name="forum" size={18} />
-        <span style={{ fontWeight: 600, flex: 1 }}>Comments</span>
-        {rows.length > 0 && <span style={{ opacity: 0.6, fontSize: 12 }}>{rows.length}</span>}
-        <button
-          type="button"
-          aria-label="Add comment"
-          title="Add comment"
-          onClick={addComment}
-          style={iconBtn}
-        >
-          <Icon name="add_comment" size={18} />
-        </button>
-        <button type="button" aria-label="Close comments panel" onClick={onClose} style={iconBtn}>
-          <Icon name="close" size={18} />
-        </button>
-      </header>
+      <PanelHeader
+        icon="forum"
+        title="Comments"
+        count={rows.length}
+        onClose={onClose}
+        actions={<IconButton name="add_comment" label="Add comment" onClick={addComment} />}
+      />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
         {empty ? (

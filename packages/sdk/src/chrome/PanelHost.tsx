@@ -18,13 +18,14 @@ import { BUILT_IN_PANELS } from './panel-registry';
 
 const asideStyle: CSSProperties = {
   flex: '0 0 auto',
-  width: 300,
+  width: 320,
   minWidth: 0,
   height: '100%',
   overflow: 'auto',
-  borderLeft: '1px solid var(--cs-chrome-border, #edeff3)',
-  background: 'var(--cs-chrome-input-bg, #ffffff)',
-  color: 'var(--cs-chrome-fg, #201f1e)',
+  borderLeft: '1px solid var(--color-divider, var(--cs-chrome-border, #edeff3))',
+  background: 'var(--color-surface-alt, var(--cs-chrome-input-bg, #ffffff))',
+  color: 'var(--color-text, var(--cs-chrome-fg, #201f1e))',
+  fontSize: 13,
 };
 
 export function PanelHost({

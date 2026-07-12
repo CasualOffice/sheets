@@ -43,6 +43,7 @@ import type { IWorkbookData } from '@univerjs/core';
 import type { CasualSheetsAPI } from '../sheets/api';
 import type { PanelComponentProps } from './extensions';
 import { Icon } from './Icon';
+import { PanelHeader } from './panel-shell';
 import { applyPivot } from '../pivots/apply';
 
 /* ------------------------------------------------------------------ *
@@ -489,18 +490,7 @@ export function PivotFieldsPanel({ api, onClose }: PanelComponentProps) {
       data-testid="cs-pivot-fields-panel"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
-      <header style={headerStyle}>
-        <Icon name="pivot_table_chart" size={18} />
-        <span style={{ fontWeight: 600, flex: 1 }}>PivotTable Fields</span>
-        <button
-          type="button"
-          aria-label="Close PivotTable Fields panel"
-          onClick={onClose}
-          style={iconBtn}
-        >
-          <Icon name="close" size={18} />
-        </button>
-      </header>
+      <PanelHeader icon="pivot_table_chart" title="PivotTable Fields" onClose={onClose} />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
         {!model ? (

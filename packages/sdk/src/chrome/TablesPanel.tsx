@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { ensurePluginByName } from '../univer';
 import type { PanelComponentProps } from './extensions';
 import { Icon } from './Icon';
+import { PanelHeader, PanelEmpty } from './panel-shell';
 
 // Univer's six built-in table themes, surfaced as swatches.
 const TABLE_THEMES = [
@@ -166,32 +167,13 @@ export function TablesPanel({ api, onClose }: PanelComponentProps) {
       data-testid="cs-tables-panel"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
-      <header style={header}>
-        <Icon name="table" size={18} />
-        <span style={{ fontWeight: 600, flex: 1 }}>Tables</span>
-        {!empty && <span style={{ opacity: 0.6, fontSize: 12 }}>{tables.length}</span>}
-        <button
-          type="button"
-          aria-label="Close tables panel"
-          onClick={onClose}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit' }}
-        >
-          <Icon name="close" size={18} />
-        </button>
-      </header>
+      <PanelHeader icon="table" title="Tables" count={tables.length} onClose={onClose} />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
         {empty ? (
-          <div
-            data-testid="cs-tables-panel-empty"
-            style={{ textAlign: 'center', opacity: 0.75, padding: '24px 8px' }}
-          >
-            <Icon name="table_rows" size={40} style={{ opacity: 0.4 }} />
-            <div style={{ fontWeight: 600, marginTop: 8 }}>No tables on this sheet</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>
-              Select your data, then use <strong>Insert → Table</strong> from the menu.
-            </div>
-          </div>
+          <PanelEmpty icon="table_rows" title="No tables on this sheet" testId="cs-tables-panel-empty">
+            Select your data, then use <strong>Insert → Table</strong> from the menu.
+          </PanelEmpty>
         ) : (
           <ul
             style={{

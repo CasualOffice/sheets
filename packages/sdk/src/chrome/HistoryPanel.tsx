@@ -31,6 +31,7 @@ import { CommandType, ICommandService, type ICommandInfo } from '@univerjs/core'
 
 import type { PanelComponentProps } from './extensions';
 import { Icon } from './Icon';
+import { PanelHeader } from './panel-shell';
 
 const RING_CAP = 100;
 
@@ -230,23 +231,7 @@ export function HistoryPanel({ api, onClose }: PanelComponentProps) {
       data-testid="cs-history-panel"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
-      <header style={headerStyle}>
-        <Icon name="history" size={18} />
-        <span style={{ fontWeight: 600, flex: 1 }}>Activity</span>
-        {!empty && (
-          <span data-testid="cs-history-count" style={{ opacity: 0.6, fontSize: 12 }}>
-            {sorted.length}
-          </span>
-        )}
-        <button
-          type="button"
-          aria-label="Close activity panel"
-          onClick={onClose}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit' }}
-        >
-          <Icon name="close" size={18} />
-        </button>
-      </header>
+      <PanelHeader icon="history" title="Activity" count={sorted.length} onClose={onClose} />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
         {empty ? (
