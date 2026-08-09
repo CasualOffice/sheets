@@ -89,7 +89,7 @@ export function UniverSheet({ initialSnapshot, revision }: Props) {
     apiRef.current = api;
     // CRITICAL: publish the FUniver facade (not the CasualSheetsAPI wrapper) —
     // useUniverAPI() is typed FUniver and the whole shell calls facade methods.
-    setApi(api.univer);
+    setApi(api.univer, api);
 
     const teardowns: Array<() => void> = [];
     const pasteMerge = registerPasteMergeHook(api.univer);

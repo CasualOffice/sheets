@@ -44,20 +44,10 @@ import { startBridge, type BridgeHandle } from './bridge';
 import { buildWsUrl, type WsUrlShare } from './ws-url';
 
 /** Either the SDK's imperative API (`onReady`) or the bare FUniver facade.
- *  Collab only needs the facade, so a host that holds the raw FUniver (the
- *  reference app does) can attach without constructing a CasualSheetsAPI. */
+ *  Prefer the full API: its preservation-aware snapshot reader/applier lets
+ *  replay recover from concurrent insertion reordering without losing opaque
+ *  resources. A bare facade must supply the matching callbacks in options. */
 export type CollabAttachable = CasualSheetsAPI | FUniver;
-
-/** Pull the FUniver facade out of whichever attachable form was passed.
- *  FUniver exposes `getActiveWorkbook` directly; CasualSheetsAPI wraps the
- *  facade on `.univer`. Discriminating on the method (not on `'univer' in …`)
- *  is unambiguous either way. */
-function resolveFacade(api: CollabAttachable): FUniver {
-  const maybe = api as Partial<FUniver> & Partial<CasualSheetsAPI>;
-  return typeof maybe.getActiveWorkbook === 'function'
-    ? (api as FUniver)
-    : (maybe.univer as FUniver);
-}
 
 /** `write` peers broadcast their edits; `view` peers only receive. The
  *  client-side gate is belt-and-braces — real enforcement is the server's
@@ -105,6 +95,15 @@ export interface AttachCollabOptions {
    * land on the pre-swap unit.
    */
   onSnapshot?: (wb: IWorkbookData) => void | Promise<void>;
+  /**
+   * Preservation-aware content reader for hosts that pass a bare FUniver
+   * facade. Prefer passing CasualSheetsAPI, whose `getContent()` is used
+   * automatically. Without either source, reorder recovery and compaction
+   * fail closed rather than serializing a potentially lossy raw snapshot.
+   */
+  getContent?: () => IWorkbookData | null;
+  /** Browser compaction policy. Defaults to `off`; opt into `manual` or `auto`. */
+  compaction?: 'auto' | 'manual' | 'off';
   /** Connection-status transitions — drive a status pill / offline banner. */
   onStatus?: (status: CollabConnectionStatus) => void;
 }
@@ -128,7 +127,6 @@ export interface CollabHandle {
  * (and always before the editor unmounts).
  */
 export function attachCollab(api: CollabAttachable, opts: AttachCollabOptions): CollabHandle {
-  const facade = resolveFacade(api);
   const role: CollabRole = opts.role ?? 'write';
 
   const doc = new Y.Doc();
@@ -147,10 +145,12 @@ export function attachCollab(api: CollabAttachable, opts: AttachCollabOptions): 
     token: opts.token ?? 'anon',
   });
 
-  const bridge = startBridge(facade, doc, {
+  const bridge = startBridge(api, doc, {
     role,
     awareness: provider.awareness ?? undefined,
     onSnapshotReceived: opts.onSnapshot,
+    getContent: opts.getContent,
+    compaction: opts.compaction,
   });
 
   let current: CollabConnectionStatus = 'connecting';

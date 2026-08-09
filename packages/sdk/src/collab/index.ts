@@ -44,11 +44,18 @@ export { type WsUrlShare } from './ws-url';
 // using attachCollab's batteries-included transport.
 export {
   startBridge,
+  type BridgeAttachable,
   type BridgeHandle,
   type BridgeOptions,
   SYNCED_MUTATIONS,
   REVERTABLE_MUTATIONS,
 } from './bridge';
+export {
+  COLLAB_LOG_PROTOCOL_VERSION,
+  type MutationRecord,
+  type SnapshotRecord,
+  type OpRecord,
+} from './replay-plan';
 export {
   type ReplayFailureRecord,
   type ReplayClassification,

@@ -40,10 +40,12 @@ import { Icon } from './Icon';
  */
 
 type LogRecord = {
+  v?: number;
   c: string;
+  s?: number;
   t: number;
   id?: string;
-  kind?: 'snapshot';
+  kind?: 'op' | 'snapshot';
   p?: unknown;
   /** Captured undo params (set for REVERTABLE_MUTATIONS in
    *  bridge.ts / local-history.ts). When present, Revert is enabled. */
@@ -132,10 +134,7 @@ export function HistoryPanel() {
                 >
                   {clientNames.get(rec.c) ?? `client ${rec.c.slice(0, 6)}`}
                 </div>
-                <time
-                  className="history-list__when"
-                  dateTime={new Date(rec.t).toISOString()}
-                >
+                <time className="history-list__when" dateTime={new Date(rec.t).toISOString()}>
                   {formatTime(rec.t)}
                 </time>
                 <div className="history-list__what">{describe(rec)}</div>
@@ -178,19 +177,21 @@ function describe(rec: LogRecord): string {
       const cellCount = countCells(p?.cellValue);
       return cellCount === 1 ? 'Edited 1 cell' : `Edited ${cellCount} cells`;
     }
-    case 'sheet.mutation.set-style':
-      return 'Changed cell style';
+    case 'sheet.mutation.set.numfmt':
+      return 'Formatted numbers';
+    case 'sheet.mutation.remove.numfmt':
+      return 'Cleared number format';
     case 'sheet.mutation.insert-row':
       return `Inserted ${p?.rowCount ?? ''} row(s)`.trim();
     case 'sheet.mutation.insert-col':
       return `Inserted ${p?.colCount ?? ''} column(s)`.trim();
-    case 'sheet.mutation.remove-row':
+    case 'sheet.mutation.remove-rows':
       return 'Deleted row(s)';
     case 'sheet.mutation.remove-col':
       return 'Deleted column(s)';
     case 'sheet.mutation.move-rows':
       return 'Moved row(s)';
-    case 'sheet.mutation.move-cols':
+    case 'sheet.mutation.move-columns':
       return 'Moved column(s)';
     case 'sheet.mutation.set-row-hidden':
       return 'Hid row(s)';
@@ -202,6 +203,8 @@ function describe(rec: LogRecord): string {
       return 'Showed column(s)';
     case 'sheet.mutation.set-worksheet-row-height':
       return 'Resized row(s)';
+    case 'sheet.mutation.set-worksheet-row-auto-height':
+      return 'Auto-sized row(s)';
     case 'sheet.mutation.set-worksheet-col-width':
       return 'Resized column(s)';
     case 'sheet.mutation.add-worksheet-merge':
@@ -220,11 +223,11 @@ function describe(rec: LogRecord): string {
       return p?.hidden ? 'Hid a sheet' : 'Showed a sheet';
     case 'sheet.mutation.set-frozen':
       return 'Changed freeze panes';
-    case 'sheet.mutation.add-hyper-link':
+    case 'sheets.mutation.add-hyper-link':
       return 'Added a hyperlink';
-    case 'sheet.mutation.remove-hyper-link':
+    case 'sheets.mutation.remove-hyper-link':
       return 'Removed a hyperlink';
-    case 'sheet.mutation.update-hyper-link':
+    case 'sheets.mutation.update-hyper-link':
       return 'Updated a hyperlink';
     default:
       return id.replace(/^sheet\.mutation\./, '') || 'Change';

@@ -19,6 +19,7 @@ import type { FUniver } from '@univerjs/core/facade';
 import type { IWorkbookData } from '@univerjs/core';
 import { ICommandService, type ICommandInfo, type IExecutionOptions } from '@univerjs/core';
 import { SetRangeValuesUndoMutationFactory } from '@univerjs/sheets';
+import type { CasualSheetsAPI } from '../sheets/api';
 import { deepRewriteUnitId, rewriteJson1OpPathUnitId } from './bridge-helpers';
 import { ensurePluginByName, type LazyPluginGroup } from '../univer';
 import {
@@ -28,6 +29,18 @@ import {
   withRetry,
   type ReplayFailureRecord,
 } from './replay-retry';
+import {
+  buildReplayPlan,
+  COLLAB_LOG_PROTOCOL_VERSION,
+  CollabProtocolError,
+  isPrefix,
+  mergeFrontier,
+  recordId,
+  type MutationRecord,
+  type OpRecord,
+  type ReplayPlan,
+  type SnapshotRecord,
+} from './replay-plan';
 
 /**
  * Map mutation ids to the lazy-plugin group that owns the matching
@@ -51,9 +64,9 @@ const MUTATION_TO_LAZY_GROUP: Record<string, LazyPluginGroup> = {
   'sheet.mutation.remove-filter': 'filter',
   'sheet.mutation.update-note': 'note',
   'sheet.mutation.remove-note': 'note',
-  'sheet.mutation.add-hyper-link': 'hyperlink',
-  'sheet.mutation.remove-hyper-link': 'hyperlink',
-  'sheet.mutation.update-hyper-link': 'hyperlink',
+  'sheets.mutation.add-hyper-link': 'hyperlink',
+  'sheets.mutation.remove-hyper-link': 'hyperlink',
+  'sheets.mutation.update-hyper-link': 'hyperlink',
   'data-validation.mutation.addRule': 'dv',
   'data-validation.mutation.removeRule': 'dv',
   'data-validation.mutation.updateRule': 'dv',
@@ -79,53 +92,59 @@ type Awareness = { getStates(): Map<number, any> };
 /**
  * Yjs ↔ Univer mutation bridge. See docs/CO-EDITING.md for the design.
  *
- * Strategy: every non-collab mutation gets serialized into a Y.Array log;
- * peers replay each entry with `fromCollab: true`. The log is the source
- * of truth — late joiners read the whole array on connect via Yjs sync
- * and replay it once, ending up at the same state.
+ * Strategy: every non-collab mutation gets a stable client/sequence id and is
+ * serialized into a Y.Array log. Peers replay the logical v2 plan strictly in
+ * order with `fromCollab: true`. If a concurrent insert changes the already
+ * applied prefix, the bridge restores a known workbook base and replays the
+ * canonical Yjs order so optimistic local execution cannot fork peers.
  *
  * Why an op log (not a state mirror): writing a per-mutation state mirror
  * for every mutation Univer emits (set-range-values, set-style, insert-row,
  * merge, hide-col, freeze, …) is dozens of handlers. The log generalizes
  * — any deterministic mutation just round-trips its params. Trade-off: no
  * per-cell CRDT merging on concurrent writes (Yjs orders inserts, then
- * Univer re-executes them; last writer wins at the mutation level). For
- * v1 that matches expectations.
+ * Univer re-executes them; last writer wins at the mutation level).
  *
  * Echo-loop guard (per CLAUDE.md):
- *   - Records carry the emitter's `clientId`. The observer skips records
- *     it emitted itself (otherwise we'd double-apply our own writes).
+ *   - Records carry a stable id. A local record is skipped only while the
+ *     canonical prefix has not moved; after a base restore it is replayed too.
  *   - Remote applies pass `fromCollab: true` so Univer's
  *     `onMutationExecutedForCollab` listener filters them back out via the
- *     options check below.
+ *     private options identity check below.
+ *   - Univer mutations marked `onlyLocal` or `fromChangeset` are deliberately
+ *     non-replicating runtime/snapshot work and never become source log ops.
  */
 
 const LOG_KEY = 'ops';
+const COMPACTION_ORIGIN = Symbol('casual-sheets-compaction-v2');
 
 /**
  * Allowlist of mutation ids we sync. Listed explicitly to keep
- * undocumented / version-volatile mutations out of the log — anything
- * not here just stays local. Easier to add new ids than to debug a
- * silent corruption from a mutation that secretly references local
- * state (selections, render skeletons, etc.).
+ * undocumented / version-volatile mutations out of the log. An unlisted
+ * state mutation marks the browser unsafe for compaction so it cannot become
+ * a divergent room base. Easier to add new ids than to debug corruption from
+ * a mutation that secretly references local state (render skeletons, etc.).
  */
 export const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   // Cell-level — values, formulas, styles, rich text.
   'sheet.mutation.set-range-values',
-  'sheet.mutation.set-style',
+  // Number formats are separate eager-plugin mutations in Univer 0.25.
+  'sheet.mutation.set.numfmt',
+  'sheet.mutation.remove.numfmt',
   // Row / column structural.
   'sheet.mutation.insert-row',
   'sheet.mutation.insert-col',
-  'sheet.mutation.remove-row',
+  'sheet.mutation.remove-rows',
   'sheet.mutation.remove-col',
   'sheet.mutation.move-rows',
-  'sheet.mutation.move-cols',
+  'sheet.mutation.move-columns',
   'sheet.mutation.set-row-hidden',
   'sheet.mutation.set-row-visible',
   'sheet.mutation.set-col-hidden',
   'sheet.mutation.set-col-visible',
   'sheet.mutation.set-worksheet-row-height',
   'sheet.mutation.set-worksheet-row-is-auto-height',
+  'sheet.mutation.set-worksheet-row-auto-height',
   'sheet.mutation.set-worksheet-col-width',
   // Merges.
   'sheet.mutation.add-worksheet-merge',
@@ -142,9 +161,9 @@ export const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   // Freeze.
   'sheet.mutation.set-frozen',
   // Hyperlinks (sheets-hyper-link).
-  'sheet.mutation.add-hyper-link',
-  'sheet.mutation.remove-hyper-link',
-  'sheet.mutation.update-hyper-link',
+  'sheets.mutation.add-hyper-link',
+  'sheets.mutation.remove-hyper-link',
+  'sheets.mutation.update-hyper-link',
   // Tab colour — picks up the right-click "Tab color" menu.
   'sheet.mutation.set-tab-color',
   // Move + sort. Without these, a peer's cut-and-paste-cell-block or
@@ -217,14 +236,10 @@ export const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
   // but cheap to propagate when it does happen. Without these,
   // renaming the workbook or toggling gridlines silently stays
   // local-only — confusing in a shared room.
-  // NOTE: `set-worksheet-right-to-left` is intentionally NOT here —
-  // neither the command nor the mutation is registered in
-  // @univerjs/sheets@0.22.1 (it's exported but never wired up by any
-  // plugin), so nothing in our app can emit it. Add it back if a
-  // future Univer bump registers it.
   'sheet.mutation.set-workbook-name',
   'sheet.mutation.set-worksheet-row-count',
   'sheet.mutation.set-worksheet-column-count',
+  'sheet.mutation.set-worksheet-right-to-left',
   'sheet.mutation.toggle-gridlines',
   'sheet.mutation.set-gridlines-color',
 ]);
@@ -239,48 +254,6 @@ export const SYNCED_MUTATIONS: ReadonlySet<string> = new Set([
 export const REVERTABLE_MUTATIONS: ReadonlySet<string> = new Set([
   'sheet.mutation.set-range-values',
 ]);
-
-type MutationRecord = {
-  kind?: 'op';
-  /** Yjs client id of the emitter (string for portability via JSON). */
-  c: string;
-  /** Wall-clock at emit; diagnostic only. */
-  t: number;
-  /** Mutation id (e.g. `sheet.mutation.set-range-values`). */
-  id: string;
-  /** Mutation params, JSON-serializable. */
-  p: unknown;
-  /** Optional undo params — set for mutations in REVERTABLE_MUTATIONS,
-   *  computed via Univer's `*UndoMutationFactory` BEFORE the redo
-   *  runs (so it reads pre-edit state). The HistoryPanel's Revert
-   *  button feeds this back into `executeCommand(rec.id, rec.u)` to
-   *  restore the pre-edit values. Older log entries without `u`
-   *  predate this feature — their Revert button stays disabled. */
-  u?: unknown;
-};
-
-/**
- * Snapshot entry written into the op log by the designated compactor
- * client (lowest awareness clientId). Replaces all prior entries; any
- * mutation records that come AFTER it in the array are post-compaction
- * incremental edits and replay normally.
- *
- * Pipeline Stage 6 — keeps long-lived rooms from accumulating an
- * unbounded op log. A 24-hour room with light editing could otherwise
- * grow to thousands of records, slowing every late join. Compaction
- * collapses it back to "snapshot + a handful of recent ops".
- */
-type SnapshotRecord = {
-  kind: 'snapshot';
-  c: string;
-  t: number;
-  /** Full IWorkbookData. Yes, this is large for big workbooks — but
-   *  it ships once per compaction interval, not per mutation. The
-   *  trade-off vs. unbounded op-log growth is straightforward. */
-  wb: IWorkbookData;
-};
-
-type OpRecord = MutationRecord | SnapshotRecord;
 
 export type BridgeHandle = {
   /** Underlying Yjs document — exposed so tests / devtools can introspect. */
@@ -317,6 +290,12 @@ export type BridgeHandle = {
    * Returns a teardown.
    */
   subscribeReplayDeadLetter: (cb: (entries: readonly ReplayFailureRecord[]) => void) => () => void;
+  /** Resolves after the currently-known log is applied or replay is blocked. */
+  whenReplaySettled: () => Promise<void>;
+  /** Whether replay is halted at an unapplied protocol/mutation failure. */
+  isReplayBlocked: () => boolean;
+  /** Diagnostic/manual compaction hook. Returns false when safety gates fail. */
+  forceCompact: () => boolean;
 };
 
 export type BridgeOptions = {
@@ -329,9 +308,9 @@ export type BridgeOptions = {
   role?: 'view' | 'write';
   /**
    * Provider's Yjs awareness. Used (a) to determine which peer is the
-   * designated compactor (lowest known clientId — deterministic and
-   * race-free) and (b) so view-only clients don't try to compact. If
-   * omitted, compaction is disabled.
+   * designated compactor inside one connected awareness view (lowest known
+   * clientId) and (b) so view-only clients don't try to compact. Awareness is
+   * not partition-safe election. If omitted, compaction is disabled.
    */
   awareness?: Awareness;
   /**
@@ -346,22 +325,44 @@ export type BridgeOptions = {
    * which silently forks state on late joiners.
    */
   onSnapshotReceived?: (wb: IWorkbookData) => void | Promise<void>;
+  /**
+   * Preservation-aware snapshot reader. Required for safe reorder recovery and
+   * compaction when `api` is a bare FUniver facade. Passing CasualSheetsAPI
+   * supplies `api.getContent()` automatically.
+   */
+  getContent?: () => IWorkbookData | null;
+  /**
+   * Client compaction policy. `off` keeps replay/awareness but prevents every
+   * browser snapshot write (use this when the host owns validated checkpoints).
+   * `manual` exposes only `forceCompact`; `auto` opts into the idle timer.
+   * Defaults to `off`: awareness cannot elect one writer safely across a
+   * network partition, so automatic browser checkpoints must be explicit.
+   */
+  compaction?: 'auto' | 'manual' | 'off';
 };
 
 /**
  * Compaction thresholds. We only attempt to compact when the log has
  * grown past `COMPACT_OPS_THRESHOLD` AND at least
  * `COMPACT_MIN_INTERVAL_MS` has elapsed since the last compaction.
- * The interval guard prevents two designated-writer candidates from
- * racing the compaction; the ops threshold avoids compacting a quiet
- * room over and over.
+ * The interval guard limits checkpoint churn after awareness changes; it is
+ * not partition-safe consensus (which is why auto mode is opt-in). The ops
+ * threshold avoids compacting a quiet room over and over.
  */
 const COMPACT_OPS_THRESHOLD = 200;
 const COMPACT_MIN_INTERVAL_MS = 60_000;
 const COMPACT_CHECK_INTERVAL_MS = 30_000;
 
-export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}): BridgeHandle {
+export type BridgeAttachable = FUniver | CasualSheetsAPI;
+
+export function startBridge(
+  attachable: BridgeAttachable,
+  doc: Y.Doc,
+  opts: BridgeOptions = {},
+): BridgeHandle {
+  const api = resolveFacade(attachable);
   const role = opts.role ?? 'write';
+  const compactionMode = opts.compaction ?? 'off';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const injector = (api as any)._injector as { get: (token: unknown) => unknown } | undefined;
   if (!injector) {
@@ -376,11 +377,28 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     };
     executeCommand: (id: string, params: unknown, options?: IExecutionOptions) => Promise<unknown>;
   };
+  // `fromCollab` is part of Univer's public options surface, so any host caller
+  // can forge it. Use object identity as the bridge-owned capability for echo
+  // suppression; keep the boolean only as the downstream Univer signal.
+  const replayExecutionOptions: IExecutionOptions = { fromCollab: true };
 
   const log = doc.getArray<OpRecord>(LOG_KEY);
   const myClientId = String(doc.clientID);
-  // One-shot guard for the __splitChunk__ regression watchdog below.
-  let splitChunkWarned = false;
+  const casualApi = isCasualSheetsAPI(attachable) ? attachable : null;
+  const readContent = opts.getContent ?? (casualApi ? () => casualApi.getContent() : null);
+  const applySnapshot =
+    opts.onSnapshotReceived ?? (casualApi ? (wb: IWorkbookData) => casualApi.setContent(wb) : null);
+  let initialBase: IWorkbookData | null = null;
+  if (readContent) {
+    try {
+      const content = readContent();
+      initialBase = content ? cloneWorkbook(content) : null;
+    } catch (err) {
+      console.warn('[collab] failed to capture the initial replay base', err);
+    }
+  }
+  let nextSequence = 0;
+  let disposed = false;
 
   // Replay-failure tracking — surfaces silent divergences to the UI.
   // Every time a remote mutation throws on apply, this counter ticks
@@ -420,7 +438,7 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // through with no `u` field — the HistoryPanel disables Revert.
   const subBeforeDispose = cmdSvc.beforeCommandExecuted((info, options) => {
     if (role === 'view') return;
-    if (options?.fromCollab) return;
+    if (options === replayExecutionOptions || options?.onlyLocal || options?.fromChangeset) return;
     if (!REVERTABLE_MUTATIONS.has(info.id)) return;
     try {
       // The factory's first arg is described as "accessor" — Univer's
@@ -435,14 +453,66 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     }
   });
 
-  // Local → Yjs: append every synced mutation to the log. Skipped for
-  // view-role clients — their local edits never leave their browser.
-  //
-  // We BATCH the appends across a microtask window so a paste / sort
-  // that emits many mutations doesn't trigger one Yjs encode per
-  // mutation — that path was the main contributor to "large action
-  // takes 3–5 s" on big workbooks. Single Y.Array.push with N entries
-  // is one transaction, one encode, one WS frame.
+  // Stable replay state. Positional cursors are unsafe for a Y.Array: a
+  // concurrent append can merge before the cursor and be skipped forever.
+  // We remember the exact logical record-id prefix applied to this workbook.
+  // If Yjs later inserts before it, restore a known base and replay the final
+  // deterministic order.
+  let appliedIds: string[] = [];
+  const locallyAppliedIds = new Set<string>();
+  // A counter, rather than a boolean, matters across an awaited workbook swap:
+  // a local edit can request ANOTHER rebuild while the current rebuild is in
+  // flight. Clearing a boolean after the await would erase that request and
+  // let the optimistic edit be skipped even though the swap discarded it.
+  let rebuildGeneration = 0;
+  let handledRebuildGeneration = 0;
+  let replayBlocked: { key: string; message: string } | null = null;
+  let reportedBlockedKey: string | null = null;
+  let replayInFlight: Promise<void> | null = null;
+  let replayRequested = false;
+  let logRevision = 0;
+  let localStateUnsafe = false;
+  let localUnsafeGeneration = 0;
+  let appendBlocked = false;
+
+  const requestRebuild = (): void => {
+    rebuildGeneration += 1;
+  };
+  const needsRebuild = (): boolean => handledRebuildGeneration < rebuildGeneration;
+
+  const reportBlocked = (
+    key: string,
+    id: string,
+    params: unknown,
+    err: unknown,
+    attempts: number,
+  ): void => {
+    const message = err instanceof Error ? err.message : String(err);
+    replayBlocked = { key, message };
+    console.warn('[collab] replay blocked at', id, err);
+    if (reportedBlockedKey === key) return;
+    reportedBlockedKey = key;
+    const now = Date.now();
+    noteReplayFailure({
+      id,
+      params,
+      lastError: message,
+      attempts,
+      firstFailedAt: now,
+      lastFailedAt: now,
+      classification: classifyReplayError(err),
+    });
+  };
+
+  const clearBlocked = (key?: string): void => {
+    if (!key && (localStateUnsafe || appendBlocked)) return;
+    if (key && replayBlocked?.key !== key) return;
+    replayBlocked = null;
+    reportedBlockedKey = null;
+  };
+
+  // Local → Yjs. Appends are batched across one microtask, but every record
+  // gets a stable per-client sequence before entering the batch.
   let pending: OpRecord[] = [];
   let flushScheduled = false;
   const flush = () => {
@@ -450,29 +520,42 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     if (pending.length === 0) return;
     const batch = pending;
     pending = [];
-    // doc.transact wraps the push in a single transaction so subscribers
-    // see one change event for the whole batch.
-    doc.transact(() => {
-      log.push(batch);
-    });
+    const recoveringAppend = appendBlocked;
+    try {
+      doc.transact(() => {
+        log.push(batch);
+      });
+      appendBlocked = false;
+      clearBlocked('local-log-append');
+      // A prior append failure means these optimistic edits may have
+      // interleaved with remote work while absent from the canonical log.
+      // Request this only AFTER the write succeeds; replayPending's drain flag
+      // makes the already-fired Y.Array observer loop back and rebuild.
+      if (recoveringAppend) {
+        requestRebuild();
+        void replayPending();
+      }
+    } catch (err) {
+      // The local workbook already contains these edits. Keep them queued and
+      // block compaction instead of silently publishing a snapshot without them.
+      pending = [...batch, ...pending];
+      appendBlocked = true;
+      reportBlocked('local-log-append', '__local_log_append__', batch, err, 1);
+    }
   };
   const subDispose = cmdSvc.onMutationExecutedForCollab((info, options) => {
     if (role === 'view') return;
-    if (options?.fromCollab) return;
-    if (!SYNCED_MUTATIONS.has(info.id)) return;
-    // Univer 0.22.x doesn't use the chunked-mutation protocol that
-    // earlier versions (and the CLAUDE.md hard rule) referenced. If a
-    // future upgrade reintroduces __splitChunk__, mutations split
-    // across multiple emissions will silently corrupt on peers because
-    // our op-log doesn't reassemble them. Warn loudly the FIRST time
-    // we see one so an upgrade regression surfaces in the console
-    // instead of as a mysterious paste-corruption bug.
-    if (!splitChunkWarned && hasSplitChunkMarker(info.params)) {
-      splitChunkWarned = true;
-      console.warn(
-        '[collab] mutation "%s" carries __splitChunk__ — Univer reintroduced chunked mutations; bridge needs reassembly logic. See docs/COLLAB-FIXES.md issue 8.',
-        info.id,
-      );
+    if (options === replayExecutionOptions || options?.onlyLocal || options?.fromChangeset) return;
+    if (!SYNCED_MUTATIONS.has(info.id)) {
+      // A state mutation outside the protocol makes this browser an unsafe
+      // compaction source. Surface it and keep receiving peer ops, but never
+      // publish this local workbook as the room base. Do not put it in the
+      // remote-replay dead-letter feed: formula/runtime mutations are expected
+      // to remain local, and labelling one as a peer edit that failed is false.
+      localStateUnsafe = true;
+      localUnsafeGeneration += 1;
+      console.warn('[collab] local mutation is not collaboration-safe:', info.id);
+      return;
     }
     // Pair with the undo params we captured at beforeCommandExecuted
     // (only set for REVERTABLE_MUTATIONS). The before-hook ran a few
@@ -481,8 +564,11 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     const key = JSON.stringify(info.params);
     const undoParams = pendingUndo.get(key);
     pendingUndo.delete(key);
-    pending.push({
+    const rec: MutationRecord = {
+      v: COLLAB_LOG_PROTOCOL_VERSION,
+      kind: 'op',
       c: myClientId,
+      s: nextSequence++,
       t: Date.now(),
       id: info.id,
       // Univer mutation params are already JSON-friendly (numbers, strings,
@@ -491,7 +577,20 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
       // mutation from SYNCED_MUTATIONS.
       p: info.params as unknown,
       ...(undoParams !== undefined ? { u: undoParams } : {}),
-    });
+    };
+    locallyAppliedIds.add(recordId(rec));
+    if (replayInFlight || replayBlocked) requestRebuild();
+    if (hasSplitChunkMarker(info.params)) {
+      // Univer 0.25 marks each independent slice of a large paste/copy with
+      // __splitChunk__ so collaboration transports it as a separate changeset
+      // instead of one oversized frame. Preserve that boundary in Yjs while
+      // stable ids keep the slices strictly ordered on replay.
+      if (pending.length > 0) flush();
+      pending.push(rec);
+      flush();
+      return;
+    }
+    pending.push(rec);
     if (!flushScheduled) {
       flushScheduled = true;
       // queueMicrotask runs after the current command completes but
@@ -501,165 +600,207 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     }
   });
 
-  // Replay tracking: how many entries we've already executed locally so we
-  // don't double-apply on incremental updates. On connect, replay everything
-  // we haven't seen — that's how late joiners catch up.
-  let appliedCount = 0;
-  // Single-flight guard: when a snapshot record needs an async workbook
-  // swap, subsequent records have to wait for the swap to land — otherwise
-  // they execute against the old unit id and silently fork state. We also
-  // want a single observer callback at a time so re-entrant Yjs events
-  // don't interleave half-applied loops.
-  let replayInFlight: Promise<void> | null = null;
+  const applyMutation = async (rec: MutationRecord): Promise<boolean> => {
+    const stableId = recordId(rec);
+    if (!SYNCED_MUTATIONS.has(rec.id)) {
+      reportBlocked(
+        stableId,
+        rec.id,
+        rec.p,
+        new CollabProtocolError(`unsupported collaboration mutation ${rec.id}`),
+        1,
+      );
+      return false;
+    }
+
+    const params = rewriteUnitId(api, rec.p, rec.id);
+    const sheetBefore = rec.id === 'sheet.mutation.insert-sheet' ? captureActiveSheetId(api) : null;
+    const lazyGroup = MUTATION_TO_LAZY_GROUP[rec.id];
+    const attempt = async (): Promise<void> => {
+      if (lazyGroup) await ensurePluginByName(lazyGroup);
+      const result = await cmdSvc.executeCommand(rec.id, params, replayExecutionOptions);
+      if (result === false) throw new Error(`mutation handler rejected ${rec.id}`);
+    };
+    try {
+      await withRetry(
+        attempt,
+        TRANSIENT_RETRY_DELAYS_MS,
+        (err) => classifyReplayError(err) === 'transient',
+      );
+      clearBlocked(stableId);
+      return true;
+    } catch (err) {
+      // A mutation handler is expected to be atomic, but fail closed even if a
+      // future handler mutates partially before throwing/returning false. The
+      // next retry starts from the known base and replays the successful prefix.
+      requestRebuild();
+      const classification = classifyReplayError(err);
+      reportBlocked(
+        stableId,
+        rec.id,
+        rec.p,
+        err,
+        classification === 'transient' ? 1 + TRANSIENT_RETRY_DELAYS_MS.length : 1,
+      );
+      return false;
+    } finally {
+      if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
+    }
+  };
+
+  const applyReplayBase = async (wb: IWorkbookData, stableId: string): Promise<boolean> => {
+    if (!applySnapshot) {
+      reportBlocked(
+        stableId,
+        '__snapshot__',
+        undefined,
+        new CollabProtocolError(
+          'replay requires a snapshot applier; pass CasualSheetsAPI or onSnapshotReceived',
+        ),
+        1,
+      );
+      return false;
+    }
+    const unsafeAtStart = localUnsafeGeneration;
+    try {
+      await applySnapshot(cloneWorkbook(wb));
+      // A full base restore discards any unsupported local-only mutation that
+      // previously made this browser unsafe as a compaction source. Do not
+      // clear one that occurred WHILE the async swap was in flight: it may
+      // have landed on the newly mounted workbook and is not in the log.
+      if (localUnsafeGeneration === unsafeAtStart) localStateUnsafe = false;
+      clearBlocked(stableId);
+      return true;
+    } catch (err) {
+      reportBlocked(stableId, '__snapshot__', undefined, err, 1);
+      return false;
+    }
+  };
+
+  const readPlan = (): ReplayPlan | null => {
+    try {
+      const plan = buildReplayPlan(log.toArray());
+      for (const rec of plan.records) {
+        if (rec.c === myClientId) nextSequence = Math.max(nextSequence, rec.s + 1);
+      }
+      return plan;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      reportBlocked(`protocol:${message}`, '__protocol__', log.toArray(), err, 1);
+      return null;
+    }
+  };
+
+  const runReplay = async (): Promise<void> => {
+    let replayOwnMutations = false;
+    let cachedPlan: ReplayPlan | null = null;
+    let cachedPlanRevision = -1;
+    while (!disposed) {
+      // Rebuilding the full validated plan after every awaited command makes a
+      // late join O(n²). Reuse it while the Y.Array is unchanged; the observer
+      // increments logRevision synchronously, so any concurrent insert still
+      // forces a fresh plan before the next record is touched.
+      if (!cachedPlan || cachedPlanRevision !== logRevision) {
+        cachedPlan = readPlan();
+        if (!cachedPlan) return;
+        cachedPlanRevision = logRevision;
+      }
+      const plan = cachedPlan;
+
+      if (needsRebuild() || !isPrefix(appliedIds, plan.ids)) {
+        const rebuildTarget = rebuildGeneration;
+        // A snapshot in the plan is itself the reset base and is applied below.
+        // Otherwise restore the preservation-aware workbook captured on attach.
+        if (!plan.snapshot) {
+          if (!initialBase) {
+            reportBlocked(
+              'missing-initial-base',
+              '__snapshot__',
+              undefined,
+              new CollabProtocolError(
+                'concurrent replay reorder requires api.getContent() captured at attach time',
+              ),
+              1,
+            );
+            return;
+          }
+          if (!(await applyReplayBase(initialBase, 'initial-base'))) return;
+        }
+        appliedIds = [];
+        replayOwnMutations = true;
+        // Preserve any newer request raised while applyReplayBase awaited.
+        handledRebuildGeneration = Math.max(handledRebuildGeneration, rebuildTarget);
+      }
+
+      if (appliedIds.length === plan.ids.length) {
+        clearBlocked();
+        return;
+      }
+
+      if (plan.snapshot && appliedIds.length === 0) {
+        const snapshotId = recordId(plan.snapshot);
+        if (!(await applyReplayBase(plan.snapshot.wb, snapshotId))) return;
+        appliedIds.push(snapshotId);
+        replayOwnMutations = true;
+        continue;
+      }
+
+      const mutationIndex = appliedIds.length - (plan.snapshot ? 1 : 0);
+      const rec = plan.mutations[mutationIndex];
+      if (!rec) {
+        reportBlocked(
+          'invalid-replay-plan',
+          '__protocol__',
+          plan.ids,
+          new CollabProtocolError('replay plan and applied prefix are inconsistent'),
+          1,
+        );
+        return;
+      }
+      const stableId = recordId(rec);
+      if (!replayOwnMutations && locallyAppliedIds.has(stableId)) {
+        locallyAppliedIds.delete(stableId);
+        appliedIds.push(stableId);
+        clearBlocked(stableId);
+        continue;
+      }
+      if (!(await applyMutation(rec))) return;
+      locallyAppliedIds.delete(stableId);
+      appliedIds.push(stableId);
+      // Re-read after every await. An update may have inserted before this
+      // record while a plugin or command handler was resolving.
+    }
+  };
 
   const replayPending = (): Promise<void> => {
+    replayRequested = true;
     if (replayInFlight) return replayInFlight;
-    // CRITICAL: assign `replayInFlight = p` BEFORE invoking the async
-    // IIFE. The previous version was:
-    //   replayInFlight = (async () => { try { ... } finally { replayInFlight = null; } })();
-    // For an empty log the IIFE body has no `await` and runs
-    // synchronously — the `finally` set `replayInFlight = null`
-    // BEFORE the outer `replayInFlight = ...promise...` assignment,
-    // which then OVERWROTE the null with the freshly-resolved promise.
-    // Result: `replayInFlight` stayed truthy forever and every
-    // subsequent `replayPending()` returned immediately without
-    // doing anything — remote mutations sat in the Yjs log untouched.
-    // Tracker: docs/COLLAB-FIXES.md issue #29.
-    let resolveOuter!: () => void;
-    const p = new Promise<void>((r) => {
-      resolveOuter = r;
-    });
-    replayInFlight = p;
-    void (async () => {
-      try {
-        // Loop until we catch up. `log.length` may grow while we're awaiting
-        // a snapshot apply, so re-read on each pass.
-
-        while (true) {
-          const total = log.length;
-          // Stage 6 compaction shrinks the log atomically. If our cursor
-          // is past the new end, reset to 0 and replay the snapshot record
-          // (which is always at position 0 right after compaction).
-          if (appliedCount > total) appliedCount = 0;
-          if (appliedCount >= total) {
-            break;
-          }
-          const rec = log.get(appliedCount);
-          appliedCount += 1;
-          if (!rec) continue;
-          if (rec.c === myClientId) continue; // our own write — Univer already ran it
-          if (rec.kind === 'snapshot') {
-            // Compaction record from a peer — replace the local workbook
-            // with the snapshot. Without `onSnapshotReceived` wired (e.g.
-            // in unit tests that drive the bridge directly), skip the
-            // record; the next post-snapshot mutations may still apply
-            // cleanly if state is close enough.
-            //
-            // CRITICAL: await the handler. Univer's unit swap is async, and
-            // continuing the loop before the new unit is wired into the
-            // facade means rewriteUnitId() reads the OLD active unit and
-            // every subsequent mutation targets a stale workbook.
-            if (opts.onSnapshotReceived) {
-              try {
-                await opts.onSnapshotReceived(rec.wb);
-              } catch (err) {
-                console.warn('[collab] failed to apply compaction snapshot', err);
-              }
-            } else {
-              console.warn(
-                '[collab] received compaction snapshot but no handler — workbook may diverge',
-              );
-            }
-            continue;
-          }
-          // Each browser creates its workbook with its OWN random unit id, so
-          // raw replay would target the sender's unit (which doesn't exist
-          // here) — rewrite to our local active unit. Sheet ids (`sheet-1`)
-          // are already deterministic across the room.
-          const params = rewriteUnitId(api, rec.p, rec.id);
-          // Univer's ActiveWorksheetController unconditionally switches
-          // the active sheet on every insert-sheet mutation — there's no
-          // `fromCollab` opt-out inside Univer. Save our current active
-          // sheet around the replay and restore it after the next tick
-          // so peers don't get yanked to whichever sheet someone else
-          // just created.
-          const sheetBefore =
-            rec.id === 'sheet.mutation.insert-sheet' ? captureActiveSheetId(api) : null;
-          // Lazy-plugin gate: if this mutation belongs to a plugin we
-          // haven't mounted yet (CF, tables, filter, notes,
-          // hyperlinks), the mutation handler is missing and the
-          // change drops silently. AWAIT plugin load before executing.
-          // For mutations not in the map, this resolves to undefined
-          // and the executeCommand fires immediately.
-          const lazyGroup = MUTATION_TO_LAZY_GROUP[rec.id];
-          // Fire-and-forget; ordering is preserved by Univer's command bus
-          // serialising its own dispatch.
-          //
-          // Failure handling is two-class (see replay-retry.ts):
-          //   - TRANSIENT (dynamic-import chunk-load failures) → retry
-          //     with 300/900/2700 ms backoff. The lazy-plugin gate is
-          //     the common source: a network flap during webpack chunk
-          //     fetch rejects the import; retries land cleanly once
-          //     connectivity recovers.
-          //   - PERMANENT (malformed params, unknown command id, range
-          //     out-of-bounds) → dead-letter immediately. Retrying
-          //     just re-throws the same stack.
-          //
-          // Final failure (after retries exhausted OR permanent on
-          // first throw) increments `replayFailures` AND appends to
-          // the dead-letter ring buffer for the UI to render.
-          const attempt = () =>
-            (lazyGroup ? ensurePluginByName(lazyGroup) : Promise.resolve()).then(() =>
-              cmdSvc.executeCommand(rec.id, params, { fromCollab: true }),
-            );
-          void withRetry(
-            attempt,
-            TRANSIENT_RETRY_DELAYS_MS,
-            (err) => classifyReplayError(err) === 'transient',
-          )
-            .then(() => {
-              if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
-            })
-            .catch((err: unknown) => {
-              const cls = classifyReplayError(err);
-              const message = err instanceof Error ? err.message : String(err);
-              console.warn(
-                '[collab] replay failed for',
-                rec.id,
-                '(class:',
-                cls + ',',
-                'gave up)',
-                err,
-              );
-              const now = Date.now();
-              const failure: ReplayFailureRecord = {
-                id: rec.id,
-                params: rec.p,
-                lastError: message,
-                // Permanent = 1 attempt; transient = 1 + N retries
-                // configured in TRANSIENT_RETRY_DELAYS_MS.
-                attempts: cls === 'transient' ? 1 + TRANSIENT_RETRY_DELAYS_MS.length : 1,
-                firstFailedAt: now,
-                lastFailedAt: now,
-                classification: cls,
-              };
-              noteReplayFailure(failure);
-              if (sheetBefore) restoreActiveSheetId(api, sheetBefore);
-            });
+    const flight = (async () => {
+      do {
+        replayRequested = false;
+        try {
+          await runReplay();
+        } catch (err) {
+          reportBlocked('unexpected-replay-error', '__replay__', undefined, err, 1);
         }
-      } finally {
-        // Only clear if we're still the in-flight token. A future
-        // re-entrant guard scheme might let multiple flights coexist;
-        // this check keeps us correct under that.
-        if (replayInFlight === p) replayInFlight = null;
-        resolveOuter();
-      }
+        // An observer can fire while runReplay is awaiting a plugin, command,
+        // or snapshot. Drain that request before publishing a settled flight.
+      } while (replayRequested && !disposed);
     })();
-    return p;
+    replayInFlight = flight;
+    void flight.finally(() => {
+      if (replayInFlight !== flight) return;
+      replayInFlight = null;
+      // Close the narrow microtask race where an observer sees this already-
+      // resolved flight after the loop's final condition but before finally.
+      if (replayRequested && !disposed) void replayPending();
+    });
+    return flight;
   };
 
   const observer = (event: Y.YArrayEvent<OpRecord>) => {
-    void event;
+    if (event.transaction.origin === COMPACTION_ORIGIN) return;
+    logRevision += 1;
     void replayPending();
   };
   log.observe(observer);
@@ -670,76 +811,84 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
   // once on mount to catch up.
   void replayPending();
 
-  // ── Stage 6: periodic compaction by the designated writer ────────
-  // Only one client in the room compacts at a time — the one with the
-  // lowest known clientId. The interval guard prevents an over-eager
-  // compactor from churning. View-only clients never compact.
-  //
-  // Seed `lastCompactedAt` to `now` so the first auto-compaction
-  // observes the full COMPACT_MIN_INTERVAL_MS cooldown. Without this
-  // seed, a fresh session that immediately crosses the op threshold
-  // (e.g. a quick paste of >200 cells, or the e2e harness) would see
-  // an instant first compaction before the test could observe the
-  // pre-compaction log. The explicit `__bridgeForceCompact` path
-  // bypasses this guard, so the test still works.
+  // ── Periodic, preservation-aware compaction ─────────────────────
+  // A browser may compact only after it has applied the exact current replay
+  // plan. Any pending, failed, reordered, or still-running replay makes the
+  // attempt a no-op. This prevents a divergent browser from becoming the next
+  // room base.
   let lastCompactedAt = Date.now();
-  // Both scheduling paths declared in outer scope so the dispose
-  // closure below can clean up either one.
   let intervalHandle: ReturnType<typeof setInterval> | null = null;
   let idleHandle: number | null = null;
+  let tryCompact = (_ignoreCooldown = false): boolean => false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cic = (globalThis as any).cancelIdleCallback as undefined | ((id: number) => void);
-  if (role !== 'view' && opts.awareness) {
+  if (role !== 'view' && opts.awareness && readContent && compactionMode !== 'off') {
     const awareness = opts.awareness;
-    const tryCompact = (): void => {
+    tryCompact = (ignoreCooldown = false): boolean => {
       try {
-        if (log.length < COMPACT_OPS_THRESHOLD) return;
-        if (Date.now() - lastCompactedAt < COMPACT_MIN_INTERVAL_MS) return;
-        // Designated writer = lowest clientId currently in awareness.
-        // Math.min over the awareness keys, then compare to ours.
+        if (disposed) return false;
+        if (log.length < COMPACT_OPS_THRESHOLD) return false;
+        if (!ignoreCooldown && Date.now() - lastCompactedAt < COMPACT_MIN_INTERVAL_MS) return false;
+        if (
+          replayInFlight ||
+          replayBlocked ||
+          needsRebuild() ||
+          localStateUnsafe ||
+          appendBlocked
+        ) {
+          return false;
+        }
+        if (pending.length > 0 || flushScheduled) return false;
         const keys = Array.from(awareness.getStates().keys()) as number[];
-        if (keys.length === 0) return;
+        if (keys.length === 0) return false;
         const designated = Math.min(...keys);
-        if (designated !== doc.clientID) return;
-        // Snapshot the live workbook.
-        const wb = api.getActiveWorkbook();
-        if (!wb) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const snap = (wb as any).save() as IWorkbookData;
+        if (designated !== doc.clientID) return false;
+
+        const plan = readPlan();
+        if (!plan || replayBlocked) return false;
+        if (
+          appliedIds.length !== plan.ids.length ||
+          !appliedIds.every((id, index) => plan.ids[index] === id)
+        ) {
+          return false;
+        }
+
+        // Never call raw FWorkbook.save() here. CasualSheetsAPI.getContent()
+        // merges its opaque-resource shadow before returning the snapshot.
+        const content = readContent();
+        if (!content) return false;
+        const snap = cloneWorkbook(content);
+        const frontier = mergeFrontier(plan.snapshot?.frontier, plan.records);
+        nextSequence = Math.max(nextSequence, (frontier[myClientId] ?? -1) + 1);
         const snapshotRec: SnapshotRecord = {
+          v: COLLAB_LOG_PROTOCOL_VERSION,
           kind: 'snapshot',
           c: myClientId,
+          s: nextSequence++,
           t: Date.now(),
           wb: snap,
+          frontier,
         };
         const opsBefore = log.length;
-        // Atomic swap: clear then append. Yjs serializes the whole
-        // transaction so subscribers see one consistent change.
         doc.transact(() => {
           log.delete(0, log.length);
           log.push([snapshotRec]);
-        });
-        // We just rewrote the log; our cursor must stay PAST the
-        // snapshot (we already have its state). The replayer's
-        // appliedCount > length reset would otherwise re-apply our
-        // own snapshot which is a no-op but pointless.
-        appliedCount = 1;
+        }, COMPACTION_ORIGIN);
+        appliedIds = [recordId(snapshotRec)];
+        for (const id of locallyAppliedIds) {
+          const [clientId, sequence] = splitRecordId(id);
+          if (sequence <= (frontier[clientId] ?? -1)) locallyAppliedIds.delete(id);
+        }
+        clearBlocked();
         lastCompactedAt = Date.now();
         console.info('[collab] op-log compacted: %d ops → 1 snapshot record', opsBefore);
+        return true;
       } catch (err) {
         console.warn('[collab] compaction attempt failed', err);
+        return false;
       }
     };
-    // Schedule `tryCompact` via requestIdleCallback so the heavy
-    // `wb.save()` only runs when the main thread is genuinely idle —
-    // never mid-keystroke or mid-paste. The browser gives us a
-    // deadline; if it expires before we'd start, we skip and wait
-    // for the next tick. Fall back to a plain setInterval in
-    // environments without rIC (Safari < 18, some test runners).
-    //
-    // `wb.save()` itself can't move to a Web Worker (the Univer
-    // workbook is a main-thread object graph), so the realistic
-    // optimisation is "don't run it when the user is busy".
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ric = (globalThis as any).requestIdleCallback as
       | undefined
@@ -747,7 +896,7 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
           cb: (d: { didTimeout: boolean; timeRemaining: () => number }) => void,
           opts?: { timeout: number },
         ) => number);
-    if (typeof ric === 'function') {
+    if (compactionMode === 'auto' && typeof ric === 'function') {
       const scheduleNext = () => {
         idleHandle = ric(
           (deadline) => {
@@ -755,16 +904,16 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
             // empty-workbook save is <1 ms, big ones a few ms;
             // anything longer should defer to the next idle window).
             if (deadline.didTimeout || deadline.timeRemaining() > 5) {
-              tryCompact();
+              tryCompact(false);
             }
-            scheduleNext();
+            if (!disposed) scheduleNext();
           },
           { timeout: COMPACT_CHECK_INTERVAL_MS },
         );
       };
       scheduleNext();
-    } else {
-      intervalHandle = setInterval(tryCompact, COMPACT_CHECK_INTERVAL_MS);
+    } else if (compactionMode === 'auto') {
+      intervalHandle = setInterval(() => tryCompact(false), COMPACT_CHECK_INTERVAL_MS);
       intervalHandle.unref?.();
     }
 
@@ -780,16 +929,18 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
     (globalThis as any).__bridgeLogLength = () => log.length;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (globalThis as any).__bridgeForceCompact = () => {
-      // Bypass the COMPACT_MIN_INTERVAL_MS guard so the test
-      // doesn't have to sleep a minute.
-      lastCompactedAt = 0;
-      tryCompact();
+      return tryCompact(true);
     };
+  } else if (role !== 'view' && opts.awareness && !readContent && compactionMode !== 'off') {
+    console.warn(
+      '[collab] compaction disabled: pass CasualSheetsAPI or BridgeOptions.getContent so opaque resources are preserved',
+    );
   }
 
   return {
     doc,
     dispose: () => {
+      disposed = true;
       subDispose.dispose();
       subBeforeDispose.dispose();
       // Flush any pending batch so an edit-then-leave race doesn't drop
@@ -817,7 +968,41 @@ export function startBridge(api: FUniver, doc: Y.Doc, opts: BridgeOptions = {}):
         deadLetterSubscribers.delete(cb);
       };
     },
+    whenReplaySettled: async () => {
+      // Calling this also retries a blocked head, which lets a host resume
+      // after registering a lazily-loaded command/plugin.
+      // Flush synchronously instead of waiting for the queued microtask so the
+      // returned promise really covers every local edit known at call time.
+      if (pending.length > 0) flush();
+      await replayPending();
+      while (replayInFlight) await replayInFlight;
+    },
+    isReplayBlocked: () => replayBlocked !== null || localStateUnsafe || appendBlocked,
+    forceCompact: () => tryCompact(true),
   };
+}
+
+function isCasualSheetsAPI(api: BridgeAttachable): api is CasualSheetsAPI {
+  const candidate = api as Partial<CasualSheetsAPI>;
+  return (
+    typeof candidate.getContent === 'function' &&
+    typeof candidate.setContent === 'function' &&
+    !!candidate.univer
+  );
+}
+
+function resolveFacade(api: BridgeAttachable): FUniver {
+  return isCasualSheetsAPI(api) ? api.univer : api;
+}
+
+function cloneWorkbook(wb: IWorkbookData): IWorkbookData {
+  if (typeof structuredClone === 'function') return structuredClone(wb);
+  return JSON.parse(JSON.stringify(wb)) as IWorkbookData;
+}
+
+function splitRecordId(id: string): [string, number] {
+  const separator = id.lastIndexOf(':');
+  return [id.slice(0, separator), Number(id.slice(separator + 1))];
 }
 
 /**
@@ -912,16 +1097,9 @@ function restoreActiveSheetId(api: FUniver, sheetId: string): void {
 }
 
 /**
- * Cheap probe for the `__splitChunk__` marker — a flag Univer used in
- * earlier versions to indicate a mutation was one chunk of a larger
- * operation (large paste, copy-worksheet). Univer 0.22.x doesn't emit
- * it, but if a future upgrade reintroduces it our op-log replay would
- * silently corrupt because we don't reassemble chunks. Watchdog logs
- * a warning the first time it sees one so the regression is loud.
- *
- * Walks one level deep — Univer carried the marker on the top-level
- * params object historically. Deeper nesting would be a different
- * shape and warrants a different fix.
+ * Cheap probe for Univer's top-level `__splitChunk__` transport marker.
+ * Each marked mutation is already an independently replayable slice; the
+ * bridge only needs to keep it in a separate Yjs transaction.
  */
 function hasSplitChunkMarker(params: unknown): boolean {
   if (!params || typeof params !== 'object') return false;

@@ -154,9 +154,19 @@ export function SdkHarness() {
             const bridge = startBridge(api.univer, receiver, { role: 'view' });
             sender
               .getArray('ops')
-              .push([{ c: String(sender.clientID), t: Date.now(), id, p: commandParams }]);
+              .push([
+                {
+                  v: 2,
+                  kind: 'op',
+                  c: String(sender.clientID),
+                  s: 0,
+                  t: Date.now(),
+                  id,
+                  p: commandParams,
+                },
+              ]);
             Y.applyUpdate(receiver, Y.encodeStateAsUpdate(sender));
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await bridge.whenReplaySettled();
             const failures = bridge.getReplayFailures();
             bridge.dispose();
             sender.destroy();

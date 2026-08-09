@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
+import type { CasualSheetsAPI } from '@casualoffice/sheets/sheets';
 import { UniverContext, type UniverCtxValue } from './univer-context';
 
 /**
@@ -23,6 +24,17 @@ import { UniverContext, type UniverCtxValue } from './univer-context';
  */
 export function UniverRoot({ children }: { children: ReactNode }) {
   const [api, setApi] = useState<FUniver | null>(null);
-  const value = useMemo<UniverCtxValue>(() => ({ api, setApi }), [api]);
+  const [sheetsApi, setSheetsApi] = useState<CasualSheetsAPI | null>(null);
+  const publishApi = useCallback(
+    (nextApi: FUniver | null, nextSheetsApi: CasualSheetsAPI | null = null) => {
+      setApi(nextApi);
+      setSheetsApi(nextSheetsApi);
+    },
+    [],
+  );
+  const value = useMemo<UniverCtxValue>(
+    () => ({ api, sheetsApi, setApi: publishApi }),
+    [api, sheetsApi, publishApi],
+  );
   return <UniverContext.Provider value={value}>{children}</UniverContext.Provider>;
 }

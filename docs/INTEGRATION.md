@@ -363,7 +363,8 @@ let collab;
     collab = attachCollab(api, {
       room: 'doc-42',
       server: 'wss://your-host/yjs',
-      // password, role: 'view' | 'write', token, onSnapshot, onStatus all optional
+      // Set compaction:'off' when your backend owns validated checkpoints.
+      compaction: 'off',
       onStatus: (s) => console.log('collab status:', s), // 'connecting' | 'live' | 'offline'
     });
   }}
@@ -377,10 +378,31 @@ The `provider.awareness` is your hook for presence (cursors, avatars); `doc` is 
 raw Yjs document for any extra shared state. Build that UI on top — the SDK ships
 the transport + mutation bridge, not the presence chrome.
 
+Pass the full `CasualSheetsAPI` received by `onReady`, as above. It supplies the
+preservation-aware `getContent()` and `setContent()` boundaries needed to recover
+from concurrent offline insertion order and to retain opaque xlsx resources in a
+client compaction snapshot. A host that passes a bare `FUniver` facade must also
+provide `getContent` and an awaited `onSnapshot`; otherwise reorder recovery and
+client compaction fail closed. `compaction` defaults to `'off'`; choose
+`'manual'` for the health-gated `bridge.forceCompact()` hook or explicitly opt
+into `'auto'` for the idle timer. Keep it off when a backend owns validated
+checkpoints. Awareness alone cannot safely elect one browser across a network
+partition, so automatic browser checkpoints are never enabled implicitly.
+`bridge.isReplayBlocked()` and the existing replay-failure
+subscription are the host's divergence/readiness signal.
+
 Under the hood the bridge uses the only correct Univer hook,
 `ICommandService.onMutationExecutedForCollab`, applies remote mutations with
-`fromCollab` (echo-loop prevention), and guards `__splitChunk__` (see
+an SDK-private execution token plus `fromCollab` (echo-loop prevention that
+cannot be forged through the public boolean), and awaits every replay in stable
+v2-log order (see
 [`CO-EDITING.md`](./CO-EDITING.md)).
+
+> **v2 room migration:** old v1 room logs used a positional cursor and have no
+> stable operation identity. They cannot be upgraded safely in place. After
+> deploying this SDK, create a fresh room (or let ephemeral/Redis TTL remove the
+> old room). A v2 client encountering a legacy record stops at it and reports a
+> replay failure; it never skips the record.
 
 > **Peer deps:** `attachCollab` needs `yjs` and `@hocuspocus/provider` from the
 > host (declared `optional` peers) so there's a **single** Yjs copy in the graph —

@@ -16,6 +16,7 @@
 
 import { useContext } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
+import type { CasualSheetsAPI } from '@casualoffice/sheets/sheets';
 import { UniverContext } from './univer-context';
 
 /** Returns the Facade API once ready, or `null` while Univer is mounting. */
@@ -27,8 +28,20 @@ export function useUniverAPI(): FUniver | null {
   return ctx.api;
 }
 
+/** Preservation-aware SDK API used by persistence/collaboration boundaries. */
+export function useCasualSheetsAPI(): CasualSheetsAPI | null {
+  const ctx = useContext(UniverContext);
+  if (!ctx) {
+    throw new Error('useCasualSheetsAPI must be used inside <UniverProvider>');
+  }
+  return ctx.sheetsApi;
+}
+
 /** Internal — used by `<UniverSheet>` to publish the API once ready. */
-export function useSetUniverAPI(): (api: FUniver | null) => void {
+export function useSetUniverAPI(): (
+  api: FUniver | null,
+  sheetsApi?: CasualSheetsAPI | null,
+) => void {
   const ctx = useContext(UniverContext);
   if (!ctx) {
     throw new Error('useSetUniverAPI must be used inside <UniverProvider>');

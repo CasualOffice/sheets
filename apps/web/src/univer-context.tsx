@@ -16,10 +16,12 @@
 
 import { createContext } from 'react';
 import type { FUniver } from '@univerjs/core/facade';
+import type { CasualSheetsAPI } from '@casualoffice/sheets/sheets';
 
 export type UniverCtxValue = {
   api: FUniver | null;
-  setApi: (api: FUniver | null) => void;
+  sheetsApi: CasualSheetsAPI | null;
+  setApi: (api: FUniver | null, sheetsApi?: CasualSheetsAPI | null) => void;
 };
 
 export const UniverContext = createContext<UniverCtxValue | null>(null);

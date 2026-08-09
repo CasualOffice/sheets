@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as Y from 'yjs';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
-import { useUniverAPI } from '../use-univer';
+import { useCasualSheetsAPI, useUniverAPI } from '../use-univer';
 import { useWorkbook } from '../use-workbook';
 import { useLoading } from '../loading-context';
 import { useToast } from '../shell/toast/toast-context';
@@ -86,6 +86,7 @@ import { parseShareMeta, shareMetaUrl, sharePasswordKey, type ShareMeta } from '
  */
 export function CollabDriver({ children }: { children?: ReactNode }) {
   const api = useUniverAPI();
+  const sheetsApi = useCasualSheetsAPI();
   const workbook = useWorkbook();
   const loading = useLoading();
   const toast = useToast();
@@ -220,7 +221,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
 
   // Effect 1: discover the room (URL) and decide whether to prompt or join.
   useEffect(() => {
-    if (!api) return;
+    if (!api || !sheetsApi) return;
     const id = readRoomFromLocation();
     if (!id) return;
 
@@ -433,7 +434,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api]);
+  }, [api, sheetsApi]);
 
   // Effect 2: tear down on unmount. The join() helper does its own
   // teardown when it's called again (e.g. reconnect with new password).
@@ -446,7 +447,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
 
   const join = useCallback(
     (id: string, joinRole: CollabRole, password: string): void => {
-      if (!api) return;
+      if (!api || !sheetsApi) return;
       teardown();
       passwordRef.current = password;
       setStatus('connecting');
@@ -465,7 +466,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       // omits `role=` from the URL) but still pass `joinRole` for the LOCAL
       // belt-and-braces view-only gate below; the server stays authoritative.
       const share = shareRef.current ?? undefined;
-      const collab = attachCollab(api, {
+      const collab = attachCollab(sheetsApi, {
         room: id,
         server: wsUrl(),
         password: password || undefined,
@@ -474,6 +475,11 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
         // already stops cell mutations from firing, so none reach the bridge.
         role: joinRole === 'comment' ? 'write' : joinRole,
         share,
+        // Awareness cannot elect one compactor safely across a network
+        // partition. Keep browser compaction disabled until this self-host has
+        // a server-owned checkpoint coordinator; a longer log is recoverable,
+        // while concurrent browser snapshots deliberately fail closed.
+        compaction: 'off',
         // Map the SDK's coarse status onto our richer CollabStatus (which also
         // carries 'off' / 'denied', driven elsewhere in this component).
         onStatus: (s) => setStatus(s),
@@ -593,7 +599,7 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
 
       console.info('[collab] joined room', id, 'as', joinRole);
     },
-    [api, charts],
+    [api, sheetsApi, charts],
   );
 
   const teardown = (): void => {
@@ -767,9 +773,8 @@ export function CollabDriver({ children }: { children?: ReactNode }) {
       return;
     }
     if (status !== 'offline' && status !== 'connecting') return;
-    // Use a loose-typed Y.Array since the bridge's MutationRecord
-    // shape isn't exported and only the `c` (clientId) field matters
-    // here. Mirror the LOG_KEY constant from bridge.ts (`'ops'`).
+    // Use a minimal Y.Array projection because only `c` (clientId) matters
+    // to this counter. Mirror the LOG_KEY constant from bridge.ts (`'ops'`).
     type LogRecord = { c?: string };
     const log = doc.getArray<LogRecord>('ops');
     const myId = String(doc.clientID);

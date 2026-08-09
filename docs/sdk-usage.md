@@ -307,6 +307,7 @@ single-user editor.
     room: 'workbook-42',
     token: authToken, // optional; defaults to 'anon'
     role: 'write', // 'view' | 'write'; default 'write'
+    compaction: 'off', // use backend-owned validated checkpoints
     onStatus: (s) => setStatus(s), // 'connecting' | 'live' | 'offline'
     onSnapshot: (wb) => {}, // peer compaction snapshot arrived
   }}
@@ -314,7 +315,13 @@ single-user editor.
 ```
 
 Options match `AttachCollabOptions` (`server`, `room`, `password`, `token`,
-`role`, `share`, `onStatus`, `onSnapshot`). Yjs/Hocuspocus is the realtime
+`role`, `share`, `onStatus`, `onSnapshot`, `getContent`, `compaction`). Pass
+`compaction: 'off'` when the host/server owns checkpoints; this is also the safe
+default. `'manual'` keeps only the bridge's health-gated `forceCompact()`, while
+`'auto'` explicitly enables the idle timer. A full
+`CasualSheetsAPI` automatically supplies preservation-aware snapshot I/O. A bare
+FUniver host must supply `getContent` plus an awaited `onSnapshot` or concurrent
+reorder recovery and compaction fail closed. Yjs/Hocuspocus is the realtime
 transport only — the authoritative document is still saved by the host via the
 save/exit contract; collab does not turn the SDK into a store.
 
