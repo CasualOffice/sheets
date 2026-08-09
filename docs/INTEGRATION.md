@@ -318,9 +318,10 @@ the same Univer major you recorded on. This is the same contract the app's
 
 ## xlsx import
 
-The pure converter lives at `@casualoffice/sheets/xlsx` and runs the parse in a
-Web Worker. It works with no React and no DOM (also usable for server-side
-seeding):
+The pure converter lives at `@casualoffice/sheets/xlsx`. Browser main threads
+use a Web Worker; Node and existing Worker contexts run the same converter
+implementation directly. It needs no React or DOM and is usable for server-side
+seeding:
 
 ```ts
 import { xlsxToWorkbookData } from '@casualoffice/sheets/xlsx';
@@ -330,8 +331,9 @@ api.loadSnapshot(data); // or pass as initialData on first mount
 ```
 
 Fidelity: values, formulas, fonts, fills, alignment, number formats, borders,
-merges, sheet order, tables/comments/data-validation/named-ranges (as
-resources). Accepts loss on charts, drawings, pivots, sparklines.
+merges, sheet order, tables/comments/data-validation/named-ranges, page setup,
+and opaque resources. Raw OOXML passthrough preserves supported drawings,
+pivots, macros, external links, and threaded comments.
 
 ---
 

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import ExcelJS from 'exceljs';
-import { CustomRangeType, type IStyleData, type IWorkbookData } from '@univerjs/core';
+import type ExcelJSTypes from 'exceljs';
+import type { IStyleData, IWorkbookData } from '@univerjs/core';
 import { univerStyleToExcel } from './style-mapping';
 import { bodyToExcelRichText, type RichBody } from './rich-text';
 import { RESOURCES_SHEET } from './constants';
@@ -38,12 +38,14 @@ import {
   readPassthroughFromSnapshot,
 } from './passthrough-resource';
 import type { ExportExtras } from './export';
+import { HYPERLINK_CUSTOM_RANGE_TYPE } from './_snapshot-constants';
 
 /**
  * Pure conversion: Univer IWorkbookData → ExcelJS workbook → xlsx Blob.
- * Imported only by `exporter.worker.ts` (where it actually runs) — the
- * library `export.ts` is the worker-dispatch entry point. Splitting like
- * this keeps ExcelJS (~600 KB) out of the main chunk.
+ * Browser main threads reach this through `exporter.worker.ts`; Node and
+ * existing Worker contexts call it directly. ExcelJS is loaded lazily when
+ * conversion starts, so the public browser entry has no static ExcelJS import
+ * while the dedicated Worker build can still bundle the dependency.
  *
  * Feature models that don't live on `IWorkbookData` (charts / pivots /
  * sparklines / outline resources) are baked into the snapshot by the host
@@ -65,6 +67,7 @@ export async function workbookDataToXlsxImpl(
   data: IWorkbookData,
   extras: ExportExtras = {},
 ): Promise<Blob> {
+  const { default: ExcelJS } = await import('exceljs');
   const wb = new ExcelJS.Workbook();
   wb.title = data.name || 'Untitled';
 
@@ -172,9 +175,9 @@ export async function workbookDataToXlsxImpl(
 
         if (cell.f) {
           const formula = cell.f.startsWith('=') ? cell.f.slice(1) : cell.f;
-          excelCell.value = { formula, result: cell.v ?? null } as ExcelJS.CellValue;
+          excelCell.value = { formula, result: cell.v ?? null } as ExcelJSTypes.CellValue;
         } else if (cell.v !== undefined && cell.v !== null) {
-          excelCell.value = cell.v as ExcelJS.CellValue;
+          excelCell.value = cell.v as ExcelJSTypes.CellValue;
         }
 
         // In-cell rich text (mixed per-character formatting) → ExcelJS
@@ -184,7 +187,7 @@ export async function workbookDataToXlsxImpl(
         if (!cell.f) {
           const richBody = (cell as ICellSnapshot & { p?: { body?: RichBody } }).p?.body;
           const richText = bodyToExcelRichText(richBody);
-          if (richText) excelCell.value = { richText } as ExcelJS.CellValue;
+          if (richText) excelCell.value = { richText } as ExcelJSTypes.CellValue;
         }
 
         // Hyperlink encoded by the parser into `cell.p.body.customRanges`
@@ -206,7 +209,7 @@ export async function workbookDataToXlsxImpl(
         if (cellP?.body?.customRanges) {
           for (const cr of cellP.body.customRanges) {
             if (
-              cr.rangeType === CustomRangeType.HYPERLINK &&
+              cr.rangeType === HYPERLINK_CUSTOM_RANGE_TYPE &&
               typeof cr.properties?.url === 'string' &&
               cr.properties.url
             ) {
@@ -216,7 +219,7 @@ export async function workbookDataToXlsxImpl(
               excelCell.value = {
                 text: display,
                 hyperlink: cr.properties.url,
-              } as ExcelJS.CellValue;
+              } as ExcelJSTypes.CellValue;
               break;
             }
           }
@@ -393,7 +396,7 @@ export async function workbookDataToXlsxImpl(
 }
 
 const DEFINED_NAMES_RESOURCE = 'SHEET_DEFINED_NAME_PLUGIN';
-function writeDefinedNamesToXlsx(wb: ExcelJS.Workbook, data: IWorkbookData): void {
+function writeDefinedNamesToXlsx(wb: ExcelJSTypes.Workbook, data: IWorkbookData): void {
   const res = data.resources?.find((r) => r.name === DEFINED_NAMES_RESOURCE);
   if (!res?.data) return;
   let map: Record<string, { name?: string; formulaOrRefString?: string }>;

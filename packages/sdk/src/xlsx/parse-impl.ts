@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-import ExcelJS from 'exceljs';
-import {
-  CellValueType,
-  CustomRangeType,
-  LocaleType,
-  type ICellData,
-  type IRange,
-  type IStyleData,
-  type IWorkbookData,
-} from '@univerjs/core';
+import type ExcelJSTypes from 'exceljs';
+import type { ICellData, IRange, IStyleData, IWorkbookData } from '@univerjs/core';
 import { excelStyleToUniver } from './style-mapping';
 import { excelRichTextToBody, type ExcelRichRun } from './rich-text';
-import { INITIAL_COLUMNS, INITIAL_ROWS, UNIVER_VERSION } from './_snapshot-constants';
+import {
+  CELL_VALUE_TYPE,
+  DEFAULT_LOCALE,
+  HYPERLINK_CUSTOM_RANGE_TYPE,
+  INITIAL_COLUMNS,
+  INITIAL_ROWS,
+  UNIVER_VERSION,
+} from './_snapshot-constants';
 import { RESOURCES_SHEET } from './constants';
 import { mergeCommentsIntoResources, readCommentsFromXlsx } from './comments-resource';
 import { mergePageSetupIntoResources, readPageSetupFromXlsx } from './page-setup-resource';
@@ -49,10 +48,10 @@ import type { ImportedWorkbook } from './import';
 
 /**
  * Pure conversion: ExcelJS workbook → Univer IWorkbookData snapshot.
- * Imported by both `parser.worker.ts` (where it actually runs) and the
- * type-only `import.ts` (for the public types). Splitting this out keeps
- * ExcelJS — which is large — out of the main bundle; only the worker
- * chunk pays for it.
+ * Browser main threads reach this through `parser.worker.ts`; Node and
+ * existing Worker contexts call it directly. ExcelJS is loaded lazily when
+ * conversion starts, so the public browser entry has no static ExcelJS import
+ * while the dedicated Worker build can still bundle the dependency.
  *
  * Behavior is byte-for-byte equivalent to the previous in-place impl;
  * see import.ts header for the fidelity scope.
@@ -111,7 +110,7 @@ function buildHyperlinkBody(display: string, url: string, id: string): ICellData
         {
           startIndex: 0,
           endIndex: display.length - 1,
-          rangeType: CustomRangeType.HYPERLINK,
+          rangeType: HYPERLINK_CUSTOM_RANGE_TYPE,
           rangeId: id,
           properties: { url },
         },
@@ -124,7 +123,7 @@ function buildHyperlinkBody(display: string, url: string, id: string): ICellData
   } as any;
 }
 
-function readResourcesSheet(ws: ExcelJS.Worksheet): IWorkbookData['resources'] {
+function readResourcesSheet(ws: ExcelJSTypes.Worksheet): IWorkbookData['resources'] {
   const parts: string[] = [];
   ws.eachRow({ includeEmpty: false }, (row) => {
     const v = row.getCell(1).value;
@@ -151,7 +150,7 @@ function readResourcesSheet(ws: ExcelJS.Worksheet): IWorkbookData['resources'] {
  */
 const DEFINED_NAMES_RESOURCE = 'SHEET_DEFINED_NAME_PLUGIN';
 function mergeDefinedNamesFromXlsx(
-  wb: ExcelJS.Workbook,
+  wb: ExcelJSTypes.Workbook,
   resources: IWorkbookData['resources'],
 ): IWorkbookData['resources'] {
   const existing = resources?.find((r) => r.name === DEFINED_NAMES_RESOURCE);
@@ -215,6 +214,8 @@ function clean(v: unknown): string | undefined {
 }
 
 export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<ImportedWorkbook> {
+  const { default: ExcelJS } = await import('exceljs');
+
   // Capture raw OOXML parts ExcelJS drops (today: xl/vbaProject.bin) before
   // it consumes the buffer. Reads the same bytes twice — once as zip here,
   // once as ExcelJS below — but the second JSZip pass is ~tens of ms even
@@ -406,9 +407,9 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
         // rule, so highlight rules wouldn't paint. Formula cells get tagged from
         // their cached result's type.
         if (cd.v !== undefined) {
-          if (typeof cd.v === 'number') cd.t = CellValueType.NUMBER;
-          else if (typeof cd.v === 'boolean') cd.t = CellValueType.BOOLEAN;
-          else if (typeof cd.v === 'string') cd.t = CellValueType.STRING;
+          if (typeof cd.v === 'number') cd.t = CELL_VALUE_TYPE.NUMBER;
+          else if (typeof cd.v === 'boolean') cd.t = CELL_VALUE_TYPE.BOOLEAN;
+          else if (typeof cd.v === 'string') cd.t = CELL_VALUE_TYPE.STRING;
         }
 
         const styleId = internStyle(style);
@@ -519,7 +520,7 @@ export async function workbookFromExcelJs(buffer: ArrayBuffer): Promise<Imported
     rev: 1,
     name: wb.title || 'Untitled',
     appVersion: UNIVER_VERSION,
-    locale: LocaleType.EN_US,
+    locale: DEFAULT_LOCALE as IWorkbookData['locale'],
     styles,
     sheetOrder,
     sheets,

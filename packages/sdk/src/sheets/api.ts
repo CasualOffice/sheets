@@ -59,6 +59,7 @@ import {
 } from './scripting';
 import { applyReadOnly } from './read-only';
 import { createEmitter } from './emitter';
+import { createWorkbookResourcePreserver } from './resource-preservation';
 
 // Re-export so hosts can type a recorded/scripted step off the main entry.
 export type { CommandRecord } from './scripting';
@@ -239,28 +240,10 @@ export function createCasualSheetsAPI(
   univerAPI: FUniver,
   initialResources?: IWorkbookData['resources'],
 ): CasualSheetsAPI {
-  // SDK-owned snapshot resources (charts / pivots / sparklines panels persist
-  // their models here). Univer's `.save()`/`.load()` silently drop any resource
-  // it doesn't own, so getContent()/setContent() alone can't round-trip them.
-  // We shadow them in an SDK-layer store: setContent captures them before the
-  // workbook swap, getContent merges them back onto the Univer snapshot. This
-  // keeps the panels' existing `IWorkbookData.resources` read/write working and
-  // makes them survive save/reload + collab.
-  const CUSTOM_RESOURCE_NAMES = new Set([
-    '__casual_sheets_charts__',
-    '__casual_sheets_pivots__',
-    '__casual_sheets_sparklines__',
-  ]);
-  const customResources = new Map<string, string>();
-  const captureCustom = (resources: IWorkbookData['resources']) => {
-    customResources.clear();
-    for (const r of resources ?? []) {
-      if (CUSTOM_RESOURCE_NAMES.has(r.name) && r.data) customResources.set(r.name, r.data);
-    }
-  };
-  // Seed from the mounted snapshot so pivots/charts saved in a loaded workbook
-  // are visible before the first edit.
-  captureCustom(initialResources);
+  // Univer only serializes resources owned by plugins registered in this
+  // runtime. Shadow every imported resource generically so xlsx sidecars and
+  // host-owned opaque resources survive even when Univer does not know them.
+  const resourcePreserver = createWorkbookResourcePreserver(initialResources);
 
   // Extracted so importXlsx / setContent reuse the exact same swap semantics.
   const swapWorkbook = (data: IWorkbookData) => {
@@ -295,16 +278,14 @@ export function createCasualSheetsAPI(
 
   const getContent = (): IWorkbookData | null => {
     const snap = univerAPI.getActiveWorkbook()?.save() ?? null;
-    if (!snap || customResources.size === 0) return snap;
-    // Re-attach the SDK-owned resources Univer dropped on save.
-    const resources = (snap.resources ?? []).filter((r) => !CUSTOM_RESOURCE_NAMES.has(r.name));
-    for (const [name, data] of customResources) resources.push({ name, data });
-    return { ...snap, resources };
+    if (!snap) return null;
+    const resources = resourcePreserver.merge(snap.resources);
+    return resources ? { ...snap, resources } : { ...snap, resources: undefined };
   };
 
   const setContent = (data: IWorkbookData): void => {
-    // Capture the SDK-owned resources before Univer drops them on the swap.
-    captureCustom(data.resources);
+    // Reset the shadow before Univer drops resources it does not own.
+    resourcePreserver.reset(data.resources);
     swapWorkbook(data);
     // A fresh snapshot is a clean buffer until the user edits it.
     markDirty(false);
@@ -337,13 +318,16 @@ export function createCasualSheetsAPI(
       data.name = file.name.replace(/\.(xlsx|xlsm)$/i, '') || data.name;
       data.custom = { ...data.custom, sourceBytes: file.size, sourceName: file.name };
     }
+    resourcePreserver.reset(data.resources);
     swapWorkbook(data);
     markDirty(false);
     return data;
   };
 
   const exportXlsx = async (): Promise<Blob> => {
-    const snap = univerAPI.getActiveWorkbook()?.save();
+    // Export the same preservation-aware snapshot exposed to hosts. Calling
+    // `.save()` directly here would drop imported resources Univer does not own.
+    const snap = getContent();
     if (!snap) throw new Error('exportXlsx: no active workbook to export');
     // Bare subpath import → separate chunk (see file header + tsup external).
     const { workbookDataToXlsx } = await import('@casualoffice/sheets/xlsx');
