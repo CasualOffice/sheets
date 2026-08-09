@@ -25,7 +25,7 @@
  * Surface (canonical, doc 38 §4):
  *   getContent / setContent / import / export / getSelection / focus /
  *   on / off / executeCommand / executeCommands / undo / redo / onMutation /
- *   setTheme / setDocumentMode / getDocumentMode / univer
+ *   onLocalMutation / setTheme / setDocumentMode / getDocumentMode / univer
  *   (+ deprecated aliases getSnapshot / loadSnapshot; format-specific
  *   importXlsx / exportXlsx retained)
  *
@@ -52,6 +52,7 @@ import { ICommandService, IUniverInstanceService, ThemeService } from '@univerjs
 import type { FUniver } from '@univerjs/core/facade';
 import type { IRange, IWorkbookData } from '@univerjs/core';
 import {
+  attachLocalMutationObserver,
   attachMutationObserver,
   runSteps,
   type CommandRecord,
@@ -59,6 +60,7 @@ import {
 } from './scripting';
 import { applyReadOnly } from './read-only';
 import { createEmitter } from './emitter';
+import { createPublicUniverFacade } from './public-univer';
 
 // Re-export so hosts can type a recorded/scripted step off the main entry.
 export type { CommandRecord } from './scripting';
@@ -169,8 +171,9 @@ export interface CasualSheetsAPI {
   executeCommand(id: string, params?: object): Promise<boolean>;
   /** Replay a sequence of command/mutation steps in order — e.g. a recorded
    *  macro, or a host-authored script. Best-effort: a step that throws is
-   *  skipped (the underlying state may have moved on). Resolves to the number
-   *  of steps that ran without throwing. */
+   *  skipped (the underlying state may have moved on); a command-policy veto
+   *  resolves `false` and is not counted. Resolves to the number of accepted
+   *  steps. */
   executeCommands(steps: CommandRecord[]): Promise<number>;
   /** Undo the last edit — the canonical cross-editor history control (doc 38
    *  §4). Dispatches Univer's `univer.command.undo` on the active unit
@@ -185,8 +188,14 @@ export interface CasualSheetsAPI {
    *  (`onMutationExecutedForCollab`): fires for `CommandType.MUTATION` only —
    *  the deterministic, replayable state changes, not transient command/calc
    *  noise. Pair with `executeCommands` for record→replay. Returns a disposer;
-   *  call it to stop observing. */
+   *  call it to stop observing. Handler exceptions emit the SDK `error` event
+   *  but cannot change the already-committed command result. */
   onMutation(handler: (record: CommandRecord) => void): () => void;
+  /** Observe only locally-authored mutations suitable for a host persistence
+   *  queue. Excludes collaboration/changeset replay and `onlyLocal` engine
+   *  writes such as formula result caches. Returns a disposer. Handler errors
+   *  are isolated and surfaced through the SDK `error` event. */
+  onLocalMutation(handler: (record: CommandRecord) => void): () => void;
   /** Imperative light/dark switch — the API equivalent of the reactive
    *  `appearance` prop. Flips Univer's `ThemeService.setDarkMode` (canvas
    *  colours + the `univer-dark` class Univer applies to the document root). */
@@ -430,7 +439,10 @@ export function createCasualSheetsAPI(
   }
 
   const api: CasualSheetsAPIInternal = {
-    univer: univerAPI,
+    // The raw facade remains the documented power-host escape hatch, but local
+    // callers cannot forge engine-owned collaboration/snapshot provenance on
+    // executeCommand. SDK internals retain `univerAPI` itself above.
+    univer: createPublicUniverFacade(univerAPI),
 
     getContent,
     setContent,
@@ -477,7 +489,24 @@ export function createCasualSheetsAPI(
       const injector = (univerAPI as unknown as { _injector?: { get(t: unknown): unknown } })
         ._injector;
       const cmdSvc = injector?.get(ICommandService) as MutationEmitter | undefined;
-      return attachMutationObserver(cmdSvc, handler);
+      return attachMutationObserver(cmdSvc, handler, (error) =>
+        emit(
+          'error',
+          error instanceof Error ? error : new Error(`onMutation failed: ${String(error)}`),
+        ),
+      );
+    },
+
+    onLocalMutation(handler) {
+      const injector = (univerAPI as unknown as { _injector?: { get(t: unknown): unknown } })
+        ._injector;
+      const cmdSvc = injector?.get(ICommandService) as MutationEmitter | undefined;
+      return attachLocalMutationObserver(cmdSvc, handler, (error) =>
+        emit(
+          'error',
+          error instanceof Error ? error : new Error(`onLocalMutation failed: ${String(error)}`),
+        ),
+      );
     },
 
     setTheme(appearance) {

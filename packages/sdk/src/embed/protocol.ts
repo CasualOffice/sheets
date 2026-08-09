@@ -168,10 +168,11 @@ export interface CommandSetThemeData {
   theme: 'light' | 'dark' | 'system';
 }
 
-/** Host → editor: enable/disable chrome features. Each key maps a toolbar
- *  group / menu item / capability to a boolean; a `false` hides the control
- *  AND blocks its command. Omitted keys default to enabled. Mirrors the
- *  `features` prop on `<CasualSheets>`. */
+/** Host → editor: enable/disable features. Each key maps a toolbar group / menu
+ *  item / capability to a boolean; a `false` hides the control and, for a
+ *  command-backed capability, vetoes its corresponding engine commands.
+ *  Omitted keys default to enabled. Mirrors the `features` prop on
+ *  `<CasualSheets>`. */
 export interface CommandSetFeaturesData {
   features: Record<string, boolean>;
 }

@@ -150,6 +150,7 @@ The handle from `onReady` is the stable, semver-covered integration surface.
 | `executeCommand(id, params?)`         | Dispatch a Univer command; resolves to its boolean result.    |
 | `executeCommands(steps)`              | Replay a sequence of recorded command/mutation steps.         |
 | `onMutation(handler)`                 | Observe the replayable mutation stream; returns a disposer.   |
+| `onLocalMutation(handler)`            | Observe locally-authored mutations for persistence.           |
 | `setTheme(appearance)`                | Imperative light/dark switch (`'light'` \| `'dark'`).         |
 | `setDocumentMode(mode)`               | Switch between `'editing'` and `'viewing'`.                   |
 | `getDocumentMode()`                   | The current `DocumentMode`.                                   |
@@ -177,9 +178,82 @@ bar).
 ### `features` map
 
 `features?: Record<string, boolean>` toggles individual chrome controls. `false`
-hides the control **and** blocks its command; omitted keys default to enabled.
-Only applies when chrome is shown. Feature ids are per-format (a sheet's `merge`
-control differs from a doc's `trackChanges`).
+hides the control **and**, for command-backed capabilities, vetoes the matching
+Univer command at the shared command bus. The veto still applies with
+`chrome="none"`, so a shortcut, context menu, facade call, `api.executeCommand`,
+`api.executeCommands`, or the raw `api.univer` escape hatch cannot bypass it.
+Omitted, `true`, and unknown keys stay enabled.
+
+`api.univer.executeCommand` and `syncExecuteCommand` deliberately discard
+caller-supplied collaboration, snapshot, formula-result, and transport-only
+provenance (`fromCollab`, `fromChangeset`, `fromFormula`,
+`applyFormulaCalculationResult`, `onlyLocal`, and `syncOnly`). Those flags are
+engine attribution, not a permission or persistence override. The SDK's
+collaboration bridge and formula engine use private command-service seams so
+authoritative remote changes and recalculation results still converge.
+Univer's private `_injector` field is unsupported SDK-internal machinery;
+hosts must not use it as an integration or policy-bypass surface.
+
+`onMutation` retains its historical all-mutation audit/replay behavior,
+including remote and engine-local mutations. Use `onLocalMutation` for a host
+save queue: it excludes collaboration/changeset replay and `onlyLocal` engine
+writes such as formula-result caches. Public command dispatch cannot forge
+those exclusions because it strips the corresponding execution markers.
+Exceptions from either observer are emitted through the SDK `error` event and
+never change the result of an already-applied engine mutation.
+
+Known compound commands are preflighted before Univer starts their nested
+mutations. Paste, clear, format painter, and auto-fill are rejected at their
+root when a disabled downstream capability could otherwise veto after earlier
+mutations and leave an un-undoable partial edit. Explicit value/formula-only
+and column-width paste modes remain available when their own capabilities are
+enabled. Structural row/column/range operations and sheet copy/removal are
+likewise preflighted against plugin-maintained tables, conditional formatting,
+filters, data validation, and merges before the sheet shape changes.
+Optional-paste replacement, refill, undo, and redo are also blocked while a
+capability they may replay is disabled because their prior payload is held in
+engine history rather than available to the policy for safe inspection.
+
+Every nested command is still evaluated independently. Univer's execution
+stack is global rather than async-context-local, so lending a root decision to
+apparent descendants would let an unrelated concurrent UI/API command inherit
+the wrong authority. A host plugin that implements another multi-mutation or
+async compound action must therefore expose and preflight its own root command;
+it must not rely on a late child veto to roll back earlier mutations.
+
+Command-backed feature ids are `history`, `clipboard`, `format-painter`, `font`,
+`font-style`, `color`, `borders`, `alignment`, `merge`, `number`, `clear-format`,
+`tables`, `conditionalFormatting`, `filter`, and `dataValidation`. UI-only or
+non-dedicated-command ids — `file`, `help`, `branding`, `autosum`, `format-cells`,
+`insert-chart`, `pivot-table`, `charts`, `pivots`, and `sparklines` — remain
+surface gates only. They do not claim engine enforcement; use `onBeforeCommand`
+when a host plugin gives one of those resources its own command id.
+
+### `onBeforeCommand` policy
+
+Use the synchronous `onBeforeCommand` prop for host-specific policy. Return
+`false` to cancel a local engine command before its handler runs:
+
+```tsx
+<CasualSheets
+  initialData={data}
+  onBeforeCommand={({ id }) => (id === 'sheet.command.delete-range' ? false : undefined)}
+/>
+```
+
+The callback sees local commands from every entry path, including nested
+commands and mutations. Authoritative collaboration, snapshot-load replays,
+and internal formula-result writes bypass local policy so a restricted client
+still converges and recalculates. Feature ids are per-format (a sheet's `merge`
+capability differs from a doc's `trackChanges`).
+
+Hosts implementing a narrower editor can import the SDK's pure
+`isReadOnlyBlocked(commandId)` predicate and allow only their explicitly
+supported edit commands. The predicate is intentionally conservative: known
+navigation/selection operations and copy remain available, while commands and
+mutations otherwise fail closed, including future plugin ids. This keeps the
+read-only boundary in one place instead of copying Univer command-id heuristics
+into each host.
 
 ### `extensions` (ChromeExtensions slots)
 

@@ -30,6 +30,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
 import {
+  attachLocalMutationObserver,
   attachMutationObserver,
   runSteps,
   type CommandRecord,
@@ -69,6 +70,27 @@ test('runSteps is best-effort: a throwing step is skipped, not fatal', async () 
   assert.deepEqual(calls, ['sheet.mutation.set-range-values', 'sheet.mutation.insert-row']);
 });
 
+test('runSteps does not count a command-policy veto that resolves false', async () => {
+  const calls: string[] = [];
+  const applied = await runSteps(
+    (id) => {
+      calls.push(id);
+      return id !== 'sheet.command.blocked';
+    },
+    [
+      { id: 'sheet.command.allowed' },
+      { id: 'sheet.command.blocked' },
+      { id: 'sheet.command.also-allowed' },
+    ],
+  );
+  assert.equal(applied, 2);
+  assert.deepEqual(calls, [
+    'sheet.command.allowed',
+    'sheet.command.blocked',
+    'sheet.command.also-allowed',
+  ]);
+});
+
 test('runSteps awaits async execute and on an empty list resolves to 0', async () => {
   assert.equal(await runSteps(async () => true, []), 0);
   let ran = 0;
@@ -82,7 +104,7 @@ test('runSteps awaits async execute and on an empty list resolves to 0', async (
 
 /** A fake command service whose collab hook we can fire manually. */
 function fakeCmdSvc() {
-  let listener: ((info: CommandRecord) => void) | undefined;
+  let listener: Parameters<MutationEmitter['onMutationExecutedForCollab']>[0] | undefined;
   let disposed = false;
   const svc: MutationEmitter = {
     onMutationExecutedForCollab(l) {
@@ -97,7 +119,10 @@ function fakeCmdSvc() {
   };
   return {
     svc,
-    emit: (info: CommandRecord) => listener?.(info),
+    emit: (
+      info: CommandRecord,
+      options?: { onlyLocal?: boolean; fromCollab?: boolean; fromChangeset?: boolean },
+    ) => listener?.(info, options),
     isObserving: () => listener !== undefined,
     wasDisposed: () => disposed,
   };
@@ -120,6 +145,65 @@ test('attachMutationObserver forwards {id, params} and the disposer stops the st
   assert.equal(wasDisposed(), true);
   emit({ id: 'sheet.mutation.set-range-values', params: { v: 9 } });
   assert.equal(seen.length, 2, 'no events after dispose');
+});
+
+test('attachMutationObserver preserves the historical all-mutation audit stream', () => {
+  const { svc, emit } = fakeCmdSvc();
+  const seen: CommandRecord[] = [];
+  const stop = attachMutationObserver(svc, (record) => seen.push(record));
+  const formulaResult = {
+    id: 'sheet.mutation.set-range-values',
+    params: { cellValue: { 0: { 0: { v: 42 } } } },
+  };
+
+  emit(formulaResult, {
+    onlyLocal: true,
+    // These extra engine markers are deliberately accepted structurally even
+    // though `onlyLocal` alone is enough to keep the record out of the stream.
+    fromCollab: false,
+  });
+  emit(formulaResult, { fromCollab: true });
+  emit(formulaResult, { fromChangeset: true });
+  assert.deepEqual(seen, [formulaResult, formulaResult, formulaResult]);
+  stop();
+});
+
+test('attachLocalMutationObserver omits authoritative and local-only engine applications', () => {
+  const { svc, emit } = fakeCmdSvc();
+  const seen: CommandRecord[] = [];
+  const stop = attachLocalMutationObserver(svc, (record) => seen.push(record));
+  const formulaResult = {
+    id: 'sheet.mutation.set-range-values',
+    params: { cellValue: { 0: { 0: { v: 42 } } } },
+  };
+
+  emit(formulaResult, { onlyLocal: true });
+  emit(formulaResult, { fromCollab: true });
+  emit(formulaResult, { fromChangeset: true });
+  emit({ id: 'sheet.mutation.set-range-values', params: { v: 'local edit' } });
+  assert.deepEqual(seen, [{ id: 'sheet.mutation.set-range-values', params: { v: 'local edit' } }]);
+  stop();
+});
+
+test('mutation observer exceptions are reported without escaping the command bus', () => {
+  for (const attach of [attachMutationObserver, attachLocalMutationObserver]) {
+    const { svc, emit } = fakeCmdSvc();
+    const errors: unknown[] = [];
+    const stop = attach(
+      svc,
+      () => {
+        throw new Error('observer exploded');
+      },
+      (error) => errors.push(error),
+    );
+
+    assert.doesNotThrow(() =>
+      emit({ id: 'sheet.mutation.set-range-values', params: { v: 'committed' } }),
+    );
+    assert.equal(errors.length, 1);
+    assert.match(String(errors[0]), /observer exploded/);
+    stop();
+  }
 });
 
 test('attachMutationObserver tolerates an absent service (no-op disposer)', () => {

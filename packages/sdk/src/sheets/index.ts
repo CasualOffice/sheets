@@ -27,7 +27,11 @@ export {
   type RangeRef,
   type CommandRecord,
 } from './api';
+export type { BeforeCommandContext, BeforeCommandPolicy } from './command-policy';
 export { applyReadOnly, applyCommentOnly, getEditable } from './read-only';
+// Public fail-closed predicate for hosts that build a narrower editing policy
+// without copying Univer command-id heuristics.
+export { isReadOnlyBlocked } from './read-only-predicate';
 export {
   setMentionProvider,
   getMentionProvider,

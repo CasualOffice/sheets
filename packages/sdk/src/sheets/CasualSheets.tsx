@@ -54,6 +54,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import {
+  CustomCommandExecutionError,
   ICommandService,
   IMentionIOService,
   LocaleType,
@@ -92,6 +93,8 @@ import {
   type DocumentMode,
   type RangeRef,
 } from './api';
+import { createCommandPolicy, type BeforeCommandPolicy } from './command-policy';
+import { cleanCommandExecutionStackForVeto } from './command-veto';
 // Type-only — erased at build, so the collab entry (Yjs + Hocuspocus) stays out
 // of the `sheets` bundle. The runtime `attachCollab` is pulled in lazily via a
 // dynamic `import('@casualoffice/sheets/collab')` only when the `collab` prop is
@@ -240,9 +243,19 @@ export interface CasualSheetsProps {
    *    `'full'` is where richer panels (find/replace, charts, …) will land. */
   chrome?: 'none' | 'minimal' | 'full';
   /** Enable/disable chrome features. Each key maps a toolbar group / menu item /
-   *  capability to a boolean; `false` hides the control AND blocks its command.
-   *  Omitted keys default to enabled. Only applies when `chrome` is shown. */
+   *  capability to a boolean; `false` hides the control. For command-backed
+   *  capabilities it also vetoes the corresponding engine commands, even with
+   *  `chrome="none"`, so host UI, shortcuts, context menus, facades,
+   *  `executeCommand`, and `executeCommands` cannot bypass an explicit `false`.
+   *  Omitted keys default to enabled. */
   features?: Record<string, boolean>;
+  /** Synchronous policy hook at Univer's shared command boundary. Return
+   *  `false` to veto a local command; `true` / `undefined` allows it. This sees
+   *  commands from every entry path (built-in chrome, shortcuts, context menus,
+   *  facades, `api.univer`, and nested command/mutation execution). Remote
+   *  collaboration, snapshot-load replays, and internal formula-result writes
+   *  bypass local policy so restricted clients still converge. */
+  onBeforeCommand?: BeforeCommandPolicy;
   /** Legacy host hook for dialog-backed chrome controls. The SDK now ships
    *  BUILT-IN dialogs (Format Cells, Find & Replace, …) that open by default, so
    *  this is no longer required. It still works for back-compat: kinds the SDK
@@ -335,6 +348,7 @@ export function CasualSheets({
   appearance = 'light',
   chrome = 'none',
   features,
+  onBeforeCommand,
   onDialogRequest,
   hostOwnedDialogs,
   extensions,
@@ -375,6 +389,13 @@ export function CasualSheets({
   const hasSelectionChange = useRef(!!onSelectionChange).current;
   const hasError = useRef(!!onError).current;
   const hasDirtyChange = useRef(!!onDirtyChange).current;
+  // Command policy is installed once on Univer's command service, but both
+  // inputs are reactive. Refs let feature/host-policy prop changes take effect
+  // immediately without disposing or remounting the workbook.
+  const featuresRef = useRef(features);
+  featuresRef.current = features;
+  const onBeforeCommandRef = useRef(onBeforeCommand);
+  onBeforeCommandRef.current = onBeforeCommand;
   // The live FUniver facade, captured at mount so the reactive appearance
   // effect can reach Univer's ThemeService without re-running boot.
   const apiRef = useRef<CasualSheetsAPI | null>(null);
@@ -422,6 +443,7 @@ export function CasualSheets({
     let cancelled = false;
     let changeTimer: ReturnType<typeof setTimeout> | null = null;
     let changeSub: { dispose: () => void } | undefined;
+    let commandPolicySub: { dispose: () => void } | undefined;
 
     void (async () => {
       // Plugin registration runs here (not synchronously) so the OPTIONAL RPC
@@ -488,6 +510,48 @@ export function CasualSheets({
       const api = createCasualSheetsAPI(FUniver.newAPI(univer), initialData.resources);
       const apiInternal = api as CasualSheetsAPIInternal;
       apiRef.current = api;
+      // One load-bearing veto at Univer's shared boundary covers every command
+      // entry point, including the raw facade escape hatch and native shortcuts.
+      // Returning CustomCommandExecutionError makes Univer resolve the command
+      // as `false` without running its handler or surfacing an unhandled error.
+      {
+        const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
+          ._injector;
+        const cmdSvc = injector?.get(ICommandService) as
+          | {
+              beforeCommandExecuted: (
+                listener: (info: ICommandInfo, options?: IExecutionOptions) => void,
+              ) => { dispose: () => void };
+            }
+          | undefined;
+        const policy = createCommandPolicy({
+          features: () => featuresRef.current,
+          beforeCommand: () => onBeforeCommandRef.current,
+        });
+        commandPolicySub = cmdSvc?.beforeCommandExecuted((info, options) => {
+          let decision: ReturnType<typeof policy>;
+          try {
+            decision = policy(info, options);
+          } catch (error) {
+            const reportedError =
+              error instanceof Error
+                ? error
+                : new Error(`onBeforeCommand failed: ${String(error)}`);
+            apiInternal.emit('error', reportedError);
+            // Convert host callback failures into the same fail-closed result as
+            // an ordinary veto. Re-throwing the host error would unwind a nested
+            // command past Univer's catch and strand its parent on the private
+            // execution stack.
+            cleanCommandExecutionStackForVeto(cmdSvc, info);
+            throw new CustomCommandExecutionError(`host policy failed: blocked ${info.id}`);
+          }
+          if (!decision.allowed) {
+            const reason = decision.feature ? `feature ${decision.feature}` : 'host policy';
+            cleanCommandExecutionStackForVeto(cmdSvc, info);
+            throw new CustomCommandExecutionError(`${reason}: blocked ${info.id}`);
+          }
+        });
+      }
       // Bridge the declarative event props (doc 38 §3) to the unified emitter, so
       // a prop and `api.on(name, …)` both receive the event. Only wire the bridge
       // when the prop was present at mount — direct `api.on(...)` still works
@@ -586,6 +650,7 @@ export function CasualSheets({
       cancelled = true;
       if (changeTimer) clearTimeout(changeTimer);
       changeSub?.dispose();
+      commandPolicySub?.dispose();
       // Last-chance persist: emit the final snapshot before the workbook is
       // disposed (disposal is deferred via microtask below, so it's still alive).
       if (onExitRef.current) {
