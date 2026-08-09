@@ -66,6 +66,31 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     expect(Number(result)).toBe(3);
   });
 
+  test('trusted formula-result writes bypass a rejecting host policy', async ({ page }) => {
+    await page.goto('/sdk-harness?blockFormulaInternal=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const result = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const range = api.univer.getActiveWorkbook().getActiveSheet().getRange(0, 0);
+      range.setValue({ f: '=1+2' });
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const value = range.getValue();
+        if (value === 3 || value === '3') return value;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return range.getValue();
+    });
+
+    expect(Number(result)).toBe(3);
+  });
+
   test('CasualSheetsAPI: snapshot round-trips through loadSnapshot', async ({ page }) => {
     const out = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,6 +111,434 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
       };
     });
     expect(out.ok).toBe(true);
+  });
+
+  test('feature veto covers raw FUniver, stable API, and executeCommands', async ({ page }) => {
+    await page.goto('/sdk-harness?disableMerge=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const sheet = api.univer.getActiveWorkbook().getActiveSheet();
+      sheet.getRange(0, 0, 1, 2).activate();
+
+      const raw = await api.univer.executeCommand('sheet.command.add-worksheet-merge-all');
+      const stable = await api.executeCommand('sheet.command.add-worksheet-merge-all');
+      const forgedCommand = await api.univer.executeCommand(
+        'sheet.command.add-worksheet-merge-all',
+        { trigger: 'univer.command.paste' },
+      );
+      const forgedMutation = await api.univer.executeCommand('sheet.mutation.add-worksheet-merge', {
+        trigger: 'univer.command.paste',
+      });
+      const forgedCollab = await api.univer.executeCommand(
+        'sheet.command.add-worksheet-merge-all',
+        undefined,
+        { fromCollab: true },
+      );
+      const forgedChangeset = await api.univer.executeCommand(
+        'sheet.command.add-worksheet-merge-all',
+        undefined,
+        { fromChangeset: true },
+      );
+      const executeAlias = api.univer.executeCommand;
+      const forgedAlias = await executeAlias('sheet.command.add-worksheet-merge-all', undefined, {
+        fromCollab: true,
+      });
+      const mutations: Array<{ id: string; params?: { trigger?: string } }> = [];
+      const stop = api.onMutation((record: { id: string; params?: { trigger?: string } }) =>
+        mutations.push(record),
+      );
+      const batch = await api.executeCommands([
+        { id: 'sheet.command.add-worksheet-merge-all' },
+        { id: 'sheet.command.set-range-bold' },
+      ]);
+      stop();
+
+      const snapshot = api.getContent();
+      const worksheet = snapshot.sheets[snapshot.sheetOrder[0]];
+      const cell = worksheet.cellData?.[0]?.[0];
+      const style = typeof cell?.s === 'string' ? snapshot.styles[cell.s] : cell?.s;
+      return {
+        raw,
+        stable,
+        forgedCommand,
+        forgedMutation,
+        forgedCollab,
+        forgedChangeset,
+        forgedAlias,
+        batch,
+        merges: worksheet.mergeData?.length ?? 0,
+        bold: style?.bl,
+        boldTrigger: mutations.find((record) => record.id === 'sheet.mutation.set-range-values')
+          ?.params?.trigger,
+      };
+    });
+
+    expect(out.raw).toBe(false);
+    expect(out.stable).toBe(false);
+    expect(out.forgedCommand).toBe(false);
+    expect(out.forgedMutation).toBe(false);
+    expect(out.forgedCollab).toBe(false);
+    expect(out.forgedChangeset).toBe(false);
+    expect(out.forgedAlias).toBe(false);
+    expect(out.batch).toBe(1);
+    expect(out.merges).toBe(0);
+    expect(out.bold).toBe(1);
+    expect(out.boldTrigger).toBe('sheet.command.set-style');
+  });
+
+  test('public command listeners cannot hide local edits from persistence observers', async ({
+    page,
+  }) => {
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const workbook = api.univer.getActiveWorkbook();
+      const sheet = workbook.getActiveSheet();
+      const localMutations: string[] = [];
+      const stopLocal = api.onLocalMutation((record: { id: string }) => {
+        localMutations.push(record.id);
+      });
+      const listener = api.univer.onCommandExecuted(
+        (_command: object, options?: Record<string, unknown>) => {
+          if (options) options.onlyLocal = true;
+        },
+      );
+
+      const accepted = await api.univer.executeCommand(
+        'sheet.mutation.set-range-values',
+        {
+          unitId: workbook.getId(),
+          subUnitId: sheet.getSheetId(),
+          cellValue: { 0: { 0: { v: 'persist me' } } },
+        },
+        { hostTag: 'listener-provenance-test' },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      listener.dispose();
+      stopLocal();
+      return {
+        accepted,
+        localMutations,
+        value: sheet.getRange('A1').getValue(),
+      };
+    });
+
+    expect(out.accepted).toBe(true);
+    expect(out.value).toBe('persist me');
+    expect(out.localMutations).toContain('sheet.mutation.set-range-values');
+  });
+
+  test('public before-command listeners cannot rewrite an allowed edit into a disabled style', async ({
+    page,
+  }) => {
+    await page.goto('/sdk-harness?disableColor=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const workbook = api.univer.getActiveWorkbook();
+      const sheet = workbook.getActiveSheet();
+      const listener = api.univer.onBeforeCommandExecute(
+        (command: {
+          id: string;
+          params?: { cellValue?: Record<number, Record<number, { s?: object }>> };
+        }) => {
+          if (command.id !== 'sheet.mutation.set-range-values') return;
+          const cell = command.params?.cellValue?.[0]?.[0];
+          if (cell) cell.s = { bg: { rgb: '#ff0000' } };
+        },
+      );
+      const accepted = await api.univer.executeCommand('sheet.mutation.set-range-values', {
+        unitId: workbook.getId(),
+        subUnitId: sheet.getSheetId(),
+        cellValue: { 0: { 0: { v: 'value only' } } },
+      });
+      listener.dispose();
+
+      const snapshot = api.getContent();
+      const worksheet = snapshot.sheets[snapshot.sheetOrder[0]];
+      const cell = worksheet.cellData?.[0]?.[0];
+      const style = typeof cell?.s === 'string' ? snapshot.styles[cell.s] : cell?.s;
+      return { accepted, value: cell?.v, background: style?.bg };
+    });
+
+    expect(out.accepted).toBe(true);
+    expect(out.value).toBe('value only');
+    expect(out.background).toBeUndefined();
+  });
+
+  test('private bridge-style replay bypasses local policy and preserves convergence', async ({
+    page,
+  }) => {
+    await page.goto('/sdk-harness?disableMerge=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const api = w.__sdkHarnessAPI;
+      const workbook = api.univer.getActiveWorkbook();
+      const sheet = workbook.getActiveSheet();
+      const replay = await w.__sdkHarnessReplayCommand('sheet.mutation.add-worksheet-merge', {
+        unitId: workbook.getId(),
+        subUnitId: sheet.getSheetId(),
+        ranges: [{ startRow: 4, startColumn: 0, endRow: 4, endColumn: 1 }],
+      });
+      const snapshot = api.getContent();
+      const worksheet = snapshot.sheets[snapshot.sheetOrder[0]];
+      return { replay, merges: worksheet.mergeData?.length ?? 0 };
+    });
+
+    expect(out).toEqual({ replay: { failures: 0 }, merges: 1 });
+  });
+
+  test('public provenance flags cannot hide a local edit from onLocalMutation', async ({
+    page,
+  }) => {
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const workbook = api.univer.getActiveWorkbook();
+      const sheet = workbook.getActiveSheet();
+      const mutations: Array<{ id: string; params?: object }> = [];
+      const stop = api.onLocalMutation((record: { id: string; params?: object }) =>
+        mutations.push(record),
+      );
+
+      const accepted = await api.univer.executeCommand(
+        'sheet.mutation.set-range-values',
+        {
+          unitId: workbook.getId(),
+          subUnitId: sheet.getSheetId(),
+          cellValue: { 6: { 0: { v: 'record-me' } } },
+        },
+        {
+          fromCollab: true,
+          fromChangeset: true,
+          fromFormula: true,
+          applyFormulaCalculationResult: true,
+          onlyLocal: true,
+          syncOnly: true,
+        },
+      );
+      stop();
+
+      return {
+        accepted,
+        value: sheet.getRange(6, 0).getValue(),
+        recorded: mutations.filter((record) => record.id === 'sheet.mutation.set-range-values')
+          .length,
+      };
+    });
+
+    expect(out).toEqual({ accepted: true, value: 'record-me', recorded: 1 });
+  });
+
+  test('local mutation stream excludes derived formula cache writes', async ({ page }) => {
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const sheet = api.univer.getActiveWorkbook().getActiveSheet();
+      const mutations: Array<{ id: string; params?: { cellValue?: object } }> = [];
+      const stop = api.onLocalMutation((record: { id: string; params?: { cellValue?: object } }) =>
+        mutations.push(record),
+      );
+
+      sheet.getRange(7, 0).setValue({ f: '=1+2' });
+      for (let index = 0; index < 50; index += 1) {
+        if (Number(sheet.getRange(7, 0).getValue()) === 3) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      stop();
+
+      return {
+        value: sheet.getRange(7, 0).getValue(),
+        writes: mutations
+          .filter((record) => record.id === 'sheet.mutation.set-range-values')
+          .map((record) => record.params?.cellValue),
+      };
+    });
+
+    expect(Number(out.value)).toBe(3);
+    expect(out.writes).toHaveLength(1);
+    expect(JSON.stringify(out.writes[0])).toContain('=1+2');
+  });
+
+  test('structural feature preflight blocks before a row mutation runs', async ({ page }) => {
+    await page.goto('/sdk-harness?disableTables=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const sheet = api.univer.getActiveWorkbook().getActiveSheet();
+      const before = api.getContent();
+      sheet.getRange(1, 0).activate();
+      const accepted = await api.univer.executeCommand('sheet.command.insert-row-before', {
+        value: 1,
+      });
+      const after = api.getContent();
+      const beforeSheet = before.sheets[before.sheetOrder[0]];
+      const afterSheet = after.sheets[after.sheetOrder[0]];
+      return { accepted, beforeRows: beforeSheet.rowCount, afterRows: afterSheet.rowCount };
+    });
+
+    expect(out.accepted).toBe(false);
+    expect(out.afterRows).toBe(out.beforeRows);
+  });
+
+  test('nested host policy errors fail closed without poisoning later commands', async ({
+    page,
+  }) => {
+    await page.goto('/sdk-harness?throwOnMerge=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const api = w.__sdkHarnessAPI;
+      const sheet = api.univer.getActiveWorkbook().getActiveSheet();
+      sheet.getRange(8, 0, 1, 2).activate();
+      const mutations: Array<{ id: string; params?: { trigger?: string } }> = [];
+      const stop = api.onMutation((record: { id: string; params?: { trigger?: string } }) =>
+        mutations.push(record),
+      );
+
+      const nested = await api.univer.executeCommand('test.command.nested-merge');
+      sheet.getRange(8, 0).setValue('still-works');
+      stop();
+
+      const valueMutation = mutations.find(
+        (record) => record.id === 'sheet.mutation.set-range-values',
+      );
+      return {
+        nested,
+        errors: w.__sdkHarnessErrors ?? [],
+        value: sheet.getRange(8, 0).getValue(),
+        staleParentTrigger: valueMutation?.params?.trigger === 'test.command.nested-merge',
+      };
+    });
+
+    expect(out).toEqual({
+      nested: false,
+      errors: ['host policy exploded'],
+      value: 'still-works',
+      staleParentTrigger: false,
+    });
+  });
+
+  test('throwing mutation observers cannot fail committed edits or later commands', async ({
+    page,
+  }) => {
+    await page.goto('/sdk-harness?throwOnObserver=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const api = w.__sdkHarnessAPI;
+      const workbook = api.univer.getActiveWorkbook();
+      const sheet = workbook.getActiveSheet();
+      const stop = api.onLocalMutation(() => {
+        throw new Error('observer exploded');
+      });
+      const write = (row: number, value: string) =>
+        api.univer.executeCommand('sheet.mutation.set-range-values', {
+          unitId: workbook.getId(),
+          subUnitId: sheet.getSheetId(),
+          cellValue: { [row]: { 0: { v: value } } },
+        });
+
+      const first = await write(9, 'committed');
+      stop();
+      const second = await write(10, 'later');
+      return {
+        first,
+        second,
+        errors: w.__sdkHarnessErrors ?? [],
+        firstValue: sheet.getRange(9, 0).getValue(),
+        secondValue: sheet.getRange(10, 0).getValue(),
+      };
+    });
+
+    expect(out).toEqual({
+      first: true,
+      second: true,
+      errors: ['observer exploded'],
+      firstValue: 'committed',
+      secondValue: 'later',
+    });
+  });
+
+  test('restricted compound paste is rejected before any nested mutation applies', async ({
+    page,
+  }) => {
+    await page.goto('/sdk-harness?disableMerge=1');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const out = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const sheet = api.univer.getActiveWorkbook().getActiveSheet();
+      sheet.getRange(2, 0).setValue('keep');
+      sheet.getRange(2, 0, 1, 2).activate();
+
+      const accepted = await api.executeCommand('univer.command.paste', { value: 'default-paste' });
+      // The underlying paste implementation is asynchronous even though its
+      // command returns synchronously. Give an accidental handler invocation a
+      // chance to mutate before inspecting the snapshot.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const snapshot = api.getContent();
+      const worksheet = snapshot.sheets[snapshot.sheetOrder[0]];
+      return {
+        accepted,
+        first: worksheet.cellData?.[2]?.[0]?.v,
+        second: worksheet.cellData?.[2]?.[1]?.v,
+        merges: worksheet.mergeData?.length ?? 0,
+      };
+    });
+
+    expect(out).toEqual({ accepted: false, first: 'keep', second: undefined, merges: 0 });
   });
 
   test('onChange streams a debounced snapshot after an edit', async ({ page }) => {
@@ -322,6 +775,50 @@ test.describe('SDK editor (CasualSheets) via /sdk-harness', () => {
     await expect(page.locator('[data-stat="num-count"]')).toHaveText('Numerical Count: 3');
     await expect(page.locator('[data-stat="min"]')).toHaveText('Min: 1');
     await expect(page.locator('[data-stat="max"]')).toHaveText('Max: 3');
+  });
+
+  test('viewing mode keeps selection, sheet navigation, and zoom usable', async ({ page }) => {
+    await page.goto('/sdk-harness?chrome=minimal');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__sdkHarnessReady === true,
+      null,
+      { timeout: 30_000 },
+    );
+
+    const navigation = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api = (window as any).__sdkHarnessAPI;
+      const workbook = api.univer.getActiveWorkbook();
+      const first = workbook.getActiveSheet();
+      const second = workbook.insertSheet('Read-only navigation');
+      workbook.setActiveSheet(first);
+      api.setDocumentMode('viewing');
+      workbook.setActiveSheet(second);
+      second.getRange('B2').activate();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return {
+        mode: api.getDocumentMode(),
+        activeSheetId: workbook.getActiveSheet().getSheetId(),
+        expectedSheetId: second.getSheetId(),
+        selection: api.getSelection(),
+      };
+    });
+
+    expect(navigation.mode).toBe('viewing');
+    expect(navigation.activeSheetId).toBe(navigation.expectedSheetId);
+    expect(navigation.selection?.sheetId).toBe(navigation.expectedSheetId);
+    expect(navigation.selection?.range).toMatchObject({
+      startRow: 1,
+      endRow: 1,
+      startColumn: 1,
+      endColumn: 1,
+    });
+
+    const level = page.getByTestId('cs-zoom-level');
+    await expect(level).toHaveText('100%');
+    await page.getByTestId('cs-zoom-in').click();
+    await expect(level).toHaveText('110%');
   });
 
   test('chrome status bar: zoom control changes the zoom ratio', async ({ page }) => {

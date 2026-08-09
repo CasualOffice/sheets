@@ -95,6 +95,8 @@ Import `@casualoffice/sheets/styles` **once** at app boot.
 | `onChangeDebounceMs`  | `number`                                       | `400`                                             | Debounce window for `onChange`.                                                                                        |
 | `onSave`              | `(snapshot: IWorkbookData) => void`            | —                                                 | Fires on Ctrl/Cmd+S inside the editor (the browser dialog is suppressed). The host persists the snapshot.              |
 | `onExit`              | `(snapshot: IWorkbookData) => void`            | —                                                 | Fires once on unmount with the final snapshot — the host's last chance to persist.                                     |
+| `features`            | `Record<string, boolean>`                      | all enabled                                       | Explicit `false` hides built-in controls and vetoes matching command-backed capabilities at the engine boundary.       |
+| `onBeforeCommand`     | `(command) => boolean \| void`                 | —                                                 | Synchronous local command policy. Return `false` to veto shortcuts, context menus, facades, or API dispatch equally.   |
 | `formula`             | `{ worker?: Worker \| string }`                | main-thread                                       | Off-main compute: pass a Web Worker to move formula calc off-thread (needs `@univerjs/rpc`). See **Off-main formula**. |
 | `onBeforeCreateUnit`  | `(univer: Univer) => void`                     | —                                                 | Power-host escape hatch: register extra plugins before the unit mounts. NOT semver-covered. See **Power-host hooks**.  |
 | `locale`              | `LocaleType`                                   | `EN_US`                                           |                                                                                                                        |
@@ -205,6 +207,7 @@ interface CasualSheetsAPI {
   executeCommand(id: string, params?: object): Promise<boolean>;
   executeCommands(steps: CommandRecord[]): Promise<number>; // batch replay
   onMutation(handler: (record: CommandRecord) => void): () => void; // observe/record
+  onLocalMutation(handler: (record: CommandRecord) => void): () => void; // local save queue
   setTheme(appearance: 'light' | 'dark'): void; // imperative light/dark
   univer: FUniver; // escape hatch — NOT semver-covered
 }
@@ -292,6 +295,10 @@ editor** (automations, audit logs, "apply this template"):
   wraps Univer's canonical collab hook (`onMutationExecutedForCollab`), so it
   fires for `CommandType.MUTATION` only — the deterministic state changes, never
   transient command/calc/selection noise. Returns a disposer.
+- **`onLocalMutation(handler)`** is the persistence-oriented subset. It omits
+  collaboration/changeset replay and `onlyLocal` engine writes (including
+  formula-result caches), preventing a host save queue from echoing derived or
+  authoritative state back to its server.
 - **`executeCommands(steps)`** replays a list of `{ id, params }` steps in order.
   Best-effort: a step that throws is skipped (state may have moved on); it
   resolves to the count that ran.

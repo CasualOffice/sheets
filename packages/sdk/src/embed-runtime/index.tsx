@@ -206,7 +206,8 @@ function EmbeddedSheets({
   }, [theme]);
 
   // Feature flags (host → editor via casual.command.set.features). undefined =
-  // all enabled; a key set false hides that control/group + blocks its command.
+  // all enabled; a key set false hides that control/group and, when the feature
+  // is command-backed, the shared policy vetoes its command from every path.
   const [features, setFeatures] = useState<Record<string, boolean> | undefined>(undefined);
 
   const [viewMode, setViewMode] = useState<'preview' | 'editor'>(initialViewMode);
