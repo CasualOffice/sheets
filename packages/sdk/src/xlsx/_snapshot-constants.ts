@@ -24,8 +24,19 @@
  * mount and a mismatch warns in dev. Sheet apps' `../snapshot` reads
  * the version from the workspace's @univerjs/core dep; we hardcode
  * the same minor here because the SDK declares @univerjs/* as
- * `^0.24.0` peer.
+ * `^0.25.0` peers.
  */
 export const INITIAL_ROWS = 1024;
 export const INITIAL_COLUMNS = 26;
-export const UNIVER_VERSION = '0.24.0';
+export const UNIVER_VERSION = '0.25.0';
+
+// Runtime values from Univer's pinned snapshot contract. Keeping them local to
+// the converter makes the Node xlsx path self-contained: `@univerjs/core` stays
+// a type-only dependency and is not required just to parse or serialize bytes.
+export const CELL_VALUE_TYPE = {
+  STRING: 1,
+  NUMBER: 2,
+  BOOLEAN: 3,
+} as const;
+export const HYPERLINK_CUSTOM_RANGE_TYPE = 0;
+export const DEFAULT_LOCALE = 'enUS';

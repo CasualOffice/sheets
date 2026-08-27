@@ -19,24 +19,27 @@ import { timeItAsync } from './_perf';
 import { parseXlsxInWorker } from './parse-in-worker';
 
 /**
- * Public entry point for xlsx import. The actual ExcelJS work lives in a
- * Web Worker (`parser.worker.ts` → `parse-impl.ts`) so the main thread
- * stays responsive while a multi-MB workbook is being parsed. This file
- * stays type-only on the main bundle — ExcelJS doesn't get pulled in
- * here.
+ * Public entry point for xlsx import. Browser main threads dispatch to a
+ * Web Worker (`parser.worker.ts` → `parse-impl.ts`) so a multi-MB workbook
+ * does not block the UI. Node and existing Worker contexts run the same
+ * converter directly; that implementation loads ExcelJS only when invoked.
  *
- * Fidelity scope (MVP):
+ * Fidelity scope:
  *   - Values + formulas (cell.value / cell.formula)
  *   - Font (family, size, bold, italic, underline, color)
  *   - Fill (solid background)
  *   - Alignment (horizontal, vertical, wrap)
  *   - Number format
- *   - Borders (thin, per side, color preserved)
+ *   - Borders
  *   - Merges
  *   - Sheet order + names
+ *   - Tables, comments, hyperlinks, data validation, conditional formatting,
+ *     page setup, named ranges, and opaque Univer resources
+ *   - Raw OOXML passthrough for drawings, pivots, macros, external links, and
+ *     threaded comments that Univer or ExcelJS cannot model losslessly
  *
- * Accepts loss: charts, drawings, pivots, validation, conditional formatting,
- * data tables, comments, hyperlinks, advanced borders (dashed/double), themes.
+ * Passthrough features survive save/download but are not necessarily editable
+ * or rendered inside Univer (for example VBA and pivot machinery).
  */
 
 /**
@@ -47,5 +50,14 @@ import { parseXlsxInWorker } from './parse-in-worker';
 export type ImportedWorkbook = IWorkbookData;
 
 export async function xlsxToWorkbookData(buffer: ArrayBuffer): Promise<ImportedWorkbook> {
-  return timeItAsync('parse-xlsx', () => parseXlsxInWorker(buffer));
+  return timeItAsync('parse-xlsx', async () => {
+    // Browser main threads keep the responsive Worker path. Node and existing
+    // Worker contexts have no `window`, so run the same pure converter directly
+    // instead of requiring browser Worker globals.
+    if (typeof window === 'undefined' || typeof Worker === 'undefined') {
+      const { workbookFromExcelJs } = await import('./parse-impl');
+      return workbookFromExcelJs(buffer);
+    }
+    return parseXlsxInWorker(buffer);
+  });
 }

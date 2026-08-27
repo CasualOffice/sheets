@@ -21,10 +21,9 @@
  *
  *   import { xlsxToWorkbookData, workbookDataToXlsx } from '@casualoffice/sheets/xlsx';
  *
- * The parser runs in a Web Worker so multi-MB workbooks don't block
- * the main thread; bundler must support the `new Worker(new URL(...),
- * import.meta.url)` pattern (Vite, esbuild's bundler, modern webpack
- * with worker-plugin).
+ * Browser main threads run the converter in a Web Worker so multi-MB
+ * workbooks don't block the UI. Node and existing Worker contexts reuse the
+ * same converter implementation directly and require no DOM or Worker global.
  *
  * Fidelity scope:
  *   - Values + formulas
@@ -37,8 +36,9 @@
  *   - Sheet order + names
  *   - Tables, comments, data validation, page setup, named ranges (resources)
  *
- * Accepts loss: charts, drawings, pivots, sparklines, advanced borders
- * (dashed/double), themes.
+ * Opaque resources are carried through the hidden resources sidecar; raw
+ * drawings, pivots, macros, external links, and threaded comments additionally
+ * round-trip through OOXML passthrough payloads.
  *
  * The shared utilities below (style mappers + resource readers) are
  * exposed for hosts that ship their own xlsx export path and want to

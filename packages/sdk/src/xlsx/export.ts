@@ -22,9 +22,10 @@ import { serializeXlsxInWorker } from './serialize-in-worker';
  *
  * The core converter (cells, formulas, styles, merges, number formats,
  * borders, hyperlinks, comments, data validation, tables, page setup,
- * named ranges, VBA passthrough) lives here in the SDK and runs in a Web
- * Worker so a multi-MB save doesn't block the main thread. Fidelity is the
- * mirror of the importer (`./import`).
+ * named ranges, VBA passthrough) lives here in the SDK. Browser main threads
+ * run it in a Web Worker so a multi-MB save does not block the UI; Node and
+ * existing Worker contexts invoke the same converter directly. Fidelity is
+ * the mirror of the importer (`./import`).
  *
  * Anything NOT recoverable from the snapshot alone is passed via `ExportExtras`:
  * live hyperlink cells read from the plugin, native outline gutter levels, and
@@ -65,5 +66,12 @@ export async function workbookDataToXlsx(
   data: IWorkbookData,
   extras: ExportExtras = {},
 ): Promise<Blob> {
+  // Browser main threads keep the responsive Worker path. Node and existing
+  // Worker contexts reuse the same pure converter directly, with no DOM or
+  // browser Worker globals required.
+  if (typeof window === 'undefined' || typeof Worker === 'undefined') {
+    const { workbookDataToXlsxImpl } = await import('./export-impl');
+    return workbookDataToXlsxImpl(data, extras);
+  }
   return serializeXlsxInWorker(data, extras);
 }

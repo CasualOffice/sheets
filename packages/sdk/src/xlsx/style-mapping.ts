@@ -14,28 +14,43 @@
  * limitations under the License.
  */
 
-import type { IStyleData } from '@univerjs/core';
-import { BorderStyleTypes } from '@univerjs/core';
+import type { BorderStyleTypes, IStyleData } from '@univerjs/core';
 import type * as ExcelJS from 'exceljs';
+
+const BORDER_STYLE = {
+  THIN: 1,
+  HAIR: 2,
+  DOTTED: 3,
+  DASHED: 4,
+  DASH_DOT: 5,
+  DASH_DOT_DOT: 6,
+  DOUBLE: 7,
+  MEDIUM: 8,
+  MEDIUM_DASHED: 9,
+  MEDIUM_DASH_DOT: 10,
+  MEDIUM_DASH_DOT_DOT: 11,
+  SLANT_DASH_DOT: 12,
+  THICK: 13,
+} as const;
 
 // ExcelJS border-style strings ↔ Univer BorderStyleTypes. Covers Excel's full
 // set of line styles so dashed / double / thick / medium / hair / dotted survive
 // the round-trip instead of all collapsing to a thin line. Anything unrecognised
 // falls back to THIN so a border is never dropped entirely.
 const EXCEL_BORDER_TO_UNIVER: Record<string, BorderStyleTypes> = {
-  thin: BorderStyleTypes.THIN,
-  hair: BorderStyleTypes.HAIR,
-  dotted: BorderStyleTypes.DOTTED,
-  dashed: BorderStyleTypes.DASHED,
-  dashDot: BorderStyleTypes.DASH_DOT,
-  dashDotDot: BorderStyleTypes.DASH_DOT_DOT,
-  double: BorderStyleTypes.DOUBLE,
-  medium: BorderStyleTypes.MEDIUM,
-  mediumDashed: BorderStyleTypes.MEDIUM_DASHED,
-  mediumDashDot: BorderStyleTypes.MEDIUM_DASH_DOT,
-  mediumDashDotDot: BorderStyleTypes.MEDIUM_DASH_DOT_DOT,
-  slantDashDot: BorderStyleTypes.SLANT_DASH_DOT,
-  thick: BorderStyleTypes.THICK,
+  thin: BORDER_STYLE.THIN as BorderStyleTypes,
+  hair: BORDER_STYLE.HAIR as BorderStyleTypes,
+  dotted: BORDER_STYLE.DOTTED as BorderStyleTypes,
+  dashed: BORDER_STYLE.DASHED as BorderStyleTypes,
+  dashDot: BORDER_STYLE.DASH_DOT as BorderStyleTypes,
+  dashDotDot: BORDER_STYLE.DASH_DOT_DOT as BorderStyleTypes,
+  double: BORDER_STYLE.DOUBLE as BorderStyleTypes,
+  medium: BORDER_STYLE.MEDIUM as BorderStyleTypes,
+  mediumDashed: BORDER_STYLE.MEDIUM_DASHED as BorderStyleTypes,
+  mediumDashDot: BORDER_STYLE.MEDIUM_DASH_DOT as BorderStyleTypes,
+  mediumDashDotDot: BORDER_STYLE.MEDIUM_DASH_DOT_DOT as BorderStyleTypes,
+  slantDashDot: BORDER_STYLE.SLANT_DASH_DOT as BorderStyleTypes,
+  thick: BORDER_STYLE.THICK as BorderStyleTypes,
 };
 const UNIVER_BORDER_TO_EXCEL: Record<number, ExcelJS.BorderStyle> = Object.fromEntries(
   Object.entries(EXCEL_BORDER_TO_UNIVER).map(([excel, univer]) => [univer, excel]),
@@ -162,7 +177,7 @@ export function excelStyleToUniver(cell: ExcelJS.Cell): IStyleData | undefined {
         | undefined;
       if (side?.style && side.style !== 'none') {
         bd[k] = {
-          s: EXCEL_BORDER_TO_UNIVER[side.style] ?? BorderStyleTypes.THIN,
+          s: EXCEL_BORDER_TO_UNIVER[side.style] ?? (BORDER_STYLE.THIN as BorderStyleTypes),
           cl: { rgb: normalizeColor(side.color?.argb) ?? '#666666' },
         };
       }
