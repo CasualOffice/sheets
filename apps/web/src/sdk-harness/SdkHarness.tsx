@@ -16,10 +16,19 @@
 
 import { useState } from 'react';
 import { CasualSheets, type CasualSheetsAPI } from '@casualoffice/sheets/sheets';
+import { startBridge } from '@casualoffice/sheets/collab';
 import '@casualoffice/sheets/styles';
+import * as Y from 'yjs';
 import { emptyWorkbook } from '../snapshot';
 import { LOCALES } from '../locale';
-import { ICommandService, ThemeService, type IWorkbookData, type Univer } from '@univerjs/core';
+import {
+  CommandType,
+  ICommandService,
+  ThemeService,
+  type ICommand,
+  type IWorkbookData,
+  type Univer,
+} from '@univerjs/core';
 import { UniverSheetsCrosshairHighlightPlugin } from '@univerjs/sheets-crosshair-highlight';
 
 /**
@@ -44,6 +53,31 @@ export function SdkHarness() {
   // `?chrome=minimal|full` renders the built-in chrome so the spec can verify it.
   const chromeParam = params.get('chrome');
   const chrome = chromeParam === 'minimal' || chromeParam === 'full' ? chromeParam : 'none';
+  // `?disableMerge=1` exercises feature enforcement below the chrome: the
+  // Playwright spec dispatches merge through both the stable API and raw
+  // FUniver escape hatch, then through executeCommands.
+  const features: Record<string, boolean> | undefined =
+    params.get('disableMerge') === '1'
+      ? { merge: false }
+      : params.get('disableTables') === '1'
+        ? { tables: false }
+        : params.get('disableColor') === '1'
+          ? { color: false }
+          : undefined;
+  const throwOnMerge = params.get('throwOnMerge') === '1';
+  const blockFormulaInternal = params.get('blockFormulaInternal') === '1';
+  const captureErrors = throwOnMerge || params.get('throwOnObserver') === '1';
+  const beforeCommand =
+    throwOnMerge || blockFormulaInternal
+      ? ({ id }: { id: string }) => {
+          if (id === 'sheet.command.add-worksheet-merge-all') {
+            throw new Error('host policy exploded');
+          }
+          if (blockFormulaInternal && id === 'formula.mutation.set-formula-calculation-result') {
+            return false;
+          }
+        }
+      : undefined;
   // `?beforeCreate=crosshair` exercises the onBeforeCreateUnit escape hatch by
   // registering a plugin the SDK doesn't bundle (crosshair-highlight) — the
   // spec then asserts its command registered, proving the hook works.
@@ -71,21 +105,63 @@ export function SdkHarness() {
         locales={LOCALES}
         appearance={appearance}
         chrome={chrome}
+        features={features}
+        onBeforeCommand={beforeCommand}
         onBeforeCreateUnit={beforeCreate}
         formula={formula}
+        onError={
+          captureErrors
+            ? (error) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const w = window as any;
+                w.__sdkHarnessErrors = [...(w.__sdkHarnessErrors ?? []), error.message];
+              }
+            : undefined
+        }
         onReady={(api: CasualSheetsAPI) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__sdkHarnessAPI = api;
           // Expose hasCommand so specs can check lazy plugins registered without
           // importing redi tokens into page context.
+          const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
+            ._injector;
+          const svc = injector?.get(ICommandService) as
+            | {
+                hasCommand(id: string): boolean;
+                registerCommand(command: ICommand): { dispose(): void };
+                syncExecuteCommand(id: string, params?: object): boolean;
+              }
+            | undefined;
+          if (throwOnMerge && svc && !svc.hasCommand('test.command.nested-merge')) {
+            svc.registerCommand({
+              id: 'test.command.nested-merge',
+              type: CommandType.COMMAND,
+              handler: () => svc.syncExecuteCommand('sheet.command.add-worksheet-merge-all'),
+            });
+          }
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (window as any).__sdkHarnessHasCommand = (id: string) => {
-            const injector = (api.univer as unknown as { _injector?: { get(t: unknown): unknown } })
-              ._injector;
-            const svc = injector?.get(ICommandService) as
-              | { hasCommand(id: string): boolean }
-              | undefined;
-            return svc?.hasCommand(id) ?? false;
+          (window as any).__sdkHarnessHasCommand = (id: string) => svc?.hasCommand(id) ?? false;
+          // Test-only driver for a real Yjs → startBridge replay. Public
+          // api.univer dispatch strips replay provenance; the bridge's private
+          // command-service path intentionally retains it for convergence.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__sdkHarnessReplayCommand = async (
+            id: string,
+            commandParams?: object,
+          ) => {
+            const receiver = new Y.Doc();
+            const sender = new Y.Doc();
+            const bridge = startBridge(api.univer, receiver, { role: 'view' });
+            sender
+              .getArray('ops')
+              .push([{ c: String(sender.clientID), t: Date.now(), id, p: commandParams }]);
+            Y.applyUpdate(receiver, Y.encodeStateAsUpdate(sender));
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const failures = bridge.getReplayFailures();
+            bridge.dispose();
+            sender.destroy();
+            receiver.destroy();
+            return { failures };
           };
           // Expose Univer's dark-mode flag so the appearance spec can assert it.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

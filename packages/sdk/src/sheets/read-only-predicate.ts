@@ -24,11 +24,31 @@
 /**
  * Command ids that MUTATE a sheet — opening the cell editor, writing values,
  * styling, structural edits, clipboard paste. The read-only veto cancels any
- * command whose id matches. Navigation (selection, scroll, zoom, sheet switch),
- * copy, and undo/redo deliberately fall through so preview stays usable.
+ * command whose id matches. Navigation (selection, scroll, zoom, sheet switch)
+ * and copy deliberately fall through so preview stays usable. Undo/redo remain
+ * blocked because they can mutate workbook state created before viewing mode.
  */
 export const READONLY_BLOCK =
-  /(set-cell-edit-visible|set-activate-cell-edit|set-range-values|set-style|set-bold|set-italic|set-underline|set-strike|set-font|set-background|set-text|set-horizontal|set-vertical|set-wrap|set-rotation|set-border|set-number-format|insert-|delete-|remove-|clear-selection|cut-content|paste|move-range|move-rows|move-cols|merge|split|add-worksheet|set-worksheet-name|set-worksheet-row|set-worksheet-col|auto-fill|reorder|set-defined-name|set-tab-color|set-frozen-cancel)/;
+  /(set-cell-edit-visible|set-activate-cell-edit|set-range-|reset-range-|set-style|set-bold|set-italic|set-underline|set-strike|set-font|set-background|set-text|set-horizontal|set-vertical|set-wrap|set-rotation|set-border|set-number-format|sheet\.command\.numfmt\.|insert-|delete-|remove-|clear-selection|cut-content|paste|move-range|move-rows|move-cols|merge|split|add-worksheet|set-worksheet-name|set-worksheet-row|set-worksheet-col|auto-fill|reorder|set-defined-name|set-tab-color|set-frozen-cancel)/;
+
+const COMMAND_OR_MUTATION = /(?:^|\.)(?:command|mutation)(?:\.|$)/;
+const READONLY_COMMAND_ALLOW = new Set([
+  'univer.command.copy',
+  'sheet.command.copy',
+  'sheet.command.copy-formula-only',
+  'sheet.command.select-range',
+  'sheet.command.move-selection',
+  'sheet.command.move-selection-enter-tab',
+  'sheet.command.expand-selection',
+  'sheet.command.select-all',
+  'sheet.command.set-scroll-relative',
+  'sheet.command.scroll-view',
+  'sheet.command.scroll-to-cell',
+  'sheet.command.scroll-view-reset',
+  'sheet.command.change-zoom-ratio',
+  'sheet.command.set-zoom-ratio',
+  'sheet.command.set-worksheet-activate',
+]);
 
 /**
  * Commands that must stay usable for the **comment** share-role even though the
@@ -39,9 +59,14 @@ export const READONLY_BLOCK =
  */
 export const COMMENT_ALLOW = /(thread-comment|rich-text-editing)/;
 
-/** True for any mutating command (the read-only veto target). */
+/**
+ * Conservative read-only boundary. Known navigation/selection operations and
+ * copy remain usable; commands and mutations otherwise fail closed, including
+ * plugin ids that a static mutator-name regex cannot anticipate.
+ */
 export function isReadOnlyBlocked(commandId: string): boolean {
-  return READONLY_BLOCK.test(commandId);
+  if (READONLY_COMMAND_ALLOW.has(commandId)) return false;
+  return READONLY_BLOCK.test(commandId) || COMMAND_OR_MUTATION.test(commandId);
 }
 
 /**
@@ -50,5 +75,5 @@ export function isReadOnlyBlocked(commandId: string): boolean {
  * through.
  */
 export function isCommentOnlyBlocked(commandId: string): boolean {
-  return READONLY_BLOCK.test(commandId) && !COMMENT_ALLOW.test(commandId);
+  return isReadOnlyBlocked(commandId) && !COMMENT_ALLOW.test(commandId);
 }

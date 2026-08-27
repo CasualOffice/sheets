@@ -35,9 +35,9 @@ export interface CommandRecord {
 }
 
 /**
- * Replay `steps` in order through `execute`. Best-effort: a step that throws is
- * skipped (the underlying state may have moved on). Resolves to the number of
- * steps that ran without throwing.
+ * Replay `steps` in order through `execute`. Best-effort: a step that throws or
+ * resolves `false` (including a command-policy veto) is skipped. Resolves to the
+ * number of steps the command bus accepted.
  */
 export async function runSteps(
   execute: (id: string, params?: object) => Promise<unknown> | unknown,
@@ -46,8 +46,8 @@ export async function runSteps(
   let applied = 0;
   for (const s of steps) {
     try {
-      await execute(s.id, s.params);
-      applied += 1;
+      const result = await execute(s.id, s.params);
+      if (result !== false) applied += 1;
     } catch {
       /* skip a step that no longer applies to the current state */
     }
@@ -57,7 +57,38 @@ export async function runSteps(
 
 /** Minimal shape of the command service's collab mutation hook. */
 export interface MutationEmitter {
-  onMutationExecutedForCollab: (l: (info: CommandRecord) => void) => { dispose: () => void };
+  onMutationExecutedForCollab: (
+    l: (info: CommandRecord, options?: MutationExecutionOptions) => void,
+  ) => { dispose: () => void };
+}
+
+export interface MutationExecutionOptions {
+  onlyLocal?: boolean;
+  fromCollab?: boolean;
+  fromChangeset?: boolean;
+  syncOnly?: boolean;
+}
+
+type MutationObserverErrorHandler = (error: unknown) => void;
+
+function notifyMutationObserver(
+  handler: (record: CommandRecord) => void,
+  record: CommandRecord,
+  onError?: MutationObserverErrorHandler,
+): void {
+  try {
+    handler(record);
+  } catch (error) {
+    // Mutation listeners run inside Univer's command stack after the state
+    // change. A host exception must never turn a committed mutation into a
+    // reported failure or strand that stack frame. Error reporting is itself
+    // isolated so even a faulty reporter cannot escape the command bus.
+    try {
+      onError?.(error);
+    } catch {
+      /* observer failures are diagnostic only */
+    }
+  }
 }
 
 /**
@@ -67,9 +98,28 @@ export interface MutationEmitter {
 export function attachMutationObserver(
   cmdSvc: MutationEmitter | undefined,
   handler: (record: CommandRecord) => void,
+  onError?: MutationObserverErrorHandler,
 ): () => void {
-  const sub = cmdSvc?.onMutationExecutedForCollab((info) =>
-    handler({ id: info.id, params: info.params }),
-  );
+  const sub = cmdSvc?.onMutationExecutedForCollab((info) => {
+    notifyMutationObserver(handler, { id: info.id, params: info.params }, onError);
+  });
+  return () => sub?.dispose();
+}
+
+/**
+ * Observe only locally-authored, persistable mutations. Unlike the historical
+ * `onMutation` audit stream, this excludes formula/cache-only writes plus
+ * collaboration and changeset replay so a host can build a save queue without
+ * echoing authoritative or derived state back to its server.
+ */
+export function attachLocalMutationObserver(
+  cmdSvc: MutationEmitter | undefined,
+  handler: (record: CommandRecord) => void,
+  onError?: MutationObserverErrorHandler,
+): () => void {
+  const sub = cmdSvc?.onMutationExecutedForCollab((info, options) => {
+    if (options?.onlyLocal || options?.fromCollab || options?.fromChangeset) return;
+    notifyMutationObserver(handler, { id: info.id, params: info.params }, onError);
+  });
   return () => sub?.dispose();
 }

@@ -17,7 +17,8 @@
 import { CustomCommandExecutionError, ICommandService, IPermissionService } from '@univerjs/core';
 import type { FUniver } from '@univerjs/core/facade';
 import { WorkbookEditablePermission } from '@univerjs/sheets';
-import { isCommentOnlyBlocked, READONLY_BLOCK } from './read-only-predicate';
+import { cleanCommandExecutionStackForVeto } from './command-veto';
+import { isCommentOnlyBlocked, isReadOnlyBlocked } from './read-only-predicate';
 
 export { isCommentOnlyBlocked, isReadOnlyBlocked } from './read-only-predicate';
 
@@ -50,8 +51,14 @@ export function applyReadOnly(
     | { beforeCommandExecuted(l: (info: { id: string }) => void): { dispose(): void } }
     | undefined;
   const vetoDisposable = cmd?.beforeCommandExecuted((info) => {
-    if (READONLY_BLOCK.test(info.id)) {
-      onBlock?.(info.id);
+    if (isReadOnlyBlocked(info.id)) {
+      cleanCommandExecutionStackForVeto(cmd, info);
+      try {
+        onBlock?.(info.id);
+      } catch {
+        // Blocking is authoritative; a diagnostic callback must not replace
+        // the controlled veto or poison Univer's execution stack.
+      }
       throw new CustomCommandExecutionError(`read-only: blocked ${info.id}`);
     }
   });
@@ -118,7 +125,13 @@ export function applyCommentOnly(
     | undefined;
   const vetoDisposable = cmd?.beforeCommandExecuted((info) => {
     if (isCommentOnlyBlocked(info.id)) {
-      onBlock?.(info.id);
+      cleanCommandExecutionStackForVeto(cmd, info);
+      try {
+        onBlock?.(info.id);
+      } catch {
+        // Blocking is authoritative; a diagnostic callback must not replace
+        // the controlled veto or poison Univer's execution stack.
+      }
       throw new CustomCommandExecutionError(`comment-only: blocked ${info.id}`);
     }
   });
